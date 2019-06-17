@@ -5,5 +5,8 @@ LIB=-lsdsl -lhts
 
 all: liftover
 
-liftover: test.cpp liftover.hpp
+liftover: liftover.cpp liftover.hpp
+	$(CXX) -o $@ $< $(LIB)
+
+test: test.cpp liftover.hpp
 	$(CXX) -o $@ $< $(LIB)

@@ -2,12 +2,12 @@
 #define LIFTOVER_HPP
 
 #include <cstdio>
-#include <memory>
+// #include <memory>
 #include <iostream>
 #include <htslib/vcf.h>
 #include <sdsl/bit_vectors.hpp>
 #include <sdsl/util.hpp>
-#include "flat_hash_map.hpp"
+// #include "flat_hash_map.hpp"
 
 namespace lift {
 
@@ -194,7 +194,7 @@ class LiftMap {
                     sbv[x] = 1; // no need to increment x here?
                 }
             } else {
-                fprintf(stderr, "skipping non-snp/non-indel variant at %d", rec->pos);
+                fprintf(stderr, "skipping non-snp/non-indel variant at %d\n", rec->pos);
             }
         } 
         if (ppos > l) {
