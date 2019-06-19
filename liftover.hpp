@@ -67,6 +67,10 @@ class Lift {
         return ins[ins.size() - 1] ? ins_rs0(ins.size() - 1) : ins_rs0(ins.size() - 1) + 1;
     }
 
+    size_t altlen() {
+        return del[del.size() - 1] ? del_rs0(del.size() - 1) : del_rs0(del.size() - 1) + 1;
+    }
+
     sdsl::sd_vector<> get_ins() const {
         return ins;
     }
@@ -112,10 +116,36 @@ class LiftMap {
 
     public:
 
+    LiftMap() {}
+
     /* TODO: save to file */
     LiftMap(std::ifstream& in) {
         this->load(in);
     }
+
+    // copy constructor
+    LiftMap(const LiftMap& rhs) : lmap(rhs.lmap), names(rhs.names) {
+    }
+
+    // move constructor
+    LiftMap(LiftMap&& rhs) : lmap(std::move(rhs.lmap)), names(std::move(rhs.names)) {
+    }
+
+    // copy assignment operator
+    LiftMap& operator=(const LiftMap& rhs) {
+        lmap = rhs.lmap;
+        names.clear();
+        names = rhs.names;
+        return *this;
+    }
+
+    // move assignment operator
+    LiftMap& operator=(LiftMap&& rhs) {
+        lmap = std::move(rhs.lmap);
+        names = std::move(rhs.names);
+        return *this;
+    }
+
     /* creates a liftover from specified sample in VCF file. 
      * For simplicity, looks at only the first haplotype of the specified
      * sample
@@ -148,7 +178,6 @@ class LiftMap {
                 // get size of contig
                 rid = rec->rid;
                 l = hdr->id[BCF_DT_CTG][rid].val->info[0];
-                fprintf(stderr, "name: %s, size %lu\n", bcf_hdr_id2name(hdr, rid), l);
                 // initialize bit vectors for this contig
                 ibv = sdsl::bit_vector(l*2);
                 dbv = sdsl::bit_vector(l*2);
@@ -194,7 +223,7 @@ class LiftMap {
                     sbv[x] = 1; // no need to increment x here?
                 }
             } else {
-                fprintf(stderr, "skipping non-snp/non-indel variant at %d\n", rec->pos);
+                // fprintf(stderr, "skipping non-snp/non-indel variant at %d\n", rec->pos);
             }
         } 
         if (ppos > l) {
@@ -251,7 +280,22 @@ class LiftMap {
             in >> name;
             names.push_back(name);
         }
-        for (const auto& n: names) std::cout << n << std::endl;
+    }
+
+    std::pair<std::vector<std::string>, std::vector<size_t>> get_reflens() {
+        std::vector<size_t> lengths;
+        for (auto i = 0; i < lmap.size(); ++i) {
+            lengths.push_back(lmap[i].reflen());
+        }
+        return std::make_pair(names, lengths);
+    }
+
+    std::pair<std::vector<std::string>, std::vector<size_t>> get_altlens() {
+        std::vector<size_t> lengths;
+        for (auto i = 0; i < lmap.size(); ++i) {
+            lengths.push_back(lmap[i].altlen());
+        }
+        return std::make_pair(names, lengths);
     }
 
     private:

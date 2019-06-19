@@ -6,8 +6,30 @@ genomic sequences given a predefined pairwise alignment.
 uses succinct data structures as implemented by
 [sdsl-lite](https://github.com/simongog/sdsl-lite)
 
+## Usage (Command line)
 
-## Usage
+To serialize liftover information between a reference sequence and given alternative sequence described in a VCF file:
+
+```
+$ ./liftover serialize -v <vcf> -s <sample_name> -p <output prefix>
+liftover file saved to <output prefix>.lft
+```
+
+To lift over coordinates given from a serialized `.lft` file
+
+```
+$ ./liftover lift -l <.lft file> -p <output prefix>
+lifted coordinates saved to <output prefix>.sam
+```
+
+To lift over coordinates on the fly:
+
+```
+$ ./liftover lift -v <vcf> -s <sample_name> -p <output prefix>
+lifted coordinates saved to <output prefix>.sam
+```
+
+## Usage (C++)
 
 To build a liftover between a reference genome and an alternative genotype
 given a *VCF* file containing a genotype for a sample over a set of
@@ -33,6 +55,7 @@ To query the equivalent reference position for a given haplotype position:
 ```
 
 To serialize the liftover to a file:
+
 ```
     std::ofstream o("liftover.lft");
     l.serialize(o);
@@ -40,13 +63,25 @@ To serialize the liftover to a file:
 ```
 
 To load a liftover from a serialized file
+
 ```
     std::ifstream in("liftover.lft");
     lift::Lift l2(in);
     in.close();
 ```
 
-# Dependencies
+## Dependencies
 
 - [sdsl-lite](https://github.com/simongog/sdsl-lite)
 - [htslib](https://github.com/samtools/htslib)
+
+## Currently Supported:
+
+- create a liftover from VCF file w/ FMT/GT field for a specified sample
+- reading/writing to SAM files converted the POS field appropriately
+
+## TODO
+
+- convert CIGAR strings for alignments (requires additional SNP information)
+- recalculate read-pair information
+- recalculate MAPQ
