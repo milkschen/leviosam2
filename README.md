@@ -82,6 +82,6 @@ To load a liftover from a serialized file
 
 ## TODO
 
-- convert CIGAR strings for alignments (requires additional SNP information)
+- ~~convert CIGAR strings for alignments (requires additional SNP information)~~ (additional testing required)
 - recalculate read-pair information
 - recalculate MAPQ
