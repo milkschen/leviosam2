@@ -6,12 +6,14 @@
 struct lift_opts {
     std::string vcf_fname = "";
     std::string sample = "";
-    std::string outpre = "liftover";
+    std::string outpre = "out";
     std::string lift_fname = "";
     std::string sam_fname = "";
 };
 
+
 lift::LiftMap lift_from_vcf(std::string fname, std::string sample);
+
 
 void serialize_run(lift_opts args) {
     lift::LiftMap l(lift_from_vcf(args.vcf_fname, args.sample));
@@ -65,10 +67,10 @@ void lift_run(lift_opts args) {
         fprintf(out_sam_fp, "%ld\t", l.alt_to_ref(ref_name, c.pos) + 1); 
         /****               ****/
         fprintf(out_sam_fp, "255\t"); // set MAPQ to unknown (255)
-        fprintf(out_sam_fp, "*\t"); // set CIGAR to unknown TODO: reconcile CIGAR.
+        fprintf(out_sam_fp, "%s\t", l.cigar_alt_to_ref(ref_name, aln).data()); // set CIGAR to unknown TODO: reconcile CIGAR.
         fprintf(out_sam_fp, "*\t"); // RNEXT
-        fprintf(out_sam_fp, "*\t"); // PNEXT
-        fprintf(out_sam_fp, "*\t"); // TLEN (can probably copy?)
+        fprintf(out_sam_fp, "0\t"); // PNEXT
+        fprintf(out_sam_fp, "0\t"); // TLEN (can probably copy?)
         // get query sequence
         std::string query_seq("");
         uint8_t* seq = bam_get_seq(aln);
@@ -103,9 +105,8 @@ lift::LiftMap lift_from_vcf(std::string fname, std::string sample) {
     return lift::LiftMap(fp, hdr, sample);
 }
 
+
 int main(int argc, char** argv) {
-    // read vcf file name
-    // read other options (which ones do we want to include?)
     int c;
     lift_opts args;
     static struct option long_options[] {

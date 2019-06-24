@@ -5,6 +5,7 @@
 // #include <memory>
 #include <iostream>
 #include <htslib/vcf.h>
+#include <htslib/sam.h>
 #include <sdsl/bit_vectors.hpp>
 #include <sdsl/util.hpp>
 // #include "flat_hash_map.hpp"
@@ -53,14 +54,65 @@ class Lift {
     }
 
     size_t alt_to_ref(size_t p) const {
-        auto x = del_sls0(p+1);
-        auto y = ins_rs0(x); // counts number of 0s before x, which, coincidentally, gives position in reference
-        return y;
-        // return ins_rs0(del_sls0(p+1));
+        // auto x = del_sls0(p+1);
+        // auto y = ins_rs0(x); // counts number of 0s before x, which, coincidentally, gives position in reference
+        // return y;
+        return ins_rs0(del_sls0(p+1));
     }
 
     size_t ref_to_alt(size_t p) const {
         return del_rs0(ins_sls0(p+1));
+    }
+
+    std::string cigar_alt_to_ref(bam1_t* b) {
+        auto x = del_sls0(b->core.pos+1);
+        int y = 0; // read2alt cigar pointer
+        uint32_t* cigar = bam_get_cigar(b);
+        std::string out_cigar = "";
+        std::vector<uint32_t> cigar_ops;
+        for (int i = 0; i < b->core.n_cigar; ++i) {
+            for (int j = 0; j < bam_cigar_oplen(cigar[i]); ++j) {
+                cigar_ops.push_back(bam_cigar_op(cigar[i]));
+            }
+        }
+        int iters = cigar_ops.size();
+        while (y < iters) {
+            int cop = cigar_ops[y];
+            if (del[x]) { // skip ahead in alt2ref cigar
+                out_cigar += "D";
+                ++x; 
+            } else if (cop == BAM_CINS || cop == BAM_CSOFT_CLIP) { // skip ahead in read2alt cigar
+                out_cigar += "I";
+                ++y; 
+            } else if (cop == BAM_CBACK || cop == BAM_CHARD_CLIP || cop == BAM_CPAD) {
+                // skip, these are fluff bases
+                ++y;
+            } else if (cop == BAM_CMATCH || cop == BAM_CDIFF || cop == BAM_CEQUAL) { // M
+                    if (ins[x]) out_cigar += "I"; // IM
+                    else out_cigar += "M"; // MM
+                    ++x; ++y;
+            } else if (cop == BAM_CDEL || cop == BAM_CREF_SKIP) { // D
+                    if (ins[x]) out_cigar += ""; // ID - insertion is invalidated
+                    else out_cigar += "D"; // MD
+                    ++x; ++y;
+            }
+        }
+
+        std::cout << out_cigar << std::endl;
+        std::string out = "";
+        int z = 1;
+        for (size_t i = 1; i < out_cigar.size(); ++i) {
+            if (out_cigar[i] == out_cigar[i-1]) {
+                z++;
+            } else {
+                out += std::to_string(z);
+                out += out_cigar[i-1];
+                z = 1;
+            }
+        }
+        out += std::to_string(z);
+        out += out_cigar[out_cigar.size() - 1];
+        return out;
     }
 
     size_t reflen() {
@@ -238,6 +290,7 @@ class LiftMap {
         names.push_back(bcf_hdr_id2name(hdr, rid));
     }
 
+    // if liftover is not defined, then returns the original position
     size_t alt_to_ref(std::string chr, size_t i) {
         // return lmap[chr].alt_to_ref(i);
         auto it = std::find(names.begin(), names.end(), chr);
@@ -245,7 +298,44 @@ class LiftMap {
             size_t index = std::distance(names.begin(), it);
             return lmap[index].alt_to_ref(i);
         } else {
-            return -1;
+            return i;
+        }
+    }
+    //
+    // if liftover is not defined, then returns empty string
+    std::string cigar_alt_to_ref(std::string chr, bam1_t* b) {
+        // return lmap[chr].alt_to_ref(i);
+        auto it = std::find(names.begin(), names.end(), chr);
+        if (it != std::end(names)) {
+            size_t index = std::distance(names.begin(), it);
+            return lmap[index].cigar_alt_to_ref(b);
+        } else {
+            std::string out_cigar = "";
+            auto cigar = bam_get_cigar(b);
+            for (int i = 0; i < b->core.n_cigar; ++i) {
+                for (int j = 0; j < bam_cigar_oplen(cigar[i]); ++j) {
+                    if (bam_cigar_op(cigar[i]) == BAM_CINS) 
+                        out_cigar += "I";
+                    else if (bam_cigar_op(cigar[i]) == BAM_CDEL)
+                        out_cigar += "D";
+                    else if (bam_cigar_op(cigar[i]) == BAM_CMATCH)
+                        out_cigar += "M";
+                }
+            }
+            std::string out = "";
+            int z = 1;
+            for (size_t i = 1; i < out_cigar.size(); ++i) {
+                if (out_cigar[i] == out_cigar[i-1]) {
+                    z++;
+                } else {
+                    out += std::to_string(z);
+                    out += out_cigar[i-1];
+                    z = 1;
+                }
+            }
+            out += std::to_string(z);
+            out += out_cigar[out_cigar.size() - 1];
+            return out;
         }
     }
 
