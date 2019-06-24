@@ -15,17 +15,17 @@ $ ./liftover serialize -v <vcf> -s <sample_name> -p <output prefix>
 liftover file saved to <output prefix>.lft
 ```
 
-To lift over coordinates given from a serialized `.lft` file
+To lift over coordinates given from a sam file using a serialized `.lft` file
 
 ```
-$ ./liftover lift -l <.lft file> -p <output prefix>
+$ ./liftover lift -a <sam> -l <lft> -p <output prefix>
 lifted coordinates saved to <output prefix>.sam
 ```
 
 To lift over coordinates on the fly:
 
 ```
-$ ./liftover lift -v <vcf> -s <sample_name> -p <output prefix>
+$ ./liftover lift -a <sam> -v <vcf> -s <sample_name> -p <output prefix>
 lifted coordinates saved to <output prefix>.sam
 ```
 
