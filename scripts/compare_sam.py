@@ -47,6 +47,50 @@ def parse_args():
     return args
 
 
+class SamUtils:
+    ''' Convert a typical CIGAR string to the expanded form
+    Example:
+        s = CompareSamSummary(0)
+        print(s._expand_cigar('3M2D5M'))
+        # MMMDDMMMMM
+    '''
+    @staticmethod
+    def _expand_cigar(cigarstring: str, consumes: str) -> str:
+        re_cigar = re.compile('[MIDS]+')
+        ops = re_cigar.findall(cigarstring)
+        lens = re_cigar.split(cigarstring)
+        ecigar = ''
+        for i, op in enumerate(ops):
+            if consumes == 'ref' and not (op in ['M', 'D']):
+                continue
+            elif consumes == 'query' and not (op in ['M', 'I', 'S']):
+                continue
+            ecigar += int(lens[i]) * op
+        return ecigar
+
+    ''' Return true if a cigar operator consumes QUERY 
+    Op table:
+        0 M BAM_CMATCH
+        1 I BAM_CINS
+        2 D BAM_CDEL
+        3 N BAM_CREF_SKIP
+        4 S BAM_CSOFT_CLIP
+        5 H BAM_CHARD_CLIP
+        6 P BAM_CPAD
+        7 = BAM_CEQUAL
+        8 X BAM_CDIFF
+        9 B BAM_CBACK
+    '''
+    @staticmethod
+    def cigar_op_consumes_query(op: int) -> bool:
+        return op in [0, 1, 4, 7, 8]
+
+    ''' Return true if a cigar operator consumes REFERENCE '''
+    @staticmethod
+    def cigar_op_consumes_ref(op: int) -> bool:
+        return op in [0, 2, 3, 7, 8]
+
+
 class CigarSegment:
     def __init__(self, cigartuple, q_offset, r_offset) -> None:
         self.op = cigartuple[0]
@@ -59,8 +103,7 @@ class CigarSegment:
         return f'{self.op}\t{self.size}\t{self.q_offset:<10d}\t{self.intercept}'
     
     def truncate_front(self, y) -> int:
-        if self.op != y.op or self.intercept != y.intercept:
-            pass
+        assert y.q_offset > self.q_offset
         diff = y.q_offset - self.q_offset
         self.size = self.size - diff
         self.q_offset += diff
@@ -82,9 +125,9 @@ class CigarSegments:
         for i, (op, n) in enumerate(aln.cigartuples):
             # cigartuples: e.g [(0, 30), (1, 5), (0, 20)] -> 30M5I20M
             stats.append(CigarSegment((op, n), q_offset, r_offset))
-            if op in [0, 1, 4, 7, 8]: # consume QUERY
+            if SamUtils.cigar_op_consumes_query(op):
                 q_offset += n
-            if op in [0, 2, 3, 7, 8]: # consume REF
+            if SamUtils.cigar_op_consumes_ref(op):
                 r_offset += n
         self.cigar = stats
 
@@ -133,27 +176,17 @@ class CompareSamSummary():
         self.fn_out = fn_out
         self.aln_filter = aln_filter
 
-    ''' Convert a typical CIGAR string to the expanded form
-    Example:
-        s = CompareSamSummary(0)
-        print(s._expand_cigar('3M2D5M'))
-        # MMMDDMMMMM
-    '''
-    @staticmethod
-    def _expand_cigar(cigarstring: str, consumes: str) -> str:
-        re_cigar = re.compile('[MIDS]+')
-        ops = re_cigar.findall(cigarstring)
-        lens = re_cigar.split(cigarstring)
-        ecigar = ''
-        for i, op in enumerate(ops):
-            if consumes == 'ref' and not (op in ['M', 'D']):
-                continue
-            elif consumes == 'query' and not (op in ['M', 'I', 'S']):
-                continue
-            ecigar += int(lens[i]) * op
-        return ecigar
-
     ''' Caculate CIGAR identity between two sequences
+    Core algorithmic idea:
+        In each iteration, compare the query_offsets between two sequences.
+        Truncate the sequence with a smaller query_offset (there can not be
+        a match in this scenario).
+        When the query_offsets are equal, pop the smaller CIGAR segment. 
+        We also check if the CIGAR op and intercept are equal. If equal, 
+        increment `idy` with the size of the popped segment.
+
+    This algorithm can be executed in O(len(rx)+len(ry)) time, where rx and ry
+    are number of CIGAR runs for the input sequences respectively.
     '''
     def _calc_identity(
         self, query: pysam.AlignedSegment, baseline: pysam.AlignedSegment
@@ -169,10 +202,6 @@ class CompareSamSummary():
         query_cigar_offsets = CigarSegments(query)
         baseline_cigar_offsets = CigarSegments(baseline)
         while len(query_cigar_offsets) and len(baseline_cigar_offsets):
-            # print('QUERY')
-            # print(query_cigar_offsets)
-            # print('BASELINE')
-            # print(baseline_cigar_offsets)
             b = baseline_cigar_offsets[0]
             q = query_cigar_offsets[0]
             if q.q_offset == b.q_offset:
@@ -188,12 +217,6 @@ class CompareSamSummary():
                 q.truncate_front(b)
             else:
                 b.truncate_front(q)
-            # input(idy)
-                
-        # print(query)
-        # print(baseline)
-        # print(f'idy = {idy}')
-        # input()
         
         return idy / query.infer_read_length()
 
