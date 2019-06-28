@@ -2,13 +2,11 @@
 #define LIFTOVER_HPP
 
 #include <cstdio>
-// #include <memory>
 #include <iostream>
 #include <htslib/vcf.h>
 #include <htslib/sam.h>
 #include <sdsl/bit_vectors.hpp>
 #include <sdsl/util.hpp>
-// #include "flat_hash_map.hpp"
 
 namespace lift {
 
