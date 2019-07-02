@@ -61,16 +61,26 @@ void lift_run(lift_opts args) {
         bam1_core_t c = aln->core;
         std::string ref_name(hdr->target_name[c.tid]);
         fprintf(out_sam_fp, "%s\t", bam_get_qname(aln));
-        fprintf(out_sam_fp, "%s\t", bam_flag2str(c.flag));
-        fprintf(out_sam_fp, "%s\t", ref_name.data());
-        /**** LIFTOVER STEP ****/
-        fprintf(out_sam_fp, "%ld\t", l.alt_to_ref(ref_name, c.pos) + 1); 
-        /****               ****/
-        fprintf(out_sam_fp, "255\t"); // set MAPQ to unknown (255)
-        fprintf(out_sam_fp, "%s\t", l.cigar_alt_to_ref(ref_name, aln).data()); // set CIGAR to unknown TODO: reconcile CIGAR.
-        fprintf(out_sam_fp, "*\t"); // RNEXT
-        fprintf(out_sam_fp, "0\t"); // PNEXT
-        fprintf(out_sam_fp, "0\t"); // TLEN (can probably copy?)
+        fprintf(out_sam_fp, "%d\t", c.flag);
+        if (c.flag & 4) { // unmapped here
+            fprintf(out_sam_fp, "*\t");
+            fprintf(out_sam_fp, "*\t");
+            fprintf(out_sam_fp, "255\t"); // set MAPQ to unknown (255)
+            fprintf(out_sam_fp, "*\t");
+            fprintf(out_sam_fp, "*\t"); // RNEXT
+            fprintf(out_sam_fp, "0\t"); // PNEXT
+            fprintf(out_sam_fp, "0\t"); // TLEN (can probably copy?)
+        } else {
+            fprintf(out_sam_fp, "%s\t", ref_name.data()); // REF NAME
+            /**** LIFTOVER STEP ****/
+            fprintf(out_sam_fp, "%ld\t", l.alt_to_ref(ref_name, c.pos) + 1);  // POS
+            /****               ****/
+            fprintf(out_sam_fp, "255\t"); // set MAPQ to unknown (255)
+            fprintf(out_sam_fp, "%s\t", l.cigar_alt_to_ref(ref_name, aln).data()); // CIGAR
+            fprintf(out_sam_fp, "*\t"); // RNEXT
+            fprintf(out_sam_fp, "0\t"); // PNEXT
+            fprintf(out_sam_fp, "0\t"); // TLEN (can probably copy?)
+        }
         // get query sequence
         std::string query_seq("");
         uint8_t* seq = bam_get_seq(aln);

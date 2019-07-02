@@ -54,6 +54,7 @@ class Lift {
     size_t alt_to_ref(size_t p) const {
         // auto x = del_sls0(p+1);
         // auto y = ins_rs0(x); // counts number of 0s before x, which, coincidentally, gives position in reference
+        // fprintf(stderr, "selecting %dth 0: %d, ranking that: %d\n", p+1, x, y);
         // return y;
         return ins_rs0(del_sls0(p+1));
     }
@@ -96,7 +97,6 @@ class Lift {
             }
         }
 
-        std::cout << out_cigar << std::endl;
         std::string out = "";
         int z = 1;
         for (size_t i = 1; i < out_cigar.size(); ++i) {
