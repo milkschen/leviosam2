@@ -75,6 +75,14 @@ To load a liftover from a serialized file
 - [sdsl-lite](https://github.com/simongog/sdsl-lite)
 - [htslib](https://github.com/samtools/htslib)
 
+On Mac, these can be installed with `brew install htslib` and `brew install sdsl-lite`.
+
+## Building
+
+Building `liftover` uses [CMake](https://cmake.org).
+
+Our `CMakeLists.txt` file expectes to use `PkgConfig` to load the libraries; you may need to add the `pkgconfig` subdirectories of the `sdsl-lite` and `libhts` libraries to the `CMAKE_PREFIX_PATH` environment variable yourself.
+
 ## Currently Supported:
 
 - create a liftover from VCF file w/ FMT/GT field for a specified sample
