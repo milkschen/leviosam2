@@ -240,16 +240,21 @@ class LiftMap {
                 fprintf(stderr, "VCF not sorted! %s, %d -> %d\n", rec->d.id, tppos, rec->pos);
                 exit(1);
             }
-            // at this point, ppos and x should point to *end* of last variant in ref & alignment, resp.
-            x += (rec->pos - ppos); // x should now be pointing to *start* of current variant wrt alignment
-            tppos = rec->pos;
-            ppos = rec->pos;  // ppos now pointing to *start* of current variant
-            // check if ordered
             int32_t* gt_arr = NULL;
             int32_t ngt_arr = 0;
             int ngt;
             ngt = bcf_get_genotypes(hdr, rec, &gt_arr, &ngt_arr);
+            // only care about the variant if the sample genotyped for it
             if (ngt > 0 && !bcf_gt_is_missing(gt_arr[0]) && bcf_gt_allele(gt_arr[0])) {
+                if (rec->pos == tppos) {
+                    fprintf(stderr, "skipping variant %s:%d\n", bcf_seqname(hdr, rec), rec->pos);
+                    continue;
+                }
+
+                // at this point, ppos and x should point to *end* of last variant in ref & alignment, resp.
+                x += (rec->pos - ppos); // x should now be pointing to *start* of current variant wrt alignment
+                tppos = rec->pos;
+                ppos = rec->pos;  // ppos now pointing to *start* of current variant
                 int var = bcf_gt_allele(gt_arr[0]);
                 int var_type = bcf_get_variant_type(rec, var);
                 int rlen = strlen(rec->d.allele[0]);
@@ -273,7 +278,7 @@ class LiftMap {
                     sbv[x] = 1; // no need to increment x here?
                 }
             } else {
-                // fprintf(stderr, "skipping non-snp/non-indel variant at %d\n", rec->pos);
+                continue;
             }
         } 
         if (ppos > l) {
