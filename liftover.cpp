@@ -1,7 +1,7 @@
+#include "liftover.hpp"
 #include <getopt.h>
 #include <htslib/vcf.h>
 #include <htslib/sam.h>
-#include "liftover.hpp"
 
 struct lift_opts {
     std::string vcf_fname = "";
