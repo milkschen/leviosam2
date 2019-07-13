@@ -145,9 +145,8 @@ int main(int argc, char** argv) {
                 args.sam_fname = optarg;
                 break;
             default:
-                fprintf(stderr, "ignoring option %s\n", c);
+                fprintf(stderr, "ignoring option %c\n", c);
                 exit(1);
-                break;
         }
     }
 
