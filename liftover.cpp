@@ -9,6 +9,7 @@ struct lift_opts {
     std::string outpre = "out";
     std::string lift_fname = "";
     std::string sam_fname = "";
+    std::string cmd = "";
 };
 
 
@@ -57,6 +58,11 @@ void lift_run(lift_opts args) {
     for (auto i = 0; i < contig_names.size(); ++i) {
         fprintf(out_sam_fp, "@SQ\tSN:%s\tLN:%ld\n", contig_names[i].data(), contig_reflens[i]);
     }
+    kstring_t s = KS_INITIALIZE;
+    sam_hdr_find_line_id(hdr, "PG", NULL, NULL, &s);
+    fprintf(out_sam_fp, "%s\n", s.s);
+    ks_free(&s);
+    fprintf(out_sam_fp, "@PG\tID:liftover\tPN:liftover\tCL:\"%s\"\n", args.cmd.data());
     while (sam_read1(sam_fp, hdr, aln) >= 0) {
         bam1_core_t c = aln->core;
         std::string ref_name(hdr->target_name[c.tid]);
@@ -116,9 +122,19 @@ lift::LiftMap lift_from_vcf(std::string fname, std::string sample) {
 }
 
 
+std::string make_cmd(int argc, char** argv) {
+    std::string cmd("");
+    for (auto i = 0; i < argc; ++i) {
+        cmd += std::string(argv[i]) + " ";
+    }
+    return cmd;
+}
+
+
 int main(int argc, char** argv) {
     int c;
     lift_opts args;
+    args.cmd = make_cmd(argc,argv);
     static struct option long_options[] {
         {"vcf", required_argument, 0, 'v'},
         {"sample", required_argument, 0, 's'},
@@ -155,7 +171,6 @@ int main(int argc, char** argv) {
         fprintf(stderr, "no argument provided\n");
         exit(1);
     }
-
     if (!strcmp(argv[optind], "lift")) {
         lift_run(args);
     } else if (!strcmp(argv[optind], "serialize")) {
