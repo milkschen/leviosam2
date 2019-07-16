@@ -221,7 +221,6 @@ class LiftMap {
                     ibv.resize(x + (l - ppos));
                     dbv.resize(x + (l - ppos));
                     sbv.resize(x + (l - ppos));
-                    // lmap[std::string(bcf_hdr_id2name(hdr, rid))] = Lift(ibv, dbv, sbv);
                     lmap.push_back(Lift(ibv,dbv,sbv));
                     names.push_back(bcf_hdr_id2name(hdr, rid));
                 }
@@ -236,36 +235,44 @@ class LiftMap {
                 ppos = 0;
                 tppos = 0; // start of last variant processed
             }
-            if (rec->pos < tppos) {
-                fprintf(stderr, "VCF not sorted! %s, %d -> %d\n", rec->d.id, tppos, rec->pos);
-                exit(1);
-            }
             int32_t* gt_arr = NULL;
             int32_t ngt_arr = 0;
             int ngt;
             ngt = bcf_get_genotypes(hdr, rec, &gt_arr, &ngt_arr);
-            // only care about the variant if the sample genotyped for it
+            int prev_is_ins = 0;
+            // only care about the variant if the sample is genotyped for it
             if (ngt > 0 && !bcf_gt_is_missing(gt_arr[0]) && bcf_gt_allele(gt_arr[0])) {
-                if (rec->pos == tppos) {
-                    fprintf(stderr, "skipping variant %s:%d\n", bcf_seqname(hdr, rec), rec->pos);
-                    continue;
-                }
-
-                // at this point, ppos and x should point to *end* of last variant in ref & alignment, resp.
-                x += (rec->pos - ppos); // x should now be pointing to *start* of current variant wrt alignment
-                tppos = rec->pos;
-                ppos = rec->pos;  // ppos now pointing to *start* of current variant
                 int var = bcf_gt_allele(gt_arr[0]);
                 int var_type = bcf_get_variant_type(rec, var);
                 int rlen = strlen(rec->d.allele[0]);
                 int alen = strlen(rec->d.allele[var]);
+                // determine if overlap
+                // see https://github.com/samtools/bcftools/blob/2299ab6acceae2658b1de480535346b30624caa8/consensus.c#L546
+                if (rec->pos <= tppos) {
+                    int overlap = 0;
+                    // check if occ before or if SNP
+                    if (rec->pos < tppos || !(var_type == VCF_INDEL)) overlap = 1;
+                    // if occ after and not snp, check if del, or if overlapping ins
+                    else if (rec->d.var[var].n <= 0 || prev_is_ins) overlap = 1;
+                    if (overlap) {
+                        fprintf(stderr, "skipping variant %s:%d\n", bcf_seqname(hdr, rec), rec->pos + 1);
+                        continue;
+                    }
+                }
+
+                // at this point, ppos and x should point to *end* of last variant in ref & alignment, resp.
+                x += (rec->pos - ppos); // x should now be pointing to *start* of current variant wrt alignment
+                tppos = rec->pos + rec->rlen - 1; // ttpos points to end of last variant
+                ppos = rec->pos;  // ppos now pointing to *start* of current variant
                 if (var_type == VCF_INDEL) {
                     ++ppos;
                     ++x; // per VCF format, first base btwn REF and ALT match, rest indicate indel
+                    prev_is_ins = 0;
                     if (rlen < alen) { // ins
                         for (size_t i = 0; i < alen - rlen; ++i) {
                             ibv[x++] = 1;
                         }
+                        prev_is_ins = 1;
                     } else if (rlen > alen) { // del
                         for (size_t i = 0; i < rlen - alen; ++i) {
                             dbv[x++] = 1;
