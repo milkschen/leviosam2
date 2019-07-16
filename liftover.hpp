@@ -224,7 +224,10 @@ class LiftMap {
      */
     LiftMap(vcfFile* fp, bcf_hdr_t* hdr, std::string sample_name) {
         sdsl::bit_vector ibv, dbv, sbv; // ins, del, snp
-        bcf_hdr_set_samples(hdr, sample_name.c_str(), 0);
+        if (bcf_hdr_set_samples(hdr, sample_name.c_str(), 0)) {
+            fprintf(stderr, "error: sample does not exist!\n");
+            exit(1);
+        }
         bcf1_t* rec = bcf_init();
         size_t x = 0;
         int rid = -1;
