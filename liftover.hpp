@@ -8,8 +8,20 @@
 #include <sdsl/bit_vectors.hpp>
 #include <sdsl/util.hpp>
 
+/* 
+ * liftover.hpp
+ *
+ * classes and routines for translating (lifting over) coordinates between
+ * two aligned sequences (ref and alt)
+ * Author: Taher Mun
+ * Johns Hopkins Dept. of Computer Science
+ *
+ * Created: July 2019
+ */
+
 namespace lift {
 
+// liftover data structure for a single sequence
 class Lift {
 
     public:
@@ -22,6 +34,10 @@ class Lift {
         this->load(in);
     }
 
+    // construct liftover from bitvectors 
+    // i: contains 1 at each insertion in alternative sequence wrt reference sequence
+    // d: contains 1 at each deletion  ""
+    // s: contains 1 at each mismatch in alignment bwtn alt and ref
     Lift(sdsl::bit_vector i, sdsl::bit_vector d, sdsl::bit_vector s) : ins(i), del(d), snp(s) {
             // create rank and select data-structures for everything
             init_rs_sls();
@@ -51,18 +67,19 @@ class Lift {
         return *this;
     }
 
+    // translate coordinate in alt-space to ref-space
     size_t alt_to_ref(size_t p) const {
-        // auto x = del_sls0(p+1);
-        // auto y = ins_rs0(x); // counts number of 0s before x, which, coincidentally, gives position in reference
-        // fprintf(stderr, "selecting %dth 0: %d, ranking that: %d\n", p+1, x, y);
-        // return y;
         return ins_rs0(del_sls0(p+1));
     }
 
+    // translate coordinate in ref-space to alt-space
     size_t ref_to_alt(size_t p) const {
         return del_rs0(ins_sls0(p+1));
     }
 
+    // convert a CIGAR string in an alt alignment to the corresponding CIGAR string in the ref alignment
+    // input: bam1_t alignment record against alt sequence
+    // output: CIGAR string (as std::string) wrt ref sequence
     std::string cigar_alt_to_ref(bam1_t* b) {
         auto x = del_sls0(b->core.pos+1);
         int y = 0; // read2alt cigar pointer
@@ -113,18 +130,17 @@ class Lift {
         return out;
     }
 
+    // returns size of reference sequence
     size_t reflen() {
         return ins[ins.size() - 1] ? ins_rs0(ins.size() - 1) : ins_rs0(ins.size() - 1) + 1;
     }
 
+    // returns size of alternative sequence
     size_t altlen() {
         return del[del.size() - 1] ? del_rs0(del.size() - 1) : del_rs0(del.size() - 1) + 1;
     }
 
-    sdsl::sd_vector<> get_ins() const {
-        return ins;
-    }
-
+    // saves to stream
     size_t serialize(std::ofstream& out) const {
         size_t size = 0;
         size += ins.serialize(out);
@@ -133,6 +149,7 @@ class Lift {
         return size;
     }
 
+    // load from stream
     void load(std::istream& in) {
         ins.load(in);
         del.load(in);
@@ -162,13 +179,15 @@ class Lift {
     sdsl::sd_vector<>::select_0_type snp_sls0;
 };
 
+// for containing and handling 1+ Lift objects
+// use this to access Lifts by sequence name
+// currently supports construction from a vcf file, other construction methods to be supported later.
 class LiftMap {
 
     public:
 
     LiftMap() {}
 
-    /* TODO: save to file */
     LiftMap(std::ifstream& in) {
         this->load(in);
     }
@@ -199,10 +218,16 @@ class LiftMap {
     /* creates a liftover from specified sample in VCF file. 
      * For simplicity, looks at only the first haplotype of the specified
      * sample
+     * input: vcfFile, bcf_hdr_t* of input VCF (via htslib)
+     *        sample name of desired individual within the VCF
+     * assumes that the vcfFile is sorted!
      */
     LiftMap(vcfFile* fp, bcf_hdr_t* hdr, std::string sample_name) {
         sdsl::bit_vector ibv, dbv, sbv; // ins, del, snp
-        bcf_hdr_set_samples(hdr, sample_name.c_str(), 0);
+        if (bcf_hdr_set_samples(hdr, sample_name.c_str(), 0)) {
+            fprintf(stderr, "error: sample does not exist!\n");
+            exit(1);
+        }
         bcf1_t* rec = bcf_init();
         size_t x = 0;
         int rid = -1;
@@ -233,21 +258,21 @@ class LiftMap {
                 sbv = sdsl::bit_vector(l*2);
                 x = 0;
                 ppos = 0;
-                tppos = 0; // start of last variant processed
+                tppos = 0; // end of last variant processed
             }
             int32_t* gt_arr = NULL;
             int32_t ngt_arr = 0;
             int ngt;
             ngt = bcf_get_genotypes(hdr, rec, &gt_arr, &ngt_arr);
             int prev_is_ins = 0;
-            // only care about the variant if the sample is genotyped for it
+            // only process the variant if it's in the sample's genotype
             if (ngt > 0 && !bcf_gt_is_missing(gt_arr[0]) && bcf_gt_allele(gt_arr[0])) {
                 int var = bcf_gt_allele(gt_arr[0]);
                 int var_type = bcf_get_variant_type(rec, var);
                 int rlen = strlen(rec->d.allele[0]);
                 int alen = strlen(rec->d.allele[var]);
                 // determine if overlap
-                // see https://github.com/samtools/bcftools/blob/2299ab6acceae2658b1de480535346b30624caa8/consensus.c#L546
+                // logic copied from https://github.com/samtools/bcftools/blob/2299ab6acceae2658b1de480535346b30624caa8/consensus.c#L546
                 if (rec->pos <= tppos) {
                     int overlap = 0;
                     // check if occ before or if SNP
@@ -262,11 +287,10 @@ class LiftMap {
 
                 // at this point, ppos and x should point to *end* of last variant in ref & alignment, resp.
                 x += (rec->pos - ppos); // x should now be pointing to *start* of current variant wrt alignment
-                tppos = rec->pos + rec->rlen - 1; // ttpos points to end of last variant
                 ppos = rec->pos;  // ppos now pointing to *start* of current variant
                 if (var_type == VCF_INDEL) {
                     ++ppos;
-                    ++x; // per VCF format, first base btwn REF and ALT match, rest indicate indel
+                    ++x; 
                     prev_is_ins = 0;
                     if (rlen < alen) { // ins
                         for (size_t i = 0; i < alen - rlen; ++i) {
@@ -284,6 +308,7 @@ class LiftMap {
                 } else if (var_type == VCF_SNP) {
                     sbv[x] = 1; // no need to increment x here?
                 }
+                tppos = rec->pos + rec->rlen - 1; // tppos points to end of this variant
             } else {
                 continue;
             }
@@ -295,11 +320,13 @@ class LiftMap {
         ibv.resize(x + (l - ppos));
         dbv.resize(x + (l - ppos));
         sbv.resize(x + (l - ppos));
-        // lmap[bcf_hdr_id2name(hdr, rid)] = Lift(ibv, dbv, sbv); // move assignment operator
         lmap.push_back(Lift(ibv,dbv,sbv));
         names.push_back(bcf_hdr_id2name(hdr, rid));
     }
 
+    // converts a position in the alt sequence to corresponding position in ref sequence
+    // input: sequence name, position within alt sequence
+    // output: position within ref sequence
     // if liftover is not defined, then returns the original position
     size_t alt_to_ref(std::string chr, size_t i) {
         // return lmap[chr].alt_to_ref(i);
@@ -311,7 +338,10 @@ class LiftMap {
             return i;
         }
     }
-    //
+
+    // converts CIGAR string of alt alignment to corresponding CIGAR string for the ref alignment
+    // input: sequence name, bam1_t alignment record object (via htslib)
+    // ouput: CIGAR string of ref alignment (as std::string)
     // if liftover is not defined, then returns empty string
     std::string cigar_alt_to_ref(std::string chr, bam1_t* b) {
         // return lmap[chr].alt_to_ref(i);
@@ -349,6 +379,7 @@ class LiftMap {
         }
     }
 
+    // saves to stream
     size_t serialize(std::ofstream& out) {
         size_t size = 0;
         size_t nelems = lmap.size();
@@ -369,6 +400,7 @@ class LiftMap {
         return size;
     }
 
+    // loads from stream
     void load(std::ifstream& in) {
         int nelems;
         in >> nelems;
@@ -382,6 +414,7 @@ class LiftMap {
         }
     }
 
+    // get names and lengths of ref sequences
     std::pair<std::vector<std::string>, std::vector<size_t>> get_reflens() {
         std::vector<size_t> lengths;
         for (auto i = 0; i < lmap.size(); ++i) {
@@ -390,6 +423,7 @@ class LiftMap {
         return std::make_pair(names, lengths);
     }
 
+    // get names and lengths of alt sequences
     std::pair<std::vector<std::string>, std::vector<size_t>> get_altlens() {
         std::vector<size_t> lengths;
         for (auto i = 0; i < lmap.size(); ++i) {
@@ -400,7 +434,6 @@ class LiftMap {
 
     private:
 
-    // ska::flat_hash_map<std::string, Lift> lmap;
     std::vector<Lift> lmap;
     std::vector<std::string> names;
 };
