@@ -6,7 +6,7 @@
 struct lift_opts {
     std::string vcf_fname = "";
     std::string sample = "";
-    std::string outpre = "out";
+    std::string outpre = "";
     std::string lift_fname = "";
     std::string sam_fname = "";
     std::string cmd = "";
@@ -18,6 +18,10 @@ lift::LiftMap lift_from_vcf(std::string fname, std::string sample);
 
 void serialize_run(lift_opts args) {
     lift::LiftMap l(lift_from_vcf(args.vcf_fname, args.sample));
+    if (args.outpre == "") {
+        fprintf(stderr, "no output prefix specified! Use -p \n");
+        exit(1);
+    }
     std::ofstream o(args.outpre + ".lft");
     l.serialize(o);
     fprintf(stderr, "liftover file saved to %s\n", (args.outpre + ".lft").data());
@@ -52,8 +56,11 @@ void lift_run(lift_opts args) {
     std::vector<size_t> contig_reflens;
     std::tie(contig_names, contig_reflens) = l.get_reflens();
     // for now we'll just write out the samfile raw
-    // samFile* out_sam_fp = sam_open((args.outpre + ".sam").data(), "w");
-    FILE* out_sam_fp = fopen((args.outpre + ".sam").data(), "w");
+    FILE* out_sam_fp;
+    if (args.outpre == "") 
+        out_sam_fp = stdout;
+    else 
+        out_sam_fp = fopen((args.outpre + ".sam").data(), "w");
     fprintf(out_sam_fp, "@HD\tVN:1.6\tSO:unknown\n");
     for (auto i = 0; i < contig_names.size(); ++i) {
         fprintf(out_sam_fp, "@SQ\tSN:%s\tLN:%ld\n", contig_names[i].data(), contig_reflens[i]);
