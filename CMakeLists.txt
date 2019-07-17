@@ -25,3 +25,5 @@ pkg_search_module(PKG_LIBDIVSUFSORT REQUIRED libdivsufsort)
 add_executable(liftover liftover.cpp)
 target_link_libraries(liftover ${PKG_HTSLIB_LDFLAGS})
 target_link_libraries(liftover sdsl)
+
+INSTALL(TARGETS liftover DESTINATION bin)
