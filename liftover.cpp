@@ -2,6 +2,7 @@
 #include <getopt.h>
 #include <htslib/vcf.h>
 #include <htslib/sam.h>
+#include <htslib/kstring.h>
 
 struct lift_opts {
     std::string vcf_fname = "";
@@ -25,6 +26,24 @@ void serialize_run(lift_opts args) {
     std::ofstream o(args.outpre + ".lft");
     l.serialize(o);
     fprintf(stderr, "liftover file saved to %s\n", (args.outpre + ".lft").data());
+}
+
+
+char* get_PG(bam_hdr_t* hdr) {
+    char* hdr_txt = (char*) malloc(sizeof(char) * hdr->l_text + 1);
+    char* buf = (char*) malloc(sizeof(char) * hdr->l_text);
+    buf[0] = '\0';
+    std::strcpy(hdr_txt, hdr->text);
+    char* token = std::strtok(hdr_txt, "@");
+    while (token != NULL) {
+        if (token[0] == 'P' && token[1] == 'G') {
+            strcat(buf, "@");
+            strcat(buf, token);
+        }
+        token = std::strtok(NULL, "@");
+    }
+    free(hdr_txt);
+    return buf;
 }
 
 
@@ -65,10 +84,16 @@ void lift_run(lift_opts args) {
     for (auto i = 0; i < contig_names.size(); ++i) {
         fprintf(out_sam_fp, "@SQ\tSN:%s\tLN:%ld\n", contig_names[i].data(), contig_reflens[i]);
     }
+    /* This is only supported in the latest dev release of htslib as of July 22. 
+     * add back in at next htslib release
     kstring_t s = KS_INITIALIZE;
     sam_hdr_find_line_id(hdr, "PG", NULL, NULL, &s);
     fprintf(out_sam_fp, "%s\n", s.s);
     ks_free(&s);
+    */
+    char* prev_pg = get_PG(hdr);
+    fprintf(out_sam_fp, "%s", prev_pg);
+    free(prev_pg);
     fprintf(out_sam_fp, "@PG\tID:liftover\tPN:liftover\tCL:\"%s\"\n", args.cmd.data());
     while (sam_read1(sam_fp, hdr, aln) >= 0) {
         bam1_core_t c = aln->core;
