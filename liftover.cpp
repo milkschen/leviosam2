@@ -2,6 +2,7 @@
 #include <getopt.h>
 #include <htslib/vcf.h>
 #include <htslib/sam.h>
+#include <htslib/kstring.h>
 
 struct lift_opts {
     std::string vcf_fname = "";
