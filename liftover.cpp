@@ -97,7 +97,6 @@ void lift_run(lift_opts args) {
     fprintf(out_sam_fp, "@PG\tID:liftover\tPN:liftover\tCL:\"%s\"\n", args.cmd.data());
     while (sam_read1(sam_fp, hdr, aln) >= 0) {
         bam1_core_t c = aln->core;
-        std::string ref_name(hdr->target_name[c.tid]);
         fprintf(out_sam_fp, "%s\t", bam_get_qname(aln));
         fprintf(out_sam_fp, "%d\t", c.flag);
         if (c.flag & 4) { // unmapped here
@@ -109,6 +108,7 @@ void lift_run(lift_opts args) {
             fprintf(out_sam_fp, "0\t"); // PNEXT
             fprintf(out_sam_fp, "0\t"); // TLEN (can probably copy?)
         } else {
+            std::string ref_name(hdr->target_name[c.tid]);
             fprintf(out_sam_fp, "%s\t", ref_name.data()); // REF NAME
             /**** LIFTOVER STEP ****/
             fprintf(out_sam_fp, "%ld\t", l.alt_to_ref(ref_name, c.pos) + 1);  // POS
