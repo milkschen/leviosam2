@@ -224,7 +224,9 @@ class LiftMap {
      */
     LiftMap(vcfFile* fp, bcf_hdr_t* hdr, std::string sample_name) {
         sdsl::bit_vector ibv, dbv, sbv; // ins, del, snp
-        if (bcf_hdr_set_samples(hdr, sample_name.c_str(), 0)) {
+        bool no_sample = (sample_name == "");
+        if (no_sample) fprintf(stderr, "no sample given, assuming GT=1 for all variants\n");
+        if (!no_sample && bcf_hdr_set_samples(hdr, sample_name.c_str(), 0)) {
             fprintf(stderr, "error: sample does not exist!\n");
             exit(1);
         }
@@ -263,11 +265,11 @@ class LiftMap {
             int32_t* gt_arr = NULL;
             int32_t ngt_arr = 0;
             int ngt;
-            ngt = bcf_get_genotypes(hdr, rec, &gt_arr, &ngt_arr);
+            ngt = no_sample? 0 : bcf_get_genotypes(hdr, rec, &gt_arr, &ngt_arr);
             int prev_is_ins = 0;
             // only process the variant if it's in the sample's genotype
-            if (ngt > 0 && !bcf_gt_is_missing(gt_arr[0]) && bcf_gt_allele(gt_arr[0])) {
-                int var = bcf_gt_allele(gt_arr[0]);
+            if (no_sample || (ngt > 0 && !bcf_gt_is_missing(gt_arr[0]) && bcf_gt_allele(gt_arr[0]))) {
+                int var = no_sample ? 1 : bcf_gt_allele(gt_arr[0]); // defaults to first alt allele in no_sample case
                 int var_type = bcf_get_variant_type(rec, var);
                 int rlen = strlen(rec->d.allele[0]);
                 int alen = strlen(rec->d.allele[var]);

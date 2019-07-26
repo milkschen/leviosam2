@@ -34,7 +34,7 @@ void lift_run(lift_opts args) {
         if (args.lift_fname != "") {
             std::ifstream in(args.lift_fname);
             return lift::LiftMap(in);
-        } else if (args.vcf_fname != "" && args.sample != "") {
+        } else if (args.vcf_fname != "") {
             return lift::LiftMap(lift_from_vcf(args.vcf_fname, args.sample));
         } else {
             fprintf(stderr, "not enough parameters specified to build/load lift-over\n");
