@@ -100,8 +100,8 @@ void lift_run(lift_opts args) {
         fprintf(out_sam_fp, "%s\t", bam_get_qname(aln));
         fprintf(out_sam_fp, "%d\t", c.flag);
         if (c.flag & 4) { // unmapped here
-            fprintf(out_sam_fp, "*\t");
-            fprintf(out_sam_fp, "*\t");
+            fprintf(out_sam_fp, "*\t"); // RNAME (String)
+            fprintf(out_sam_fp, "0\t"); // POS (Int)
             fprintf(out_sam_fp, "255\t"); // set MAPQ to unknown (255)
             fprintf(out_sam_fp, "*\t");
             fprintf(out_sam_fp, "*\t"); // RNEXT
