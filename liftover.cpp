@@ -113,7 +113,8 @@ void lift_run(lift_opts args) {
             /**** LIFTOVER STEP ****/
             fprintf(out_sam_fp, "%ld\t", l.alt_to_ref(ref_name, c.pos) + 1);  // POS
             /****               ****/
-            fprintf(out_sam_fp, "255\t"); // set MAPQ to unknown (255)
+            // fprintf(out_sam_fp, "255\t"); // set MAPQ to unknown (255)
+            fprintf(out_sam_fp, "%d\t", c.qual);
             fprintf(out_sam_fp, "%s\t", l.cigar_alt_to_ref(ref_name, aln).data()); // CIGAR
             fprintf(out_sam_fp, "*\t"); // RNEXT
             fprintf(out_sam_fp, "0\t"); // PNEXT
