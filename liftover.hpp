@@ -337,6 +337,7 @@ class LiftMap {
             size_t index = std::distance(names.begin(), it);
             return lmap[index].alt_to_ref(i);
         } else {
+            fprintf(stderr, "Warning: chromosome %s not found! \n", chr.c_str());
             return i;
         }
     }
