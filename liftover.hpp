@@ -222,7 +222,7 @@ class LiftMap {
      *        sample name of desired individual within the VCF
      * assumes that the vcfFile is sorted!
      */
-    LiftMap(vcfFile* fp, bcf_hdr_t* hdr, std::string sample_name) {
+    LiftMap(vcfFile* fp, bcf_hdr_t* hdr, std::string sample_name, std::string haplotype) {
         sdsl::bit_vector ibv, dbv, sbv; // ins, del, snp
         bool no_sample = (sample_name == "");
         if (no_sample) fprintf(stderr, "no sample given, assuming GT=1 for all variants\n");
@@ -236,6 +236,7 @@ class LiftMap {
         int ppos = 0;
         int tppos = 0;
         size_t l = 0;
+        int hap = stoi(haplotype);
         while(!bcf_read(fp, hdr, rec)) {
             bcf_unpack(rec, BCF_UN_FMT);
             if (rec->rid != rid) {
@@ -268,8 +269,8 @@ class LiftMap {
             ngt = no_sample? 0 : bcf_get_genotypes(hdr, rec, &gt_arr, &ngt_arr);
             int prev_is_ins = 0;
             // only process the variant if it's in the sample's genotype
-            if (no_sample || (ngt > 0 && !bcf_gt_is_missing(gt_arr[0]) && bcf_gt_allele(gt_arr[0]))) {
-                int var = no_sample ? 1 : bcf_gt_allele(gt_arr[0]); // defaults to first alt allele in no_sample case
+            if (no_sample || (ngt > 0 && !bcf_gt_is_missing(gt_arr[hap]) && bcf_gt_allele(gt_arr[hap]))) {
+                int var = no_sample ? 1 : bcf_gt_allele(gt_arr[hap]);
                 int var_type = bcf_get_variant_type(rec, var);
                 int rlen = strlen(rec->d.allele[0]);
                 int alen = strlen(rec->d.allele[var]);

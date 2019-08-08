@@ -11,14 +11,15 @@ struct lift_opts {
     std::string lift_fname = "";
     std::string sam_fname = "";
     std::string cmd = "";
+    std::string haplotype = "0";
 };
 
 
-lift::LiftMap lift_from_vcf(std::string fname, std::string sample);
+lift::LiftMap lift_from_vcf(std::string fname, std::string sample, std::string haplotype);
 
 
 void serialize_run(lift_opts args) {
-    lift::LiftMap l(lift_from_vcf(args.vcf_fname, args.sample));
+    lift::LiftMap l(lift_from_vcf(args.vcf_fname, args.sample, args.haplotype));
     if (args.outpre == "") {
         fprintf(stderr, "no output prefix specified! Use -p \n");
         exit(1);
@@ -54,7 +55,7 @@ void lift_run(lift_opts args) {
             std::ifstream in(args.lift_fname);
             return lift::LiftMap(in);
         } else if (args.vcf_fname != "") {
-            return lift::LiftMap(lift_from_vcf(args.vcf_fname, args.sample));
+            return lift::LiftMap(lift_from_vcf(args.vcf_fname, args.sample, args.haplotype));
         } else {
             fprintf(stderr, "not enough parameters specified to build/load lift-over\n");
             exit(1);
@@ -144,14 +145,14 @@ void lift_run(lift_opts args) {
 }
 
 
-lift::LiftMap lift_from_vcf(std::string fname, std::string sample) {
+lift::LiftMap lift_from_vcf(std::string fname, std::string sample, std::string haplotype) {
     if (fname == "" && sample == "") {
         fprintf(stderr, "vcf file name and sample name are required!! \n");
         exit(1);
     }
     vcfFile* fp = bcf_open(fname.data(), "r");
     bcf_hdr_t* hdr = bcf_hdr_read(fp);
-    return lift::LiftMap(fp, hdr, sample);
+    return lift::LiftMap(fp, hdr, sample, haplotype);
 }
 
 
@@ -173,10 +174,11 @@ int main(int argc, char** argv) {
         {"sample", required_argument, 0, 's'},
         {"prefix", required_argument, 0, 'p'},
         {"liftover", required_argument, 0, 'l'},
-        {"sam", required_argument, 0, 'a'}
+        {"sam", required_argument, 0, 'a'},
+        {"haplotype", required_argument, 0, 'g'}
     };
     int long_index = 0;
-    while((c = getopt_long(argc, argv, "v:s:p:l:a:", long_options, &long_index)) != -1) { 
+    while((c = getopt_long(argc, argv, "v:s:p:l:a:g:", long_options, &long_index)) != -1) {
         switch (c) {
             case 'v':
                 args.vcf_fname = optarg;
@@ -193,6 +195,9 @@ int main(int argc, char** argv) {
             case 'a':
                 args.sam_fname = optarg;
                 break;
+            case 'g':
+                args.haplotype = optarg;
+                break;
             default:
                 fprintf(stderr, "ignoring option %c\n", c);
                 exit(1);
@@ -201,6 +206,10 @@ int main(int argc, char** argv) {
 
     if (argc - optind < 1) {
         fprintf(stderr, "no argument provided\n");
+        exit(1);
+    }
+    if (args.haplotype != "0" && args.haplotype != "1"){
+        fprintf(stderr, "invalid haplotype %s\n", args.haplotype);
         exit(1);
     }
     if (!strcmp(argv[optind], "lift")) {
