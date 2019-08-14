@@ -216,8 +216,6 @@ class LiftMap {
     }
 
     /* creates a liftover from specified sample in VCF file. 
-     * For simplicity, looks at only the first haplotype of the specified
-     * sample
      * input: vcfFile, bcf_hdr_t* of input VCF (via htslib)
      *        sample name of desired individual within the VCF
      * assumes that the vcfFile is sorted!
@@ -255,6 +253,10 @@ class LiftMap {
                 // get size of contig
                 rid = rec->rid;
                 l = hdr->id[BCF_DT_CTG][rid].val->info[0];
+                if (l == 0) {
+                    fprintf(stderr, "contig length not specified in file!\n");
+                    exit(1);
+                }
                 // initialize bit vectors for this contig
                 ibv = sdsl::bit_vector(l*2);
                 dbv = sdsl::bit_vector(l*2);
