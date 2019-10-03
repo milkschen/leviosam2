@@ -12,7 +12,7 @@
  * liftover.hpp
  *
  * classes and routines for translating (lifting over) coordinates between
- * two aligned sequences (ref and alt)
+ * two aligned sequences
  * Author: Taher Mun
  * Johns Hopkins Dept. of Computer Science
  *
@@ -35,9 +35,9 @@ class Lift {
     }
 
     // construct liftover from bitvectors 
-    // i: contains 1 at each insertion in alternative sequence wrt reference sequence
+    // i: contains 1 at each insertion in s2 wrt s1
     // d: contains 1 at each deletion  ""
-    // s: contains 1 at each mismatch in alignment bwtn alt and ref
+    // s: contains 1 at each mismatch in alignment bwtn s1 and s1
     Lift(sdsl::bit_vector i, sdsl::bit_vector d, sdsl::bit_vector s) : ins(i), del(d), snp(s) {
             // create rank and select data-structures for everything
             init_rs_sls();
@@ -67,20 +67,20 @@ class Lift {
         return *this;
     }
 
-    // translate coordinate in alt-space to ref-space
-    size_t alt_to_ref(size_t p) const {
+    // translate coordinate in s2-space to s1-space
+    size_t s2_to_s1(size_t p) const {
         return ins_rs0(del_sls0(p+1));
     }
 
-    // translate coordinate in ref-space to alt-space
-    size_t ref_to_alt(size_t p) const {
+    // translate coordinate in s1-space to s2-space
+    size_t s1_to_s2(size_t p) const {
         return del_rs0(ins_sls0(p+1));
     }
 
-    // convert a CIGAR string in an alt alignment to the corresponding CIGAR string in the ref alignment
-    // input: bam1_t alignment record against alt sequence
-    // output: CIGAR string (as std::string) wrt ref sequence
-    std::string cigar_alt_to_ref(bam1_t* b) {
+    // convert a CIGAR string in an s2 alignment to the corresponding CIGAR string in the s1 alignment
+    // input: bam1_t alignment record against s2 sequence
+    // output: CIGAR string (as std::string) wrt s1 sequence
+    std::string cigar_s2_to_s1(bam1_t* b) {
         auto x = del_sls0(b->core.pos+1);
         int y = 0; // read2alt cigar pointer
         uint32_t* cigar = bam_get_cigar(b);
@@ -130,13 +130,13 @@ class Lift {
         return out;
     }
 
-    // returns size of reference sequence
-    size_t reflen() {
+    // returns size of s1 sequence
+    size_t s1_len() {
         return ins[ins.size() - 1] ? ins_rs0(ins.size() - 1) : ins_rs0(ins.size() - 1) + 1;
     }
 
-    // returns size of alternative sequence
-    size_t altlen() {
+    // returns size of s2 sequence
+    size_t s2_len() {
         return del[del.size() - 1] ? del_rs0(del.size() - 1) : del_rs0(del.size() - 1) + 1;
     }
 
@@ -249,7 +249,7 @@ class LiftMap {
                 if (rid != -1) {
                     // condense the bit vectors and add to map
                     if (ppos > l) {
-                        fprintf(stderr, "something went wrong, we went past bounds of ref sequence. exiting...\n");
+                        fprintf(stderr, "something went wrong, we went past bounds of s1 sequence. exiting...\n");
                         exit(1);
                     }
                     ibv.resize(x + (l - ppos));
@@ -304,7 +304,7 @@ class LiftMap {
                     }
                 }
 
-                // at this point, ppos and x should point to *end* of last variant in ref & alignment, resp.
+                // at this point, ppos and x should point to *end* of last variant in s1 & s2 alignment, resp.
                 x += (rec->pos - ppos); // x should now be pointing to *start* of current variant wrt alignment
                 ppos = rec->pos;  // ppos now pointing to *start* of current variant
                 if (var_type == VCF_INDEL) {
@@ -319,7 +319,7 @@ class LiftMap {
                     } else if (rlen > alen) { // del
                         for (size_t i = 0; i < rlen - alen; ++i) {
                             dbv[x++] = 1;
-                            ++ppos; // ref advances, so ppos advances
+                            ++ppos; // s1 advances, so ppos advances
                         }
                     }
                     --x;
@@ -333,7 +333,7 @@ class LiftMap {
             }
         } 
         if (ppos > l) {
-            fprintf(stderr, "something went wrong, we went past bounds of ref sequence. exiting...\n");
+            fprintf(stderr, "something went wrong, we went past bounds of s1 sequence. exiting...\n");
             exit(1);
         }
         ibv.resize(x + (l - ppos));
@@ -347,28 +347,28 @@ class LiftMap {
         }
     }
 
-    // converts a position in the alt sequence to corresponding position in ref sequence
-    // input: sequence name, position within alt sequence
-    // output: position within ref sequence
+    // converts a position in the s2 sequence to corresponding position in s1 sequence
+    // input: sequence name, position within s2 sequence
+    // output: position within s1 sequence
     // if liftover is not defined, then returns the original position
-    size_t alt_to_ref(std::string n, size_t i) {
+    size_t s2_to_s1(std::string n, size_t i) {
         auto it = s2_map.find(n);
         if (it != s2_map.end()) {
-            return lmap[it->second].alt_to_ref(i);
+            return lmap[it->second].s2_to_s1(i);
         } else {
             fprintf(stderr, "Warning: chromosome %s not found! \n", n.c_str());
             return i;
         }
     }
 
-    // converts CIGAR string of alt alignment to corresponding CIGAR string for the ref alignment
+    // converts CIGAR string of s2 alignment to corresponding CIGAR string for the s1 alignment
     // input: sequence name, bam1_t alignment record object (via htslib)
-    // ouput: CIGAR string of ref alignment (as std::string)
+    // ouput: CIGAR string of s1 alignment (as std::string)
     // if liftover is not defined, then returns empty string
-    std::string cigar_alt_to_ref(std::string n, bam1_t* b) {
+    std::string cigar_s2_to_s1(std::string n, bam1_t* b) {
         auto it = s2_map.find(n);
         if (it != s2_map.end()) {
-            return lmap[it->second].cigar_alt_to_ref(b);
+            return lmap[it->second].cigar_s2_to_s1(b);
         } else { // returns original cigar string
             std::string out_cigar = "";
             auto cigar = bam_get_cigar(b);
@@ -445,12 +445,12 @@ class LiftMap {
         }
     }
 
-    // get names and lengths of ref sequences
-    std::pair<std::vector<std::string>, std::vector<size_t>> get_reflens() {
+    // get names and lengths of s1 sequences
+    std::pair<std::vector<std::string>, std::vector<size_t>> get_s1_lens() {
         std::vector<size_t> lengths;
         std::vector<std::string> names;
         for (const auto& x: s1_map) {
-            lengths.push_back(lmap[x.second].reflen());
+            lengths.push_back(lmap[x.second].s1_len());
             names.push_back(x.first);
         }
         return std::make_pair(names, lengths);

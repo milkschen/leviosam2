@@ -98,7 +98,7 @@ void lift_run(lift_opts args) {
     // the "ref" lengths are all stored in the liftover structure. How do we loop over it?
     std::vector<std::string> contig_names;
     std::vector<size_t> contig_reflens;
-    std::tie(contig_names, contig_reflens) = l.get_reflens();
+    std::tie(contig_names, contig_reflens) = l.get_s1_lens();
     // for now we'll just write out the samfile raw
     FILE* out_sam_fp;
     if (args.outpre == "") 
@@ -136,11 +136,11 @@ void lift_run(lift_opts args) {
             std::string ref_name(hdr->target_name[c.tid]);
             fprintf(out_sam_fp, "%s\t", ref_name.data()); // REF NAME
             /**** LIFTOVER STEP ****/
-            fprintf(out_sam_fp, "%ld\t", l.alt_to_ref(ref_name, c.pos) + 1);  // POS
+            fprintf(out_sam_fp, "%ld\t", l.s2_to_s1(ref_name, c.pos) + 1);  // POS
             /****               ****/
             // fprintf(out_sam_fp, "255\t"); // set MAPQ to unknown (255)
             fprintf(out_sam_fp, "%d\t", c.qual);
-            fprintf(out_sam_fp, "%s\t", l.cigar_alt_to_ref(ref_name, aln).data()); // CIGAR
+            fprintf(out_sam_fp, "%s\t", l.cigar_s2_to_s1(ref_name, aln).data()); // CIGAR
             fprintf(out_sam_fp, "*\t"); // RNEXT
             fprintf(out_sam_fp, "0\t"); // PNEXT
             fprintf(out_sam_fp, "0\t"); // TLEN (can probably copy?)
