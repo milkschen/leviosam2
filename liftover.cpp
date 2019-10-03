@@ -1,8 +1,11 @@
 #include "liftover.hpp"
 #include <getopt.h>
+#include <cstdio>
 #include <htslib/vcf.h>
 #include <htslib/sam.h>
 #include <htslib/kstring.h>
+
+using NameMap = std::vector<std::pair<std::string,std::string>>;
 
 struct lift_opts {
     std::string vcf_fname = "";
@@ -12,14 +15,33 @@ struct lift_opts {
     std::string sam_fname = "";
     std::string cmd = "";
     std::string haplotype = "0";
+    NameMap name_map;
 };
 
+NameMap parse_name_map(const char* fname) {
+    NameMap names;
+    FILE* fp = fopen(fname, "r");
+    char n1[255];
+    char n2[255];
+    int x;
+    while ((x = fscanf(fp,"%[^\t]\t%[^\n]\n", n1, n2)) != EOF) {
+        if (x <= 0) {
+            fprintf(stderr, "error encountered reading name map\n");
+            exit(1);
+        }
+        names.push_back(std::make_pair(std::string(n1), std::string(n2)));
+    }
+    fclose(fp);
+    return names;
+}
 
-lift::LiftMap lift_from_vcf(std::string fname, std::string sample, std::string haplotype);
-
+lift::LiftMap lift_from_vcf(std::string fname, 
+                            std::string sample, 
+                            std::string haplotype, 
+                            NameMap names);
 
 void serialize_run(lift_opts args) {
-    lift::LiftMap l(lift_from_vcf(args.vcf_fname, args.sample, args.haplotype));
+    lift::LiftMap l(lift_from_vcf(args.vcf_fname, args.sample, args.haplotype, args.name_map));
     if (args.outpre == "") {
         fprintf(stderr, "no output prefix specified! Use -p \n");
         exit(1);
@@ -55,12 +77,14 @@ void lift_run(lift_opts args) {
             std::ifstream in(args.lift_fname);
             return lift::LiftMap(in);
         } else if (args.vcf_fname != "") {
-            return lift::LiftMap(lift_from_vcf(args.vcf_fname, args.sample, args.haplotype));
+            return lift::LiftMap(lift_from_vcf(args.vcf_fname, args.sample, args.haplotype, args.name_map));
         } else {
             fprintf(stderr, "not enough parameters specified to build/load lift-over\n");
             exit(1);
         }
     } ();
+
+    fprintf(stderr, "loaded liftmap!\n");
 
     // read sam file here
     if (args.sam_fname == "") {
@@ -145,14 +169,17 @@ void lift_run(lift_opts args) {
 }
 
 
-lift::LiftMap lift_from_vcf(std::string fname, std::string sample, std::string haplotype) {
+lift::LiftMap lift_from_vcf(std::string fname, 
+                            std::string sample, 
+                            std::string haplotype, 
+                            NameMap names) {
     if (fname == "" && sample == "") {
         fprintf(stderr, "vcf file name and sample name are required!! \n");
         exit(1);
     }
     vcfFile* fp = bcf_open(fname.data(), "r");
     bcf_hdr_t* hdr = bcf_hdr_read(fp);
-    return lift::LiftMap(fp, hdr, sample, haplotype);
+    return lift::LiftMap(fp, hdr, sample, haplotype, names);
 }
 
 
@@ -178,7 +205,7 @@ int main(int argc, char** argv) {
         {"haplotype", required_argument, 0, 'g'}
     };
     int long_index = 0;
-    while((c = getopt_long(argc, argv, "v:s:p:l:a:g:", long_options, &long_index)) != -1) {
+    while((c = getopt_long(argc, argv, "v:s:p:l:a:g:n:", long_options, &long_index)) != -1) {
         switch (c) {
             case 'v':
                 args.vcf_fname = optarg;
@@ -197,6 +224,9 @@ int main(int argc, char** argv) {
                 break;
             case 'g':
                 args.haplotype = optarg;
+                break;
+            case 'n':
+                args.name_map = parse_name_map(optarg);
                 break;
             default:
                 fprintf(stderr, "ignoring option %c\n", c);

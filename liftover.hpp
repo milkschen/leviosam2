@@ -193,25 +193,26 @@ class LiftMap {
     }
 
     // copy constructor
-    LiftMap(const LiftMap& rhs) : lmap(rhs.lmap), names(rhs.names) {
+    LiftMap(const LiftMap& rhs) : lmap(rhs.lmap), s1_map(rhs.s1_map), s2_map(rhs.s2_map) {
     }
 
     // move constructor
-    LiftMap(LiftMap&& rhs) : lmap(std::move(rhs.lmap)), names(std::move(rhs.names)) {
+    LiftMap(LiftMap&& rhs) : lmap(std::move(rhs.lmap)), s1_map(std::move(rhs.s1_map)), s2_map(std::move(s2_map)) {
     }
 
     // copy assignment operator
     LiftMap& operator=(const LiftMap& rhs) {
         lmap = rhs.lmap;
-        names.clear();
-        names = rhs.names;
+        s1_map.clear();
+        s2_map.clear();
         return *this;
     }
 
     // move assignment operator
     LiftMap& operator=(LiftMap&& rhs) {
         lmap = std::move(rhs.lmap);
-        names = std::move(rhs.names);
+        s1_map = std::move(s1_map);
+        s2_map = std::move(s2_map);
         return *this;
     }
 
@@ -220,7 +221,14 @@ class LiftMap {
      *        sample name of desired individual within the VCF
      * assumes that the vcfFile is sorted!
      */
-    LiftMap(vcfFile* fp, bcf_hdr_t* hdr, std::string sample_name, std::string haplotype) {
+    LiftMap(vcfFile* fp, bcf_hdr_t* hdr, std::string sample_name, std::string haplotype, 
+            std::vector<std::pair<std::string,std::string>> nm = {}) {
+        bool get_names = 1;
+        if (nm.size()) {
+            for (int i = 0; i < nm.size(); ++i) 
+                add_names(nm[i].first, nm[i].second, i);
+            get_names = 0;
+        }
         sdsl::bit_vector ibv, dbv, sbv; // ins, del, snp
         bool no_sample = (sample_name == "");
         if (no_sample) fprintf(stderr, "no sample given, assuming GT=1 for all variants\n");
@@ -248,7 +256,12 @@ class LiftMap {
                     dbv.resize(x + (l - ppos));
                     sbv.resize(x + (l - ppos));
                     lmap.push_back(Lift(ibv,dbv,sbv));
-                    names.push_back(bcf_hdr_id2name(hdr, rid));
+                    if (get_names) {
+                        fprintf(stderr, "manually getting names 1\n");
+                        const char* name = bcf_hdr_id2name(hdr, rid);
+                        add_names(name, name, lmap.size()-1);
+                        fprintf(stderr, "got names!\n");
+                    }
                 }
                 // get size of contig
                 rid = rec->rid;
@@ -258,6 +271,7 @@ class LiftMap {
                     exit(1);
                 }
                 // initialize bit vectors for this contig
+                // TODO: maybe set vec size to something less than 2l
                 ibv = sdsl::bit_vector(l*2);
                 dbv = sdsl::bit_vector(l*2);
                 sbv = sdsl::bit_vector(l*2);
@@ -326,21 +340,23 @@ class LiftMap {
         dbv.resize(x + (l - ppos));
         sbv.resize(x + (l - ppos));
         lmap.push_back(Lift(ibv,dbv,sbv));
-        names.push_back(bcf_hdr_id2name(hdr, rid));
+        if (get_names) {
+            fprintf(stderr, "manually getting names 2\n");
+            const char* name = bcf_hdr_id2name(hdr, rid);
+            add_names(name, name, lmap.size()-1);
+        }
     }
 
     // converts a position in the alt sequence to corresponding position in ref sequence
     // input: sequence name, position within alt sequence
     // output: position within ref sequence
     // if liftover is not defined, then returns the original position
-    size_t alt_to_ref(std::string chr, size_t i) {
-        // return lmap[chr].alt_to_ref(i);
-        auto it = std::find(names.begin(), names.end(), chr);
-        if (it != std::end(names)) {
-            size_t index = std::distance(names.begin(), it);
-            return lmap[index].alt_to_ref(i);
+    size_t alt_to_ref(std::string n, size_t i) {
+        auto it = s2_map.find(n);
+        if (it != s2_map.end()) {
+            return lmap[it->second].alt_to_ref(i);
         } else {
-            fprintf(stderr, "Warning: chromosome %s not found! \n", chr.c_str());
+            fprintf(stderr, "Warning: chromosome %s not found! \n", n.c_str());
             return i;
         }
     }
@@ -349,13 +365,11 @@ class LiftMap {
     // input: sequence name, bam1_t alignment record object (via htslib)
     // ouput: CIGAR string of ref alignment (as std::string)
     // if liftover is not defined, then returns empty string
-    std::string cigar_alt_to_ref(std::string chr, bam1_t* b) {
-        // return lmap[chr].alt_to_ref(i);
-        auto it = std::find(names.begin(), names.end(), chr);
-        if (it != std::end(names)) {
-            size_t index = std::distance(names.begin(), it);
-            return lmap[index].cigar_alt_to_ref(b);
-        } else {
+    std::string cigar_alt_to_ref(std::string n, bam1_t* b) {
+        auto it = s2_map.find(n);
+        if (it != s2_map.end()) {
+            return lmap[it->second].cigar_alt_to_ref(b);
+        } else { // returns original cigar string
             std::string out_cigar = "";
             auto cigar = bam_get_cigar(b);
             for (int i = 0; i < b->core.n_cigar; ++i) {
@@ -391,17 +405,19 @@ class LiftMap {
         size_t nelems = lmap.size();
         out << nelems;
         for (const auto& it: lmap) {
-            // serialize the bit vectors
             size += it.serialize(out);
         }
-        std::vector<std::string> strs;
-        for (const auto& it: names) {
-            // serialize the names
-            size += it.size();
-            strs.push_back(it);
+        out << s1_map.size();
+        for (auto s: s1_map) {
+            size += s.first.size();
+            size += sizeof(s.second);
+            out << s.first << s.second;
         }
-        for (auto s: strs) {
-            out << s << "\t";
+        out << s2_map.size();
+        for (auto s: s2_map) {
+            size += s.first.size();
+            size += sizeof(s.second);
+            out << s.first << s.second;
         }
         return size;
     }
@@ -413,27 +429,29 @@ class LiftMap {
         for (auto i = 0; i < nelems; ++i) {
             lmap.push_back(Lift(in));
         }
+        in >> nelems;
         for (auto i = 0; i < nelems; ++i) {
-            std::string name;
-            in >> name;
-            names.push_back(name);
+            Name2IdxMap::key_type key;
+            Name2IdxMap::mapped_type value;
+            in >> key >> value;
+            s1_map[key] = value;
+        }
+        in >> nelems;
+        for (auto i = 0; i < nelems; ++i) {
+            Name2IdxMap::key_type key;
+            Name2IdxMap::mapped_type value;
+            in >> key >> value;
+            s2_map[key] = value;
         }
     }
 
     // get names and lengths of ref sequences
     std::pair<std::vector<std::string>, std::vector<size_t>> get_reflens() {
         std::vector<size_t> lengths;
-        for (auto i = 0; i < lmap.size(); ++i) {
-            lengths.push_back(lmap[i].reflen());
-        }
-        return std::make_pair(names, lengths);
-    }
-
-    // get names and lengths of alt sequences
-    std::pair<std::vector<std::string>, std::vector<size_t>> get_altlens() {
-        std::vector<size_t> lengths;
-        for (auto i = 0; i < lmap.size(); ++i) {
-            lengths.push_back(lmap[i].altlen());
+        std::vector<std::string> names;
+        for (const auto& x: s1_map) {
+            lengths.push_back(lmap[x.second].reflen());
+            names.push_back(x.first);
         }
         return std::make_pair(names, lengths);
     }
@@ -441,9 +459,29 @@ class LiftMap {
     private:
 
     std::vector<Lift> lmap;
-    std::vector<std::string> names;
+    /* I don't anticipate the names taking up a huge portion of space, so it's
+     * probably safe to store them separately */
+    using Name2IdxMap = std::unordered_map<std::string, int>;
+    Name2IdxMap s1_map;
+    Name2IdxMap s2_map;
+    void add_names(std::string n1, std::string n2, int i) {
+        fprintf(stderr, "finding the first name %s\n", n1.data());
+        if (s1_map.find(n1) == s1_map.end()) {
+            s1_map[n1] = i;
+        } else {
+            fprintf(stderr, "non one-to-one mappings not supported yet!\n");
+            exit(1);
+        }
+        fprintf(stderr, "finding the second name %s\n", n2.data());
+        if (s2_map.find(n2) == s2_map.end()) {
+            s2_map[n2] = i;
+        } else {
+            fprintf(stderr, "non one-to-one mappings not supported yet!\n");
+            exit(1);
+        }
+        fprintf(stderr, "found and added name!\n");
+    }
 };
-
 };
 
 #endif
