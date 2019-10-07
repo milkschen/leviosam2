@@ -256,8 +256,7 @@ class LiftMap {
                 if (rid != -1) { // save the bitvector
                     // condense the bit vectors and add to map
                     if (ppos > l) {
-                        fprintf(stderr, "something went wrong, we went past bounds of s1 sequence. exiting...\n");
-                        exit(1);
+                        die( "something went wrong, we went past bounds of s1 sequence. exiting...\n");
                     }
                     ibv.resize(x + (l - ppos));
                     dbv.resize(x + (l - ppos));
@@ -344,8 +343,7 @@ class LiftMap {
             }
         }
         if (ppos > l) {
-            fprintf(stderr, "something went wrong, we went past bounds of s1 sequence. exiting...\n");
-            exit(1);
+            die("something went wrong, we went past bounds of s1 sequence. exiting...\n");
         }
         ibv.resize(x + (l - ppos));
         dbv.resize(x + (l - ppos));
