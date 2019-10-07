@@ -8,7 +8,7 @@
 #include <sdsl/bit_vectors.hpp>
 #include <sdsl/util.hpp>
 
-/* 
+/*
  * liftover.hpp
  *
  * classes and routines for translating (lifting over) coordinates between
@@ -18,6 +18,11 @@
  *
  * Created: July 2019
  */
+
+static inline void die(std::string msg) {
+    fprintf(stderr, "%s\n", msg.data());
+    exit(1);
+}
 
 namespace lift {
 
@@ -34,7 +39,7 @@ class Lift {
         this->load(in);
     }
 
-    // construct liftover from bitvectors 
+    // construct liftover from bitvectors
     // i: contains 1 at each insertion in s2 wrt s1
     // d: contains 1 at each deletion  ""
     // s: contains 1 at each mismatch in alignment bwtn s1 and s1
@@ -96,10 +101,10 @@ class Lift {
             int cop = cigar_ops[y];
             if (del[x]) { // skip ahead in alt2ref cigar
                 out_cigar += "D";
-                ++x; 
+                ++x;
             } else if (cop == BAM_CINS || cop == BAM_CSOFT_CLIP) { // skip ahead in read2alt cigar
                 out_cigar += "I";
-                ++y; 
+                ++y;
             } else if (cop == BAM_CBACK || cop == BAM_CHARD_CLIP || cop == BAM_CPAD) {
                 // skip, these are fluff bases
                 ++y;
@@ -216,26 +221,28 @@ class LiftMap {
         return *this;
     }
 
-    /* creates a liftover from specified sample in VCF file. 
+    /* creates a liftover from specified sample in VCF file.
      * input: vcfFile, bcf_hdr_t* of input VCF (via htslib)
      *        sample name of desired individual within the VCF
      * assumes that the vcfFile is sorted!
      */
-    LiftMap(vcfFile* fp, bcf_hdr_t* hdr, std::string sample_name, std::string haplotype, 
-            std::vector<std::pair<std::string,std::string>> nm = {}) {
+    LiftMap(vcfFile* fp, bcf_hdr_t* hdr, std::string sample_name, std::string haplotype,
+            std::vector<std::pair<std::string,std::string>> nm = {},
+            std::unordered_map<std::string,size_t> ls = {}) {
         bool get_names = 1;
         if (nm.size()) {
-            for (int i = 0; i < nm.size(); ++i) 
+            for (int i = 0; i < nm.size(); ++i)
                 add_names(nm[i].first, nm[i].second, i);
             get_names = 0;
         }
+        int lmap_idx = 0; // current index of lmap
+
+
         sdsl::bit_vector ibv, dbv, sbv; // ins, del, snp
         bool no_sample = (sample_name == "");
         if (no_sample) fprintf(stderr, "no sample given, assuming GT=1 for all variants\n");
-        if (!no_sample && bcf_hdr_set_samples(hdr, sample_name.c_str(), 0)) {
-            fprintf(stderr, "error: sample does not exist!\n");
-            exit(1);
-        }
+        if (!no_sample && bcf_hdr_set_samples(hdr, sample_name.c_str(), 0))
+            die("error: sample does not exist!\n");
         bcf1_t* rec = bcf_init();
         size_t x = 0;
         int rid = -1;
@@ -246,7 +253,7 @@ class LiftMap {
         while(!bcf_read(fp, hdr, rec)) {
             bcf_unpack(rec, BCF_UN_FMT);
             if (rec->rid != rid) {
-                if (rid != -1) {
+                if (rid != -1) { // save the bitvector
                     // condense the bit vectors and add to map
                     if (ppos > l) {
                         fprintf(stderr, "something went wrong, we went past bounds of s1 sequence. exiting...\n");
@@ -256,19 +263,23 @@ class LiftMap {
                     dbv.resize(x + (l - ppos));
                     sbv.resize(x + (l - ppos));
                     lmap.push_back(Lift(ibv,dbv,sbv));
-                    if (get_names) {
-                        fprintf(stderr, "manually getting names 1\n");
-                        const char* name = bcf_hdr_id2name(hdr, rid);
-                        add_names(name, name, lmap.size()-1);
-                        fprintf(stderr, "got names!\n");
-                    }
+                }
+                if (get_names) {
+                    const char* name = bcf_hdr_id2name(hdr, rid);
+                    add_names(name, name, lmap_idx++);
                 }
                 // get size of contig
                 rid = rec->rid;
                 l = hdr->id[BCF_DT_CTG][rid].val->info[0];
                 if (l == 0) {
-                    fprintf(stderr, "contig length not specified in file!\n");
-                    exit(1);
+                    if (!ls.size()) {
+                        die("contig length not specified in vcf, nor was it provided by user!\n");
+                    } else {
+                        /* get length from input lengths */
+                       auto lpair = ls.find(name_map[bcf_hdr_id2name(hdr, rid)]);
+                       if (lpair != ls.end()) l = lpair->second;
+                       else die("contig length not given by user!!\n");
+                    }
                 }
                 // initialize bit vectors for this contig
                 // TODO: maybe set vec size to something less than 2l
@@ -309,7 +320,7 @@ class LiftMap {
                 ppos = rec->pos;  // ppos now pointing to *start* of current variant
                 if (var_type == VCF_INDEL) {
                     ++ppos;
-                    ++x; 
+                    ++x;
                     prev_is_ins = 0;
                     if (rlen < alen) { // ins
                         for (size_t i = 0; i < alen - rlen; ++i) {
@@ -331,7 +342,7 @@ class LiftMap {
             } else {
                 continue;
             }
-        } 
+        }
         if (ppos > l) {
             fprintf(stderr, "something went wrong, we went past bounds of s1 sequence. exiting...\n");
             exit(1);
@@ -374,7 +385,7 @@ class LiftMap {
             auto cigar = bam_get_cigar(b);
             for (int i = 0; i < b->core.n_cigar; ++i) {
                 for (int j = 0; j < bam_cigar_oplen(cigar[i]); ++j) {
-                    if (bam_cigar_op(cigar[i]) == BAM_CINS) 
+                    if (bam_cigar_op(cigar[i]) == BAM_CINS)
                         out_cigar += "I";
                     else if (bam_cigar_op(cigar[i]) == BAM_CDEL)
                         out_cigar += "D";
@@ -461,27 +472,25 @@ class LiftMap {
     std::vector<Lift> lmap;
     /* I don't anticipate the names taking up a huge portion of space, so it's
      * probably safe to store them separately */
-    using Name2IdxMap = std::unordered_map<std::string, int>;
+    using Name2IdxMap = std::unordered_map<std::string,int>;
+    using Name2NameMap = std::unordered_map<std::string,std::string>;
+    Name2NameMap name_map;
     Name2IdxMap s1_map;
     Name2IdxMap s2_map;
     void add_names(std::string n1, std::string n2, int i) {
-        fprintf(stderr, "finding the first name %s\n", n1.data());
-        if (s1_map.find(n1) == s1_map.end()) {
-            s1_map[n1] = i;
-        } else {
-            fprintf(stderr, "non one-to-one mappings not supported yet!\n");
-            exit(1);
+        if (s1_map.find(n1) == s1_map.end()) s1_map[n1] = i;
+        else die("non one-to-one mappings not supported yet!\n");
+        if (s2_map.find(n2) == s2_map.end()) s2_map[n2] = i;
+        else die("non one-to-one mappings not supported yet!\n");
+        if (name_map.find(n1) == name_map.end()) name_map[n1] = n2;
+        else die("non one-to-one mappings not supported yet!\n");
+        if (n1 != n2) {
+            if (name_map.find(n2) == name_map.end()) name_map[n2] = n1;
+            else die("non one-to-one mappings not supported yet! Or there are identical but non-corresponding names between s1 and s2\n");
         }
-        fprintf(stderr, "finding the second name %s\n", n2.data());
-        if (s2_map.find(n2) == s2_map.end()) {
-            s2_map[n2] = i;
-        } else {
-            fprintf(stderr, "non one-to-one mappings not supported yet!\n");
-            exit(1);
-        }
-        fprintf(stderr, "found and added name!\n");
     }
 };
 };
+
 
 #endif
