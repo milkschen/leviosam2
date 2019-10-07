@@ -47,7 +47,7 @@ LengthMap parse_length_map(const char* fname) {
     char n[255];
     char l[255];
     while ((x = fscanf(fp, "%[^\t]\t%[^\n]\n", n, l)) != EOF) {
-        if (x <= 0 || lengths.find(n) == lengths.end()) {
+        if (x <= 0 || lengths.find(n) != lengths.end()) {
             fprintf(stderr, "error encountered reading length map\n");
             exit(1);
         }
@@ -227,7 +227,7 @@ int main(int argc, char** argv) {
         {"haplotype", required_argument, 0, 'g'}
     };
     int long_index = 0;
-    while((c = getopt_long(argc, argv, "v:s:p:l:a:g:n:", long_options, &long_index)) != -1) {
+    while((c = getopt_long(argc, argv, "v:s:p:l:a:g:n:k:", long_options, &long_index)) != -1) {
         switch (c) {
             case 'v':
                 args.vcf_fname = optarg;
