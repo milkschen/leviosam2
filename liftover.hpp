@@ -263,12 +263,12 @@ class LiftMap {
                     sbv.resize(x + (l - ppos));
                     lmap.push_back(Lift(ibv,dbv,sbv));
                 }
+                rid = rec->rid;
                 if (get_names) {
                     const char* name = bcf_hdr_id2name(hdr, rid);
                     add_names(name, name, lmap_idx++);
                 }
                 // get size of contig
-                rid = rec->rid;
                 l = hdr->id[BCF_DT_CTG][rid].val->info[0];
                 if (l == 0) {
                     if (!ls.size()) {
@@ -349,11 +349,6 @@ class LiftMap {
         dbv.resize(x + (l - ppos));
         sbv.resize(x + (l - ppos));
         lmap.push_back(Lift(ibv,dbv,sbv));
-        if (get_names) {
-            fprintf(stderr, "manually getting names 2\n");
-            const char* name = bcf_hdr_id2name(hdr, rid);
-            add_names(name, name, lmap.size()-1);
-        }
     }
 
     // converts a position in the s2 sequence to corresponding position in s1 sequence
