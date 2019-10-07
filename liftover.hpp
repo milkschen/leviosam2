@@ -309,7 +309,7 @@ class LiftMap {
                     // if occ after and not snp, check if del, or if overlapping ins
                     else if (rec->d.var[var].n <= 0 || prev_is_ins) overlap = 1;
                     if (overlap) {
-                        fprintf(stderr, "skipping variant %s:%d\n", bcf_seqname(hdr, rec), rec->pos + 1);
+                        if (verbose) fprintf(stderr, "skipping variant %s:%d\n", bcf_seqname(hdr, rec), rec->pos + 1);
                         continue;
                     }
                 }
@@ -407,46 +407,27 @@ class LiftMap {
     size_t serialize(std::ofstream& out) {
         size_t size = 0;
         size_t nelems = lmap.size();
-        out << nelems;
-        for (const auto& it: lmap) {
-            size += it.serialize(out);
+        out.write(reinterpret_cast<char*>(&nelems), sizeof(nelems));
+        size += sizeof(nelems);
+        for (auto i = 0; i < nelems; ++i) {
+            size += lmap[i].serialize(out);
         }
-        out << s1_map.size();
-        for (auto s: s1_map) {
-            size += s.first.size();
-            size += sizeof(s.second);
-            out << s.first << s.second;
-        }
-        out << s2_map.size();
-        for (auto s: s2_map) {
-            size += s.first.size();
-            size += sizeof(s.second);
-            out << s.first << s.second;
-        }
+        size += s1_map.serialize(out);
+        size += s2_map.serialize(out);
+        size += name_map.serialize(out);
         return size;
     }
 
     // loads from stream
     void load(std::ifstream& in) {
-        int nelems;
-        in >> nelems;
+        size_t nelems;
+        in.read(reinterpret_cast<char*>(&nelems), sizeof(nelems));
         for (auto i = 0; i < nelems; ++i) {
             lmap.push_back(Lift(in));
         }
-        in >> nelems;
-        for (auto i = 0; i < nelems; ++i) {
-            Name2IdxMap::key_type key;
-            Name2IdxMap::mapped_type value;
-            in >> key >> value;
-            s1_map[key] = value;
-        }
-        in >> nelems;
-        for (auto i = 0; i < nelems; ++i) {
-            Name2IdxMap::key_type key;
-            Name2IdxMap::mapped_type value;
-            in >> key >> value;
-            s2_map[key] = value;
-        }
+        s1_map.load(in);
+        s2_map.load(in);
+        name_map.load(in);
     }
 
     // get names and lengths of s1 sequences
@@ -463,13 +444,81 @@ class LiftMap {
     private:
 
     std::vector<Lift> lmap;
-    /* I don't anticipate the names taking up a huge portion of space, so it's
-     * probably safe to store them separately */
-    using Name2IdxMap = std::unordered_map<std::string,int>;
-    using Name2NameMap = std::unordered_map<std::string,std::string>;
+    /* I have to write these so I can serialize stuff */
+    class Name2IdxMap: public std::unordered_map<std::string,int> {
+        public:
+        size_t serialize(std::ofstream& out) {
+            size_t size = 0;
+            size_t map_size = this->size();
+            out.write(reinterpret_cast<char*>(&map_size), sizeof(map_size));
+            for (auto s: *this) {
+                size_t str_size = s.first.size();
+                out.write(reinterpret_cast<char*>(&str_size), sizeof(str_size));
+                out.write(reinterpret_cast<const char*>(s.first.data()), str_size);
+                out.write(reinterpret_cast<char*>(&s.second), sizeof(s.second));
+                size += sizeof(str_size) + str_size + sizeof(s.second);
+            }
+            return size;
+        }
+
+        void load(std::ifstream& in) {
+            size_t map_size;
+            in.read(reinterpret_cast<char*>(&map_size), sizeof(map_size));
+            for (auto i = 0; i < map_size; ++i) {
+                size_t str_size;
+                in.read(reinterpret_cast<char*>(&str_size), sizeof(str_size));
+                std::vector<char> buf(str_size);
+                in.read(reinterpret_cast<char*>(buf.data()), str_size);
+                key_type key(buf.begin(), buf.end());
+                mapped_type value;
+                in.read(reinterpret_cast<char*>(&value), sizeof(value));
+                // fprintf(stderr, "%s\t%d\n", key.data(), value);
+                (*this)[key] = value;
+            }
+        }
+    };
+    class Name2NameMap : public std::unordered_map<std::string,std::string> {
+        public:
+        size_t serialize(std::ofstream& out) {
+            size_t size = 0;
+            size_t map_size = this->size();
+            out.write(reinterpret_cast<char*>(&map_size), sizeof(map_size));
+            for (auto s: *this) {
+                size_t str_size = s.first.size();
+                out.write(reinterpret_cast<char*>(&str_size), sizeof(str_size));
+                out.write(reinterpret_cast<const char*>(s.first.data()), str_size);
+                size += sizeof(str_size) + str_size;
+                str_size = s.second.size();
+                out.write(reinterpret_cast<char*>(&str_size), sizeof(str_size));
+                out.write(reinterpret_cast<const char*>(s.second.data()), str_size);
+                size += sizeof(str_size) + str_size;
+            }
+            return size;
+        }
+
+        void load(std::ifstream& in) {
+            size_t map_size;
+            in.read(reinterpret_cast<char*>(&map_size), sizeof(map_size));
+            for (auto i = 0; i < map_size; ++i) {
+                size_t str_size;
+                in.read(reinterpret_cast<char*>(&str_size), sizeof(str_size));
+                std::vector<char> buf(str_size);
+                in.read(reinterpret_cast<char*>(buf.data()), str_size);
+                key_type key(buf.begin(), buf.end());
+                in.read(reinterpret_cast<char*>(&str_size), sizeof(str_size));
+                buf.clear();
+                buf.resize(str_size);
+                in.read(reinterpret_cast<char*>(buf.data()), str_size);
+                mapped_type value(buf.begin(), buf.end());
+                (*this)[key] = value;
+            }
+        }
+    };
+
     Name2NameMap name_map;
     Name2IdxMap s1_map;
     Name2IdxMap s2_map;
+    int verbose = 0;
     void add_names(std::string n1, std::string n2, int i) {
         if (s1_map.find(n1) == s1_map.end()) s1_map[n1] = i;
         else die("non one-to-one mappings not supported yet!\n");

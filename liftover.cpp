@@ -19,6 +19,7 @@ struct lift_opts {
     std::string sam_fname = "";
     std::string cmd = "";
     std::string haplotype = "0";
+    int verbose = 0;
     NameMap name_map;
     LengthMap length_map;
 };
@@ -68,7 +69,7 @@ void serialize_run(lift_opts args) {
         fprintf(stderr, "no output prefix specified! Use -p \n");
         exit(1);
     }
-    std::ofstream o(args.outpre + ".lft");
+    std::ofstream o(args.outpre + ".lft", std::ios::binary);
     l.serialize(o);
     fprintf(stderr, "liftover file saved to %s\n", (args.outpre + ".lft").data());
 }
@@ -96,7 +97,7 @@ void lift_run(lift_opts args) {
     // if "-l" not specified, then create a liftover
     lift::LiftMap l = [&]{
         if (args.lift_fname != "") {
-            std::ifstream in(args.lift_fname);
+            std::ifstream in(args.lift_fname, std::ios::binary);
             return lift::LiftMap(in);
         } else if (args.vcf_fname != "") {
             return lift::LiftMap(lift_from_vcf(args.vcf_fname, args.sample, args.haplotype, args.name_map, args.length_map));
@@ -224,7 +225,8 @@ int main(int argc, char** argv) {
         {"prefix", required_argument, 0, 'p'},
         {"liftover", required_argument, 0, 'l'},
         {"sam", required_argument, 0, 'a'},
-        {"haplotype", required_argument, 0, 'g'}
+        {"haplotype", required_argument, 0, 'g'},
+        {"verbose", no_argument, &args.verbose, 1},
     };
     int long_index = 0;
     while((c = getopt_long(argc, argv, "v:s:p:l:a:g:n:k:", long_options, &long_index)) != -1) {
