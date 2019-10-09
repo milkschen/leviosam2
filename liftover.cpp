@@ -156,14 +156,14 @@ void lift_run(lift_opts args) {
             fprintf(out_sam_fp, "0\t"); // PNEXT
             fprintf(out_sam_fp, "0\t"); // TLEN (can probably copy?)
         } else {
-            std::string ref_name(hdr->target_name[c.tid]);
-            fprintf(out_sam_fp, "%s\t", ref_name.data()); // REF NAME
+            std::string s2_name(hdr->target_name[c.tid]);
+            std::string s1_name(l.get_other_name(s2_name));
+            fprintf(out_sam_fp, "%s\t", s1_name.data()); // REF NAME
             /**** LIFTOVER STEP ****/
-            fprintf(out_sam_fp, "%ld\t", l.s2_to_s1(ref_name, c.pos) + 1);  // POS
+            fprintf(out_sam_fp, "%ld\t", l.s2_to_s1(s2_name, c.pos) + 1);  // POS
             /****               ****/
-            // fprintf(out_sam_fp, "255\t"); // set MAPQ to unknown (255)
-            fprintf(out_sam_fp, "%d\t", c.qual);
-            fprintf(out_sam_fp, "%s\t", l.cigar_s2_to_s1(ref_name, aln).data()); // CIGAR
+            fprintf(out_sam_fp, "%d\t", c.qual); // USE ORIGINAL QUAL
+            fprintf(out_sam_fp, "%s\t", l.cigar_s2_to_s1(s2_name, aln).data()); // CIGAR
             fprintf(out_sam_fp, "*\t"); // RNEXT
             fprintf(out_sam_fp, "0\t"); // PNEXT
             fprintf(out_sam_fp, "0\t"); // TLEN (can probably copy?)

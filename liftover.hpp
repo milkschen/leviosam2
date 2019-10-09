@@ -365,6 +365,12 @@ class LiftMap {
         }
     }
 
+    std::string get_other_name(std::string n) {
+        if (name_map.find(n) != name_map.end()) {
+            return name_map[n];
+        } else return "";
+    }
+
     // converts CIGAR string of s2 alignment to corresponding CIGAR string for the s1 alignment
     // input: sequence name, bam1_t alignment record object (via htslib)
     // ouput: CIGAR string of s1 alignment (as std::string)
