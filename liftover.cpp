@@ -92,6 +92,17 @@ char* get_PG(bam_hdr_t* hdr) {
     return buf;
 }
 
+/* just gets AS for now till I get around to iterating through all the tags 
+ */
+std::string tag_to_string(const bam1_t* rec) {
+    std::string tag_string("");
+    uint8_t* aux = bam_aux_get(rec, "AS");
+    if (aux != NULL) {
+        tag_string += "AS:i:";
+        tag_string += std::to_string(bam_aux2i(aux));
+    }
+    return tag_string;
+}
 
 void lift_run(lift_opts args) {
     // if "-l" not specified, then create a liftover
@@ -161,8 +172,8 @@ void lift_run(lift_opts args) {
             fprintf(out_sam_fp, "%s\t", s1_name.data()); // REF NAME
             /**** LIFTOVER STEP ****/
             fprintf(out_sam_fp, "%ld\t", l.s2_to_s1(s2_name, c.pos) + 1);  // POS
-            /****               ****/
-            fprintf(out_sam_fp, "%d\t", c.qual); // USE ORIGINAL QUAL
+            /*** ***/
+            fprintf(out_sam_fp, "%d\t", c.qual);
             fprintf(out_sam_fp, "%s\t", l.cigar_s2_to_s1(s2_name, aln).data()); // CIGAR
             fprintf(out_sam_fp, "*\t"); // RNEXT
             fprintf(out_sam_fp, "0\t"); // PNEXT
@@ -184,8 +195,9 @@ void lift_run(lift_opts args) {
                 qual_seq += (char) (qual[i] + 33);
             }
         }
-        fprintf(out_sam_fp, "%s", qual_seq.data());
+        fprintf(out_sam_fp, "%s\t", qual_seq.data());
         // TODO reconcile any tags that also need to be added.
+        fprintf(out_sam_fp, "%s", tag_to_string(aln).data());
         fprintf(out_sam_fp, "\n");
     }
     fclose(out_sam_fp);
