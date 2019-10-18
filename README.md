@@ -6,6 +6,10 @@ genomic sequences given a predefined pairwise alignment.
 uses succinct data structures as implemented by
 [sdsl-lite](https://github.com/simongog/sdsl-lite)
 
+### DISCLAIMER: normalize and left-align your VCF files before giving them to liftover!
+
+Use `bcftools norm` to do this.
+
 ## Usage (Command line)
 
 To serialize liftover information between a reference sequence and given alternative sequence described in a VCF file:
