@@ -151,7 +151,7 @@ void lift_run(lift_opts args) {
     ks_free(&s);
     */
     char* prev_pg = get_PG(hdr);
-    fprintf(out_sam_fp, "%s", prev_pg);
+    fprintf(out_sam_fp, "%s\n", prev_pg);
     free(prev_pg);
     fprintf(out_sam_fp, "@PG\tID:liftover\tPN:liftover\tCL:\"%s\"\n", args.cmd.data());
     while (sam_read1(sam_fp, hdr, aln) >= 0) {
