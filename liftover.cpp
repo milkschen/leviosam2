@@ -143,6 +143,12 @@ void lift_run(lift_opts args) {
     for (auto i = 0; i < contig_names.size(); ++i) {
         fprintf(out_sam_fp, "@SQ\tSN:%s\tLN:%ld\n", contig_names[i].data(), contig_reflens[i]);
     }
+    for (auto i = 0; i < hdr->n_targets; i++){
+        // if a contig is not found in vcf/lft, print it as it was before liftover
+        if (std::find(contig_names.begin(), contig_names.end(), hdr->target_name[i]) == contig_names.end()){
+            fprintf(out_sam_fp, "@SQ\tSN:%s\tLN:%u\n", hdr->target_name[i], hdr->target_len[i]);
+        }
+    }
     /* This is only supported in the latest dev release of htslib as of July 22. 
      * add back in at next htslib release
     kstring_t s = KS_INITIALIZE;
@@ -278,7 +284,7 @@ int main(int argc, char** argv) {
         exit(1);
     }
     if (args.haplotype != "0" && args.haplotype != "1"){
-        fprintf(stderr, "invalid haplotype %s\n", args.haplotype);
+        fprintf(stderr, "invalid haplotype %s\n", args.haplotype.c_str());
         exit(1);
     }
     if (!strcmp(argv[optind], "lift")) {

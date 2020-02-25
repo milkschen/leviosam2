@@ -368,7 +368,10 @@ class LiftMap {
     std::string get_other_name(std::string n) {
         if (name_map.find(n) != name_map.end()) {
             return name_map[n];
-        } else return "";
+        }
+        // return original name if mapping is not available
+        else
+            return n;
     }
 
     // converts CIGAR string of s2 alignment to corresponding CIGAR string for the s1 alignment
