@@ -83,9 +83,23 @@ On Mac, these can be installed with `brew install htslib` and `brew install sdsl
 
 ## Building
 
+We support `CMake` or `make` approaches to build the software.
+
+### Using CMake
+
 Building `liftover` uses [CMake](https://cmake.org).
 
 Our `CMakeLists.txt` file expectes to use `PkgConfig` to load the libraries; you may need to add the `pkgconfig` subdirectories of the `sdsl-lite` and `libhts` libraries to the `CMAKE_PREFIX_PATH` environment variable yourself.
+
+### Using make
+
+Update `LD_LIBRARY_PATH` and `CPLUS_INCLUDE_PATH` paths after installing sdsl-lite and htslib and install with `make`:
+
+```
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:<path/to/lib>
+export CPLUS_INCLUDE_PATH=$CPLUS_INCLUDE_PATH:<path/to/include>
+make
+```
 
 ## Currently Supported:
 
