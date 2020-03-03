@@ -79,6 +79,13 @@ To load a liftover from a serialized file
 - [sdsl-lite](https://github.com/simongog/sdsl-lite)
 - [htslib](https://github.com/samtools/htslib)
 
+### Using conda
+```
+conda install -c conda-forge sdsl-lite
+conda install -c bioconda htslib
+```
+
+### Using Homebrew
 On Mac, these can be installed with `brew install htslib` and `brew install sdsl-lite`.
 
 ## Building
