@@ -21,7 +21,7 @@ struct lift_opts {
     std::string cmd = "";
     std::string haplotype = "0";
     int threads = 1;
-    int chunk_size = 16;
+    int chunk_size = 64;
     int verbose = 0;
     NameMap name_map;
     LengthMap length_map;
