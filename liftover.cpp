@@ -111,7 +111,6 @@ void read_sam(samFile* sam_fp, bam_hdr_t* hdr, int num_chunk, std::vector<bam1_t
     // std::cout << std::this_thread::get_id() << "\n";
     mutex.lock();
     for (int i = 0; i < num_chunk; i++){
-        // sam_read1(sam_fp, hdr, aln_vec[i]);
         if (sam_read1(sam_fp, hdr, aln_vec[i]) < 0){
             read_status = 1;
             if (i == 0) 
@@ -146,23 +145,12 @@ void lift_one_read(
         sam_out += "\t";
         sam_out += std::to_string(c.flag);
         sam_out += "\t";
-        // fprintf(out_sam_fp, "%s\t", bam_get_qname(aln));
-        // fprintf(out_sam_fp, "%d\t", c.flag);
         if (c.flag & 4) { // unmapped here
             sam_out += "*\t0\t255\t*\t*\t0\t0\t";
             // RNAME POS MAPQ(255) * RNEXT PNEXT TLEN
         } else {
             std::string s2_name(hdr->target_name[c.tid]);
             std::string s1_name(l->get_other_name(s2_name));
-            // fprintf(out_sam_fp, "%s\t", s1_name.data()); // REF NAME
-            /**** LIFTOVER STEP ****/
-            // fprintf(out_sam_fp, "%ld\t", l->s2_to_s1(s2_name, c.pos) + 1);  // POS
-            /*** ***/
-            // fprintf(out_sam_fp, "%d\t", c.qual);
-            // fprintf(out_sam_fp, "%s\t", l->cigar_s2_to_s1(s2_name, aln).data()); // CIGAR
-            // fprintf(out_sam_fp, "*\t"); // RNEXT
-            // fprintf(out_sam_fp, "0\t"); // PNEXT
-            // fprintf(out_sam_fp, "0\t"); // TLEN (can probably copy?)
             sam_out += s1_name.data(); // REF
             sam_out += "\t";
             sam_out += std::to_string(l->s2_to_s1(s2_name, c.pos) + 1); // POS
@@ -170,7 +158,7 @@ void lift_one_read(
             sam_out += std::to_string(c.qual); // QUAL
             sam_out += "\t";
             sam_out += l->cigar_s2_to_s1(s2_name, aln).data(); // CIGAR
-            sam_out += "\t*\t0\t0\t";
+            sam_out += "\t*\t0\t0\t"; // RNEXT PNEXT TLEN
         }
         // get query sequence
         std::string query_seq("");
@@ -178,7 +166,6 @@ void lift_one_read(
         for (auto i = 0; i < c.l_qseq; ++i) {
             query_seq += seq_nt16_str[bam_seqi(seq, i)];
         }
-        // fprintf(out_sam_fp, "%s\t", query_seq.data());
         sam_out += query_seq.data();
         sam_out += "\t";
         // get quality
@@ -190,12 +177,9 @@ void lift_one_read(
                 qual_seq += (char) (qual[i] + 33);
             }
         }
-        // fprintf(out_sam_fp, "%s\t", qual_seq.data());
         sam_out += qual_seq.data();
         sam_out += "\t";
         // // TODO reconcile any tags that also need to be added.
-        // fprintf(out_sam_fp, "%s", tag_to_string(aln).data());
-        // fprintf(out_sam_fp, "\n");
         sam_out += tag_to_string(aln).data();
         sam_out += "\n";
         // std::cerr << sam_out;
