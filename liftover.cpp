@@ -22,6 +22,7 @@ struct lift_opts {
     std::string cmd = "";
     std::string haplotype = "0";
     int threads = 1;
+    int chunk_size = 16;
     int verbose = 0;
     NameMap name_map;
     LengthMap length_map;
@@ -121,7 +122,7 @@ void read_sam(samFile* sam_fp, bam_hdr_t* hdr, int chunk_size, std::vector<bam1_
     // mutex.unlock();
 }
 
-void lift_one_read(
+void lift_chunk(
     std::vector<bam1_t*>::iterator it,
     int size_chunk,
     FILE* out_sam_fp,
@@ -174,7 +175,6 @@ void lift_one_read(
         // TODO reconcile any tags that also need to be added.
         sam_out += tag_to_string(aln).data();
         sam_out += "\n";
-        // std::cerr << sam_out;
         // mutex.lock();
         fprintf(out_sam_fp, "%s", sam_out.c_str());
         // mutex.unlock();
@@ -205,10 +205,10 @@ void lift_run(lift_opts args) {
     }
     samFile* sam_fp = sam_open(args.sam_fname.data(), "r");
     bam_hdr_t* hdr = sam_hdr_read(sam_fp);
-    // bam1_t* aln = bam_init1();
+    
     std::vector<bam1_t*> aln_vec;
     const int num_threads = args.threads;
-    const int reads_per_thread = 16;
+    const int reads_per_thread = args.chunk_size;
     const int chunk_size = num_threads * reads_per_thread;
     for (int i = 0; i < chunk_size; i++){
         bam1_t* aln = bam_init1();
@@ -260,12 +260,13 @@ void lift_run(lift_opts args) {
         }
         for (int j = 0; j < num_threads; j++){
             if (j * reads_per_thread < num_actual_reads){
+                // set number of reads need lifting
                 int num_reads = num_actual_reads - j * reads_per_thread;
                 if (num_reads > reads_per_thread)
                     num_reads = reads_per_thread;
                 threads.push_back(
                     std::thread(
-                        lift_one_read, std::next(aln_vec.begin(), j * reads_per_thread), num_reads, out_sam_fp, hdr, &l
+                        lift_chunk, std::next(aln_vec.begin(), j * reads_per_thread), num_reads, out_sam_fp, hdr, &l
                     )
                 );
             }
@@ -318,10 +319,11 @@ int main(int argc, char** argv) {
         {"sam", required_argument, 0, 'a'},
         {"haplotype", required_argument, 0, 'g'},
         {"threads", required_argument, 0, 't'},
+        {"chunk_size", required_argument, 0, 'T'},
         {"verbose", no_argument, &args.verbose, 1},
     };
     int long_index = 0;
-    while((c = getopt_long(argc, argv, "v:s:p:l:a:g:n:k:t:", long_options, &long_index)) != -1) {
+    while((c = getopt_long(argc, argv, "v:s:p:l:a:g:n:k:t:T:", long_options, &long_index)) != -1) {
         switch (c) {
             case 'v':
                 args.vcf_fname = optarg;
@@ -349,6 +351,9 @@ int main(int argc, char** argv) {
                 break;
             case 't':
                 args.threads = atoi(optarg);
+                break;
+            case 'T':
+                args.chunk_size = atoi(optarg);
                 break;
             default:
                 fprintf(stderr, "ignoring option %c\n", c);
