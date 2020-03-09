@@ -355,12 +355,20 @@ class LiftMap {
     // input: sequence name, position within s2 sequence
     // output: position within s1 sequence
     // if liftover is not defined, then returns the original position
-    size_t s2_to_s1(std::string n, size_t i) {
+    size_t s2_to_s1(
+        std::string n,
+        size_t i,
+        std::vector<std::string>* chroms_not_found
+    ) {
         auto it = s2_map.find(n);
         if (it != s2_map.end()) {
             return lmap[it->second].s2_to_s1(i);
         } else {
-            fprintf(stderr, "Warning: chromosome %s not found! \n", n.c_str());
+            for (auto it = chroms_not_found->begin() ; it != chroms_not_found->end(); ++it){
+                if (*it == n) return i;
+            }
+            chroms_not_found->push_back(n);
+            fprintf(stderr, "Warning: chromosome %s not found in liftmap! \n", n.c_str());
             return i;
         }
     }

@@ -1,6 +1,5 @@
 #include "liftover.hpp"
 #include <vector>
-#include <queue>
 #include <tuple>
 #include <unordered_map>
 #include <getopt.h>
@@ -127,9 +126,10 @@ void lift_chunk(
     int size_chunk,
     FILE* out_sam_fp,
     bam_hdr_t* hdr,
-    lift::LiftMap* l
+    lift::LiftMap* l,
+    std::vector<std::string>* chroms_not_found
 ){
-    std::mutex mutex;
+    // std::mutex mutex;
     for (int i = 0; i < size_chunk; i++){
         std::string sam_out;
         bam1_t* aln = *it;
@@ -146,7 +146,7 @@ void lift_chunk(
             std::string s1_name(l->get_other_name(s2_name));
             sam_out += s1_name.data(); // REF
             sam_out += "\t";
-            sam_out += std::to_string(l->s2_to_s1(s2_name, c.pos) + 1); // POS
+            sam_out += std::to_string(l->s2_to_s1(s2_name, c.pos, chroms_not_found) + 1); // POS
             sam_out += "\t";
             sam_out += std::to_string(c.qual); // QUAL
             sam_out += "\t";
@@ -205,15 +205,6 @@ void lift_run(lift_opts args) {
     }
     samFile* sam_fp = sam_open(args.sam_fname.data(), "r");
     bam_hdr_t* hdr = sam_hdr_read(sam_fp);
-    
-    std::vector<bam1_t*> aln_vec;
-    const int num_threads = args.threads;
-    const int reads_per_thread = args.chunk_size;
-    const int chunk_size = num_threads * reads_per_thread;
-    for (int i = 0; i < chunk_size; i++){
-        bam1_t* aln = bam_init1();
-        aln_vec.push_back(aln);
-    }
 
     // the "ref" lengths are all stored in the liftover structure. How do we loop over it?
     std::vector<std::string> contig_names;
@@ -247,6 +238,18 @@ void lift_run(lift_opts args) {
     free(prev_pg);
     fprintf(out_sam_fp, "@PG\tID:liftover\tPN:liftover\tCL:\"%s\"\n", args.cmd.data());
     
+    // store chromosomes found in SAM but not in lft
+    // use a vector to avoid printing out the same warning msg multiple times
+    std::vector<std::string> chroms_not_found;
+    const int num_threads = args.threads;
+    const int reads_per_thread = args.chunk_size;
+    const int chunk_size = num_threads * reads_per_thread;
+    // vector storing alignment objects (bam1_t)
+    std::vector<bam1_t*> aln_vec;
+    for (int i = 0; i < chunk_size; i++){
+        bam1_t* aln = bam_init1();
+        aln_vec.push_back(aln);
+    }
     // number of reads actually read from the sam file
     int num_actual_reads = chunk_size;
     std::vector<std::thread> threads;
@@ -266,7 +269,14 @@ void lift_run(lift_opts args) {
                     num_reads = reads_per_thread;
                 threads.push_back(
                     std::thread(
-                        lift_chunk, std::next(aln_vec.begin(), j * reads_per_thread), num_reads, out_sam_fp, hdr, &l
+                        lift_chunk,
+                        std::next(aln_vec.begin(),
+                        j * reads_per_thread),
+                        num_reads,
+                        out_sam_fp,
+                        hdr,
+                        &l,
+                        &chroms_not_found
                     )
                 );
             }
