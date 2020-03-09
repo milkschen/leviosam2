@@ -1,9 +1,11 @@
 #include "liftover.hpp"
 #include <vector>
+#include <queue>
 #include <tuple>
 #include <unordered_map>
 #include <getopt.h>
 #include <cstdio>
+#include <thread>
 #include <htslib/vcf.h>
 #include <htslib/sam.h>
 #include <htslib/kstring.h>
@@ -104,6 +106,106 @@ std::string tag_to_string(const bam1_t* rec) {
     return tag_string;
 }
 
+void read_sam(samFile* sam_fp, bam_hdr_t* hdr, int num_chunk, std::vector<bam1_t*> &aln_vec, int &read_status){
+    std::mutex mutex;
+    // std::cout << std::this_thread::get_id() << "\n";
+    mutex.lock();
+    for (int i = 0; i < num_chunk; i++){
+        // sam_read1(sam_fp, hdr, aln_vec[i]);
+        if (sam_read1(sam_fp, hdr, aln_vec[i]) < 0){
+            read_status = 1;
+            if (i == 0) 
+                read_status = 2;
+            else
+                return ;
+        }
+    }
+    mutex.unlock();
+}
+
+void print_rname(std::vector<bam1_t*>::iterator it, int size_chunk){
+    for (int i = 0; i < size_chunk; i++){
+        std::cout << std::this_thread::get_id() << " " << bam_get_qname(*it) << std::endl;
+        it = std::next(it);
+    }
+}
+
+void lift_one_read(
+    std::vector<bam1_t*>::iterator it,
+    int size_chunk,
+    FILE* out_sam_fp,
+    bam_hdr_t* hdr,
+    lift::LiftMap* l
+){
+    std::mutex mutex;
+    for (int i = 0; i < size_chunk; i++){
+        std::string sam_out;
+        bam1_t* aln = *it;
+        bam1_core_t c = aln->core;
+        sam_out += bam_get_qname(aln);
+        sam_out += "\t";
+        sam_out += std::to_string(c.flag);
+        sam_out += "\t";
+        // fprintf(out_sam_fp, "%s\t", bam_get_qname(aln));
+        // fprintf(out_sam_fp, "%d\t", c.flag);
+        if (c.flag & 4) { // unmapped here
+            sam_out += "*\t0\t255\t*\t*\t0\t0\t";
+            // RNAME POS MAPQ(255) * RNEXT PNEXT TLEN
+        } else {
+            std::string s2_name(hdr->target_name[c.tid]);
+            std::string s1_name(l->get_other_name(s2_name));
+            // fprintf(out_sam_fp, "%s\t", s1_name.data()); // REF NAME
+            /**** LIFTOVER STEP ****/
+            // fprintf(out_sam_fp, "%ld\t", l->s2_to_s1(s2_name, c.pos) + 1);  // POS
+            /*** ***/
+            // fprintf(out_sam_fp, "%d\t", c.qual);
+            // fprintf(out_sam_fp, "%s\t", l->cigar_s2_to_s1(s2_name, aln).data()); // CIGAR
+            // fprintf(out_sam_fp, "*\t"); // RNEXT
+            // fprintf(out_sam_fp, "0\t"); // PNEXT
+            // fprintf(out_sam_fp, "0\t"); // TLEN (can probably copy?)
+            sam_out += s1_name.data(); // REF
+            sam_out += "\t";
+            sam_out += std::to_string(l->s2_to_s1(s2_name, c.pos) + 1); // POS
+            sam_out += "\t";
+            sam_out += std::to_string(c.qual); // QUAL
+            sam_out += "\t";
+            sam_out += l->cigar_s2_to_s1(s2_name, aln).data(); // CIGAR
+            sam_out += "\t*\t0\t0\t";
+        }
+        // get query sequence
+        std::string query_seq("");
+        uint8_t* seq = bam_get_seq(aln);
+        for (auto i = 0; i < c.l_qseq; ++i) {
+            query_seq += seq_nt16_str[bam_seqi(seq, i)];
+        }
+        // fprintf(out_sam_fp, "%s\t", query_seq.data());
+        sam_out += query_seq.data();
+        sam_out += "\t";
+        // get quality
+        std::string qual_seq("");
+        uint8_t* qual = bam_get_qual(aln);
+        if (qual[0] == 255) qual_seq = "*";
+        else {
+            for (auto i = 0; i < c.l_qseq; ++i) {
+                qual_seq += (char) (qual[i] + 33);
+            }
+        }
+        // fprintf(out_sam_fp, "%s\t", qual_seq.data());
+        sam_out += qual_seq.data();
+        sam_out += "\t";
+        // // TODO reconcile any tags that also need to be added.
+        // fprintf(out_sam_fp, "%s", tag_to_string(aln).data());
+        // fprintf(out_sam_fp, "\n");
+        sam_out += tag_to_string(aln).data();
+        sam_out += "\n";
+        // std::cerr << sam_out;
+        // mutex.lock();
+        fprintf(out_sam_fp, "%s", sam_out.c_str());
+        // mutex.unlock();
+        it = std::next(it);
+    }
+}
+
 void lift_run(lift_opts args) {
     // if "-l" not specified, then create a liftover
     lift::LiftMap l = [&]{
@@ -127,7 +229,14 @@ void lift_run(lift_opts args) {
     }
     samFile* sam_fp = sam_open(args.sam_fname.data(), "r");
     bam_hdr_t* hdr = sam_hdr_read(sam_fp);
-    bam1_t* aln = bam_init1();
+    // bam1_t* aln = bam_init1();
+    std::vector<bam1_t*> aln_vec;
+    int size_per_aln_chunk = 16;
+    int num_threads = 4;
+    for (int i = 0; i < size_per_aln_chunk; i++){
+        bam1_t* aln = bam_init1();
+        aln_vec.push_back(aln);
+    }
 
     // the "ref" lengths are all stored in the liftover structure. How do we loop over it?
     std::vector<std::string> contig_names;
@@ -160,55 +269,78 @@ void lift_run(lift_opts args) {
     fprintf(out_sam_fp, "%s\n", prev_pg);
     free(prev_pg);
     fprintf(out_sam_fp, "@PG\tID:liftover\tPN:liftover\tCL:\"%s\"\n", args.cmd.data());
-    while (sam_read1(sam_fp, hdr, aln) >= 0) {
-        bam1_core_t c = aln->core;
-        fprintf(out_sam_fp, "%s\t", bam_get_qname(aln));
-        fprintf(out_sam_fp, "%d\t", c.flag);
-        if (c.flag & 4) { // unmapped here
-            fprintf(out_sam_fp, "*\t"); // RNAME (String)
-            fprintf(out_sam_fp, "0\t"); // POS (Int)
-            fprintf(out_sam_fp, "255\t"); // set MAPQ to unknown (255)
-            fprintf(out_sam_fp, "*\t");
-            fprintf(out_sam_fp, "*\t"); // RNEXT
-            fprintf(out_sam_fp, "0\t"); // PNEXT
-            fprintf(out_sam_fp, "0\t"); // TLEN (can probably copy?)
-        } else {
-            std::string s2_name(hdr->target_name[c.tid]);
-            std::string s1_name(l.get_other_name(s2_name));
-            fprintf(out_sam_fp, "%s\t", s1_name.data()); // REF NAME
-            /**** LIFTOVER STEP ****/
-            fprintf(out_sam_fp, "%ld\t", l.s2_to_s1(s2_name, c.pos) + 1);  // POS
-            /*** ***/
-            fprintf(out_sam_fp, "%d\t", c.qual);
-            fprintf(out_sam_fp, "%s\t", l.cigar_s2_to_s1(s2_name, aln).data()); // CIGAR
-            fprintf(out_sam_fp, "*\t"); // RNEXT
-            fprintf(out_sam_fp, "0\t"); // PNEXT
-            fprintf(out_sam_fp, "0\t"); // TLEN (can probably copy?)
+    int read_status = 0;
+    std::vector<std::thread> threads;
+    // for (int t = 0; t < 2; t++){
+    while (read_status == 0){
+        std::thread reader(read_sam, sam_fp, hdr, size_per_aln_chunk, std::ref(aln_vec), std::ref(read_status));
+        reader.join();
+        for (int j = 0; j < num_threads; j++){
+            int print_unit = size_per_aln_chunk / num_threads;
+            // std::cerr << j * print_unit << "\n";
+            auto begin = aln_vec.begin();
+            // threads.push_back(std::thread(print_rname, std::next(begin, j * print_unit), print_unit));
+            threads.push_back(
+                std::thread(
+                    lift_one_read, std::next(begin, j * print_unit), print_unit, out_sam_fp, hdr, &l
+                )
+            );
         }
-        // get query sequence
-        std::string query_seq("");
-        uint8_t* seq = bam_get_seq(aln);
-        for (auto i = 0; i < c.l_qseq; ++i) {
-            query_seq += seq_nt16_str[bam_seqi(seq, i)];
+        for (int j = 0; j < num_threads; j++){
+            threads[j].join();
         }
-        fprintf(out_sam_fp, "%s\t", query_seq.data());
-        // get quality
-        std::string qual_seq("");
-        uint8_t* qual = bam_get_qual(aln);
-        if (qual[0] == 255) qual_seq = "*";
-        else {
-            for (auto i = 0; i < c.l_qseq; ++i) {
-                qual_seq += (char) (qual[i] + 33);
-            }
-        }
-        fprintf(out_sam_fp, "%s\t", qual_seq.data());
-        // TODO reconcile any tags that also need to be added.
-        fprintf(out_sam_fp, "%s", tag_to_string(aln).data());
-        fprintf(out_sam_fp, "\n");
+        threads.clear();
     }
     fclose(out_sam_fp);
 }
 
+// void lift_one_read_WIP(FILE* out_sam_fp, bam1_t* aln, bam_hdr_t* hdr){
+// //    while (sam_read1(sam_fp, hdr, aln) >= 0) {
+//     bam1_core_t c = aln->core;
+//     fprintf(out_sam_fp, "%s\t", bam_get_qname(aln));
+//     fprintf(out_sam_fp, "%d\t", c.flag);
+//     if (c.flag & 4) { // unmapped here
+//         fprintf(out_sam_fp, "*\t"); // RNAME (String)
+//         fprintf(out_sam_fp, "0\t"); // POS (Int)
+//         fprintf(out_sam_fp, "255\t"); // set MAPQ to unknown (255)
+//         fprintf(out_sam_fp, "*\t");
+//         fprintf(out_sam_fp, "*\t"); // RNEXT
+//         fprintf(out_sam_fp, "0\t"); // PNEXT
+//         fprintf(out_sam_fp, "0\t"); // TLEN (can probably copy?)
+//     } else {
+//         std::string s2_name(hdr->target_name[c.tid]);
+//         std::string s1_name(l.get_other_name(s2_name));
+//         fprintf(out_sam_fp, "%s\t", s1_name.data()); // REF NAME
+//         /**** LIFTOVER STEP ****/
+//         fprintf(out_sam_fp, "%ld\t", l.s2_to_s1(s2_name, c.pos) + 1);  // POS
+//         /*** ***/
+//         fprintf(out_sam_fp, "%d\t", c.qual);
+//         fprintf(out_sam_fp, "%s\t", l.cigar_s2_to_s1(s2_name, aln).data()); // CIGAR
+//         fprintf(out_sam_fp, "*\t"); // RNEXT
+//         fprintf(out_sam_fp, "0\t"); // PNEXT
+//         fprintf(out_sam_fp, "0\t"); // TLEN (can probably copy?)
+//     }
+//     // get query sequence
+//     std::string query_seq("");
+//     uint8_t* seq = bam_get_seq(aln);
+//     for (auto i = 0; i < c.l_qseq; ++i) {
+//         query_seq += seq_nt16_str[bam_seqi(seq, i)];
+//     }
+//     fprintf(out_sam_fp, "%s\t", query_seq.data());
+//     // get quality
+//     std::string qual_seq("");
+//     uint8_t* qual = bam_get_qual(aln);
+//     if (qual[0] == 255) qual_seq = "*";
+//     else {
+//         for (auto i = 0; i < c.l_qseq; ++i) {
+//             qual_seq += (char) (qual[i] + 33);
+//         }
+//     }
+//     fprintf(out_sam_fp, "%s\t", qual_seq.data());
+//     // TODO reconcile any tags that also need to be added.
+//     fprintf(out_sam_fp, "%s", tag_to_string(aln).data());
+//     fprintf(out_sam_fp, "\n");
+// }
 
 lift::LiftMap lift_from_vcf(std::string fname, 
                             std::string sample, 
