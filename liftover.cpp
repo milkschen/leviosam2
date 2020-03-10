@@ -187,8 +187,8 @@ void read_and_lift(
     }
     for (int i = 0; i < chunk_size; i++){
         bam_destroy1(aln_vec[i]);
-        aln_vec.clear();
     }
+    aln_vec.clear();
 }
 
 void lift_run(lift_opts args) {
@@ -251,16 +251,7 @@ void lift_run(lift_opts args) {
     // use a vector to avoid printing out the same warning msg multiple times
     std::vector<std::string> chroms_not_found;
     const int num_threads = args.threads;
-    const int reads_per_thread = args.chunk_size;
-    const int chunk_size = num_threads * reads_per_thread;
-    // vector storing alignment objects (bam1_t)
-    std::vector<bam1_t*> aln_vec;
-    for (int i = 0; i < chunk_size; i++){
-        bam1_t* aln = bam_init1();
-        aln_vec.push_back(aln);
-    }
-    // number of reads actually read from the sam file
-    int num_actual_reads = chunk_size;
+    const int chunk_size = args.chunk_size;
     std::vector<std::thread> threads;
     std::mutex mutex;
     for (int j = 0; j < num_threads; j++){
