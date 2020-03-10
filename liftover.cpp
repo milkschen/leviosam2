@@ -121,6 +121,90 @@ void read_sam(samFile* sam_fp, bam_hdr_t* hdr, int chunk_size, std::vector<bam1_
     // mutex.unlock();
 }
 
+void read_and_lift(
+    std::mutex* mutex,
+    samFile* sam_fp,
+    FILE* out_sam_fp,
+    bam_hdr_t* hdr,
+    int chunk_size,
+    lift::LiftMap* l,
+    std::vector<std::string>* chroms_not_found
+){
+    // std::cerr << std::this_thread::get_id() << "\n";
+    std::vector<bam1_t*> aln_vec;
+    for (int i = 0; i < chunk_size; i++){
+        bam1_t* aln = bam_init1();
+        aln_vec.push_back(aln);
+    }
+    int read = 1;
+    while(read >= 0){
+        int num_actual_reads = chunk_size;
+        mutex->lock();
+        for (int i = 0; i < chunk_size; i++){
+            read = sam_read1(sam_fp, hdr, aln_vec[i]);
+            if (read < 0){
+                num_actual_reads = i;
+                break;
+            }
+        }
+        mutex->unlock();
+        for (int i = 0; i < num_actual_reads; i++){
+            std::string sam_out;
+            bam1_t* aln = aln_vec[i];
+            bam1_core_t c = aln->core;
+            sam_out += bam_get_qname(aln);
+            sam_out += "\t";
+            sam_out += std::to_string(c.flag);
+            sam_out += "\t";
+            if (c.flag & 4) { // unmapped here
+                sam_out += "*\t0\t255\t*\t*\t0\t0\t";
+                // RNAME POS MAPQ(255) * RNEXT PNEXT TLEN
+            } else {
+                std::string s2_name(hdr->target_name[c.tid]);
+                std::string s1_name(l->get_other_name(s2_name));
+                sam_out += s1_name.data(); // REF
+                sam_out += "\t";
+                sam_out += std::to_string(l->s2_to_s1(s2_name, c.pos, chroms_not_found) + 1); // POS
+                sam_out += "\t";
+                sam_out += std::to_string(c.qual); // QUAL
+                sam_out += "\t";
+                sam_out += l->cigar_s2_to_s1(s2_name, aln).data(); // CIGAR
+                sam_out += "\t*\t0\t0\t"; // RNEXT PNEXT TLEN
+            }
+            // get query sequence
+            std::string query_seq("");
+            uint8_t* seq = bam_get_seq(aln);
+            for (auto i = 0; i < c.l_qseq; ++i) {
+                query_seq += seq_nt16_str[bam_seqi(seq, i)];
+            }
+            sam_out += query_seq.data();
+            sam_out += "\t";
+            // get quality
+            std::string qual_seq("");
+            uint8_t* qual = bam_get_qual(aln);
+            if (qual[0] == 255) qual_seq = "*";
+            else {
+                for (auto i = 0; i < c.l_qseq; ++i) {
+                    qual_seq += (char) (qual[i] + 33);
+                }
+            }
+            sam_out += qual_seq.data();
+            sam_out += "\t";
+            // TODO reconcile any tags that also need to be added.
+            sam_out += tag_to_string(aln).data();
+            sam_out += "\n";
+            // mutex.lock();
+            fprintf(out_sam_fp, "%s", sam_out.c_str());
+            // mutex.unlock();
+            // it = std::next(it);
+        }
+    }
+    for (int i = 0; i < chunk_size; i++){
+        bam_destroy1(aln_vec[i]);
+        aln_vec.clear();
+    }
+}
+
 void lift_chunk(
     std::vector<bam1_t*>::iterator it,
     int size_chunk,
@@ -253,44 +337,55 @@ void lift_run(lift_opts args) {
     // number of reads actually read from the sam file
     int num_actual_reads = chunk_size;
     std::vector<std::thread> threads;
-    while (num_actual_reads == chunk_size){
-        std::thread reader(read_sam, sam_fp, hdr, chunk_size, std::ref(aln_vec), std::ref(num_actual_reads));
-        reader.join();
-        // stop if no data is read
-        if (num_actual_reads == 0){
-            threads.clear();
-            break;
-        }
-        for (int j = 0; j < num_threads; j++){
-            if (j * reads_per_thread < num_actual_reads){
-                // set number of reads need lifting
-                int num_reads = num_actual_reads - j * reads_per_thread;
-                if (num_reads > reads_per_thread)
-                    num_reads = reads_per_thread;
-                threads.push_back(
-                    std::thread(
-                        lift_chunk,
-                        std::next(aln_vec.begin(),
-                        j * reads_per_thread),
-                        num_reads,
-                        out_sam_fp,
-                        hdr,
-                        &l,
-                        &chroms_not_found
-                    )
-                );
-            }
-        }
-        for (int j = 0; j < num_threads; j++){
-            if(threads[j].joinable())
-                threads[j].join();
-        }
-        threads.clear();
+    std::mutex mutex;
+    for (int j = 0; j < num_threads; j++){
+        threads.push_back(
+            std::thread(read_and_lift, &mutex, sam_fp, out_sam_fp, hdr, chunk_size, &l, &chroms_not_found)
+        );
     }
-    for (int i = 0; i < chunk_size; i++){
-        bam_destroy1(aln_vec[i]);
-        aln_vec.clear();
+    for (int j = 0; j < num_threads; j++){
+        if(threads[j].joinable())
+            threads[j].join();
     }
+    threads.clear();
+    // while (num_actual_reads == chunk_size){
+    //     std::thread reader(read_sam, sam_fp, hdr, chunk_size, std::ref(aln_vec), std::ref(num_actual_reads));
+    //     reader.join();
+    //     // stop if no data is read
+    //     if (num_actual_reads == 0){
+    //         threads.clear();
+    //         break;
+    //     }
+    //     for (int j = 0; j < num_threads; j++){
+    //         if (j * reads_per_thread < num_actual_reads){
+    //             // set number of reads need lifting
+    //             int num_reads = num_actual_reads - j * reads_per_thread;
+    //             if (num_reads > reads_per_thread)
+    //                 num_reads = reads_per_thread;
+    //             threads.push_back(
+    //                 std::thread(
+    //                     lift_chunk,
+    //                     std::next(aln_vec.begin(),
+    //                     j * reads_per_thread),
+    //                     num_reads,
+    //                     out_sam_fp,
+    //                     hdr,
+    //                     &l,
+    //                     &chroms_not_found
+    //                 )
+    //             );
+    //         }
+    //     }
+    //     for (int j = 0; j < num_threads; j++){
+    //         if(threads[j].joinable())
+    //             threads[j].join();
+    //     }
+    //     threads.clear();
+    // }
+    // for (int i = 0; i < chunk_size; i++){
+    //     bam_destroy1(aln_vec[i]);
+    //     aln_vec.clear();
+    // }
     fclose(out_sam_fp);
 }
 
