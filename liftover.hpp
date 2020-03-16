@@ -100,14 +100,18 @@ class Lift {
         while (y < iters) {
             int cop = cigar_ops[y];
             if (del[x]) { // skip ahead in alt2ref cigar
-                if (out_cigar[out_cigar.length()-1] == 'I')
+                if (out_cigar[out_cigar.length()-1] == 'I'){
                     out_cigar.pop_back();
+                    out_cigar += "M";
+                }
                 else
                     out_cigar += "D";
                 ++x;
             } else if (cop == BAM_CINS || cop == BAM_CSOFT_CLIP) { // skip ahead in read2alt cigar
-                if (out_cigar[out_cigar.length()-1] == 'D')
+                if (out_cigar[out_cigar.length()-1] == 'D'){
                     out_cigar.pop_back();
+                    out_cigar += "M";
+                }
                 else
                     out_cigar += "I";
                 ++y;
@@ -116,8 +120,10 @@ class Lift {
                 ++y;
             } else if (cop == BAM_CMATCH || cop == BAM_CDIFF || cop == BAM_CEQUAL) { // M
                     if (ins[x]){
-                        if (out_cigar[out_cigar.length()-1] == 'D')
+                        if (out_cigar[out_cigar.length()-1] == 'D'){
                             out_cigar.pop_back();
+                            out_cigar += "M";
+                        }
                         else
                             out_cigar += "I"; // IM
                     }
@@ -126,8 +132,10 @@ class Lift {
             } else if (cop == BAM_CDEL || cop == BAM_CREF_SKIP) { // D
                     if (ins[x]) out_cigar += ""; // ID - insertion is invalidated
                     else{
-                        if (out_cigar[out_cigar.length()-1] == 'I')
+                        if (out_cigar[out_cigar.length()-1] == 'I'){
                             out_cigar.pop_back();
+                            out_cigar += "M";
+                        }
                         else
                             out_cigar += "D"; // MD
                     }
