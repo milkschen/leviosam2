@@ -104,6 +104,11 @@ std::string tag_to_string(const bam1_t* rec) {
         tag_string += "AS:i:";
         tag_string += std::to_string(bam_aux2i(aux));
     }
+    aux = bam_aux_get(rec, "NM");
+    if (aux != NULL) {
+        tag_string += "\tNM:i:";
+        tag_string += std::to_string(bam_aux2i(aux));
+    }
     return tag_string;
 }
 
@@ -143,8 +148,8 @@ void read_and_lift(
             sam_out += std::to_string(c.flag);
             sam_out += "\t";
             if (c.flag & 4) { // unmapped here
-                sam_out += "*\t0\t255\t*\t*\t0\t0\t";
-                // RNAME POS MAPQ(255) * RNEXT PNEXT TLEN
+                // RNAME POS MAPQ(0) * RNEXT PNEXT TLEN
+                sam_out += "*\t0\t0\t*\t*\t0\t0\t";
             } else {
                 std::string s2_name(hdr->target_name[c.tid]);
                 std::string s1_name(l->get_other_name(s2_name));
