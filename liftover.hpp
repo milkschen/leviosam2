@@ -3,6 +3,7 @@
 
 #include <cstdio>
 #include <iostream>
+#include <thread>
 #include <htslib/vcf.h>
 #include <htslib/sam.h>
 #include <sdsl/bit_vectors.hpp>
@@ -382,7 +383,8 @@ class LiftMap {
     size_t s2_to_s1(
         std::string n,
         size_t i,
-        std::vector<std::string>* chroms_not_found
+        std::vector<std::string>* chroms_not_found,
+        std::mutex* mutex
     ) {
         auto it = s2_map.find(n);
         if (it != s2_map.end()) {
@@ -391,7 +393,12 @@ class LiftMap {
             for (auto it = chroms_not_found->begin() ; it != chroms_not_found->end(); ++it){
                 if (*it == n) return i;
             }
-            chroms_not_found->push_back(n);
+            {
+                std::lock_guard<std::mutex> g(*mutex);
+                // mutex->lock();
+                chroms_not_found->push_back(n);
+                // mutex->unlock();
+            }
             fprintf(stderr, "Warning: chromosome %s not found in liftmap! \n", n.c_str());
             return i;
         }

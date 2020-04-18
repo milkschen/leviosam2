@@ -113,7 +113,9 @@ std::string tag_to_string(const bam1_t* rec) {
 }
 
 void read_and_lift(
-    std::mutex* mutex,
+    std::mutex* mutex_fread,
+    std::mutex* mutex_fwrite,
+    std::mutex* mutex_vec,
     samFile* sam_fp,
     FILE* out_sam_fp,
     bam_hdr_t* hdr,
@@ -123,6 +125,7 @@ void read_and_lift(
 ){
     // std::cerr << std::this_thread::get_id() << "\n";
     std::vector<bam1_t*> aln_vec;
+    std::vector<std::string> tmp_write_buffer(chunk_size);
     for (int i = 0; i < chunk_size; i++){
         bam1_t* aln = bam_init1();
         aln_vec.push_back(aln);
@@ -130,15 +133,19 @@ void read_and_lift(
     int read = 1;
     while(read >= 0){
         int num_actual_reads = chunk_size;
-        mutex->lock();
-        for (int i = 0; i < chunk_size; i++){
-            read = sam_read1(sam_fp, hdr, aln_vec[i]);
-            if (read < 0){
-                num_actual_reads = i;
-                break;
+        {
+            // read from SAM, protected by mutex
+            std::lock_guard<std::mutex> g(*mutex_fread);
+            // mutex->lock();
+            for (int i = 0; i < chunk_size; i++){
+                read = sam_read1(sam_fp, hdr, aln_vec[i]);
+                if (read < 0){
+                    num_actual_reads = i;
+                    break;
+                }
             }
+            // mutex->unlock();
         }
-        mutex->unlock();
         for (int i = 0; i < num_actual_reads; i++){
             std::string sam_out;
             bam1_t* aln = aln_vec[i];
@@ -155,7 +162,9 @@ void read_and_lift(
                 std::string s1_name(l->get_other_name(s2_name));
                 sam_out += s1_name.data(); // REF
                 sam_out += "\t";
-                sam_out += std::to_string(l->s2_to_s1(s2_name, c.pos, chroms_not_found) + 1); // POS
+                sam_out += std::to_string(
+                    l->s2_to_s1(s2_name, c.pos, chroms_not_found, mutex_vec) + 1
+                ); // POS
                 sam_out += "\t";
                 sam_out += std::to_string(c.qual); // QUAL
                 sam_out += "\t";
@@ -184,10 +193,18 @@ void read_and_lift(
             // TODO reconcile any tags that also need to be added.
             sam_out += tag_to_string(aln).data();
             sam_out += "\n";
-            // mutex.lock();
-            fprintf(out_sam_fp, "%s", sam_out.c_str());
-            // mutex.unlock();
-            // it = std::next(it);
+
+            tmp_write_buffer[i] = sam_out;
+            // fprintf(out_sam_fp, "%s", sam_out.c_str());
+        }
+        {
+            std::lock_guard<std::mutex> g(*mutex_fwrite);
+            // mutex->lock();
+            // std::thread::id this_id = std::this_thread::get_id();
+            for (int i = 0; i < num_actual_reads; i++){
+                fprintf(out_sam_fp, "%s", tmp_write_buffer[i].c_str());
+            }
+            // mutex->unlock();
         }
     }
     for (int i = 0; i < chunk_size; i++){
@@ -258,10 +275,23 @@ void lift_run(lift_opts args) {
     const int num_threads = args.threads;
     const int chunk_size = args.chunk_size;
     std::vector<std::thread> threads;
-    std::mutex mutex;
+    std::mutex mutex_fread;
+    std::mutex mutex_fwrite;
+    std::mutex mutex_vec;
     for (int j = 0; j < num_threads; j++){
         threads.push_back(
-            std::thread(read_and_lift, &mutex, sam_fp, out_sam_fp, hdr, chunk_size, &l, &chroms_not_found)
+            std::thread(
+                read_and_lift,
+                &mutex_fread,
+                &mutex_fwrite,
+                &mutex_vec,
+                sam_fp,
+                out_sam_fp,
+                hdr,
+                chunk_size,
+                &l,
+                &chroms_not_found
+            )
         );
     }
     for (int j = 0; j < num_threads; j++){
