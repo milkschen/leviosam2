@@ -123,7 +123,6 @@ void read_and_lift(
     lift::LiftMap* l,
     std::vector<std::string>* chroms_not_found
 ){
-    // std::cerr << std::this_thread::get_id() << "\n";
     std::vector<bam1_t*> aln_vec;
     std::vector<std::string> tmp_write_buffer(chunk_size);
     for (int i = 0; i < chunk_size; i++){
@@ -136,7 +135,6 @@ void read_and_lift(
         {
             // read from SAM, protected by mutex
             std::lock_guard<std::mutex> g(*mutex_fread);
-            // mutex->lock();
             for (int i = 0; i < chunk_size; i++){
                 read = sam_read1(sam_fp, hdr, aln_vec[i]);
                 if (read < 0){
@@ -144,7 +142,6 @@ void read_and_lift(
                     break;
                 }
             }
-            // mutex->unlock();
         }
         for (int i = 0; i < num_actual_reads; i++){
             std::string sam_out;
@@ -162,9 +159,11 @@ void read_and_lift(
                 std::string s1_name(l->get_other_name(s2_name));
                 sam_out += s1_name.data(); // REF
                 sam_out += "\t";
+                // POS
+                // chroms_not_found needs to be protected because chroms_not_found is shared
                 sam_out += std::to_string(
                     l->s2_to_s1(s2_name, c.pos, chroms_not_found, mutex_vec) + 1
-                ); // POS
+                ); 
                 sam_out += "\t";
                 sam_out += std::to_string(c.qual); // QUAL
                 sam_out += "\t";
@@ -198,13 +197,12 @@ void read_and_lift(
             // fprintf(out_sam_fp, "%s", sam_out.c_str());
         }
         {
+            // write to file, thread corruption protected by lock_guard
             std::lock_guard<std::mutex> g(*mutex_fwrite);
-            // mutex->lock();
             // std::thread::id this_id = std::this_thread::get_id();
             for (int i = 0; i < num_actual_reads; i++){
                 fprintf(out_sam_fp, "%s", tmp_write_buffer[i].c_str());
             }
-            // mutex->unlock();
         }
     }
     for (int i = 0; i < chunk_size; i++){

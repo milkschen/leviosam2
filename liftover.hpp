@@ -390,15 +390,10 @@ class LiftMap {
         if (it != s2_map.end()) {
             return lmap[it->second].s2_to_s1(i);
         } else {
-            for (auto it = chroms_not_found->begin() ; it != chroms_not_found->end(); ++it){
-                if (*it == n) return i;
-            }
-            {
-                std::lock_guard<std::mutex> g(*mutex);
-                // mutex->lock();
-                chroms_not_found->push_back(n);
-                // mutex->unlock();
-            }
+            std::lock_guard<std::mutex> g(*mutex);
+            for (auto it : *chroms_not_found)
+                if (it == n) return i;
+            chroms_not_found->push_back(n);
             fprintf(stderr, "Warning: chromosome %s not found in liftmap! \n", n.c_str());
             return i;
         }
