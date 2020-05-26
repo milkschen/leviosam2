@@ -83,14 +83,21 @@ char* get_PG(bam_hdr_t* hdr) {
     char* buf = (char*) malloc(sizeof(char) * hdr->l_text);
     buf[0] = '\0';
     std::strcpy(hdr_txt, hdr->text);
-    char* token = std::strtok(hdr_txt, "@");
+    char* token = std::strtok(hdr_txt, "\n");
     while (token != NULL) {
-        if (token[0] == 'P' && token[1] == 'G') {
-            strcat(buf, "@");
+        if (token[0] == '@' && token[1] == 'P' && token[2] == 'G') {
             strcat(buf, token);
         }
-        token = std::strtok(NULL, "@");
+        token = std::strtok(NULL, "\n");
     }
+    // char* token = std::strtok(hdr_txt, "@");
+    // while (token != NULL) {
+    //     if (token[0] == 'P' && token[1] == 'G') {
+    //         strcat(buf, "@");
+    //         strcat(buf, token);
+    //     }
+    //     token = std::strtok(NULL, "@");
+    // }
     free(hdr_txt);
     return buf;
 }
@@ -151,24 +158,65 @@ void read_and_lift(
             sam_out += "\t";
             sam_out += std::to_string(c.flag);
             sam_out += "\t";
-            if (c.flag & 4) { // unmapped here
+            if ((c.flag & 4) & (c.flag & 1 == 0)){ // single-end, unmapped
                 // RNAME POS MAPQ(0) * RNEXT PNEXT TLEN
                 sam_out += "*\t0\t0\t*\t*\t0\t0\t";
-            } else {
+            }
+            else {
                 std::string s2_name(hdr->target_name[c.tid]);
                 std::string s1_name(l->get_other_name(s2_name));
                 sam_out += s1_name.data(); // REF
                 sam_out += "\t";
                 // POS
                 // chroms_not_found needs to be protected because chroms_not_found is shared
-                sam_out += std::to_string(
-                    l->s2_to_s1(s2_name, c.pos, chroms_not_found, mutex_vec) + 1
-                ); 
+                size_t pos = l->s2_to_s1(s2_name, c.pos, chroms_not_found, mutex_vec) + 1;
+                sam_out += std::to_string(pos);
                 sam_out += "\t";
                 sam_out += std::to_string(c.qual); // QUAL
                 sam_out += "\t";
-                sam_out += l->cigar_s2_to_s1(s2_name, aln).data(); // CIGAR
-                sam_out += "\t*\t0\t0\t"; // RNEXT PNEXT TLEN
+                // CIGAR
+                if (c.flag & 4)
+                    sam_out += "*";
+                else
+                    sam_out += l->cigar_s2_to_s1(s2_name, aln).data();
+                // sam_out += "\t*\t0\t0\t"; // RNEXT PNEXT TLEN
+                sam_out += "\t";
+                if (c.flag & 1) { // mate information
+                    size_t mpos = l->s2_to_s1(s2_name, c.mpos, chroms_not_found, mutex_vec) + 1;
+                    if (c.flag & 8){ // mate is unmapped
+                        sam_out += "=\t";
+                        sam_out += std::to_string(mpos);
+                        sam_out += "\t0\t";
+                    }
+                    else{ // mate is mapped
+                        // RNEXT
+                        // If IDs match, print "="; else, print RNAME for the mate
+                        sam_out += (c.tid == c.mtid)? "=" : l->get_other_name(hdr->target_name[c.mtid]);
+                        sam_out += "\t";
+                        sam_out += std::to_string(mpos); // PNEXT
+                        int isize;
+                        size_t pos_5, mpos_5; // 5'-end
+                        if (c.tid == c.mtid){
+                            if (c.flag & 16)
+                                pos_5 = pos + size_t(c.l_qseq);
+                            else
+                                pos_5 = pos;
+                            if (c.flag & 32)
+                                mpos_5 = mpos + size_t(c.l_qseq);
+                            else
+                                mpos_5 = mpos;
+                            isize = int(mpos_5 - pos_5);
+                        }
+                        else
+                            isize = 0;
+                        sam_out += "\t";
+                        sam_out += std::to_string(isize); // TLEN (or ISIZE)
+                        sam_out += "\t";
+                    }
+                }
+                else { // single-end
+                    sam_out += "*\t0\t0\t";
+                }
             }
             // get query sequence
             std::string query_seq("");
