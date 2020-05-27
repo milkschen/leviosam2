@@ -158,65 +158,89 @@ void read_and_lift(
             sam_out += "\t";
             sam_out += std::to_string(c.flag);
             sam_out += "\t";
-            if ((c.flag & 4) & (c.flag & 1 == 0)){ // single-end, unmapped
-                // RNAME POS MAPQ(0) * RNEXT PNEXT TLEN
-                sam_out += "*\t0\t0\t*\t*\t0\t0\t";
+            std::string s1_name, s2_name;
+            size_t pos;
+            if (c.flag & 4){
+                // if   (1) paired-end, and mate unmapped
+                //      (2) single-end
+                if (((c.flag & 1) && (c.flag & 8)) || !(c.flag & 1)){
+                    sam_out += "*\t0\t0\t*\t";
+                }
+                else {
+                    s2_name = hdr->target_name[c.mtid];
+                    s1_name = l->get_other_name(s2_name);
+                    // chroms_not_found needs to be protected because chroms_not_found is shared
+                    pos = l->s2_to_s1(s2_name, c.mpos, chroms_not_found, mutex_vec) + 1;
+                    // REF
+                    sam_out += s1_name.data();
+                    sam_out += "\t";
+                    // POS
+                    sam_out += std::to_string(pos);
+                    sam_out += "\t";
+                    // QUAL
+                    // CIGAR
+                    sam_out += "0\t*\t";
+                }
             }
             else {
-                std::string s2_name(hdr->target_name[c.tid]);
-                std::string s1_name(l->get_other_name(s2_name));
-                sam_out += s1_name.data(); // REF
+                s2_name = hdr->target_name[c.tid];
+                s1_name = l->get_other_name(s2_name);
+                // chroms_not_found needs to be protected because chroms_not_found is shared
+                pos = l->s2_to_s1(s2_name, c.pos, chroms_not_found, mutex_vec) + 1;
+                // REF
+                sam_out += s1_name.data();
                 sam_out += "\t";
                 // POS
-                // chroms_not_found needs to be protected because chroms_not_found is shared
-                size_t pos = l->s2_to_s1(s2_name, c.pos, chroms_not_found, mutex_vec) + 1;
                 sam_out += std::to_string(pos);
                 sam_out += "\t";
-                sam_out += std::to_string(c.qual); // QUAL
+                // QUAL
+                sam_out += std::to_string(c.qual); 
                 sam_out += "\t";
                 // CIGAR
-                if (c.flag & 4)
-                    sam_out += "*";
-                else
-                    sam_out += l->cigar_s2_to_s1(s2_name, aln).data();
-                // sam_out += "\t*\t0\t0\t"; // RNEXT PNEXT TLEN
+                sam_out += l->cigar_s2_to_s1(s2_name, aln).data();
                 sam_out += "\t";
-                if (c.flag & 1) { // mate information
-                    size_t mpos = l->s2_to_s1(s2_name, c.mpos, chroms_not_found, mutex_vec) + 1;
-                    if (c.flag & 8){ // mate is unmapped
-                        sam_out += "=\t";
-                        sam_out += std::to_string(mpos);
-                        sam_out += "\t0\t";
-                    }
-                    else{ // mate is mapped
-                        // RNEXT
-                        // If IDs match, print "="; else, print RNAME for the mate
-                        sam_out += (c.tid == c.mtid)? "=" : l->get_other_name(hdr->target_name[c.mtid]);
-                        sam_out += "\t";
-                        sam_out += std::to_string(mpos); // PNEXT
-                        int isize;
-                        size_t pos_5, mpos_5; // 5'-end
-                        if (c.tid == c.mtid){
-                            if (c.flag & 16)
-                                pos_5 = pos + size_t(c.l_qseq);
-                            else
-                                pos_5 = pos;
-                            if (c.flag & 32)
-                                mpos_5 = mpos + size_t(c.l_qseq);
-                            else
-                                mpos_5 = mpos;
-                            isize = int(mpos_5 - pos_5);
-                        }
+            }
+            if (c.flag & 1) { // mate information
+                if (c.flag & 8){ // mate is unmapped
+                    size_t mpos = l->s2_to_s1(s2_name, c.pos, chroms_not_found, mutex_vec) + 1;
+                    sam_out += "=\t";
+                    sam_out += std::to_string(mpos);
+                    sam_out += "\t0\t";
+                }
+                else{ // mate is mapped
+                    std::string ms2_name(hdr->target_name[c.mtid]);
+                    std::string ms1_name(l->get_other_name(ms2_name));
+                    size_t mpos = l->s2_to_s1(ms2_name, c.mpos, chroms_not_found, mutex_vec) + 1;
+                    // RNEXT
+                    // If IDs match, print "="; else, print RNAME for the mate
+                    sam_out += (c.tid == c.mtid)? "=" : ms1_name.data();
+                    // sam_out += (c.tid == c.mtid)? "=" : (l->get_other_name(hdr->target_name[c.mtid])).data();
+                    sam_out += "\t";
+                    sam_out += std::to_string(mpos); // PNEXT
+                    int isize;
+                    size_t pos_5, mpos_5; // 5'-end
+                    if (c.tid == c.mtid){
+                        if (c.flag & 16)
+                            pos_5 = pos + size_t(c.l_qseq);
                         else
+                            pos_5 = pos;
+                        if (c.flag & 32)
+                            mpos_5 = mpos + size_t(c.l_qseq);
+                        else
+                            mpos_5 = mpos;
+                        isize = int(mpos_5 - pos_5);
+                        if (!(c.flag & 16) && !(c.flag & 32))
                             isize = 0;
-                        sam_out += "\t";
-                        sam_out += std::to_string(isize); // TLEN (or ISIZE)
-                        sam_out += "\t";
                     }
+                    else
+                        isize = 0;
+                    sam_out += "\t";
+                    sam_out += std::to_string(isize); // TLEN (or ISIZE)
+                    sam_out += "\t";
                 }
-                else { // single-end
-                    sam_out += "*\t0\t0\t";
-                }
+            }
+            else { // single-end
+                sam_out += "*\t0\t0\t";
             }
             // get query sequence
             std::string query_seq("");
