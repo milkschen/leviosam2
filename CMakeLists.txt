@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.10)
 
-project(liftover CXX C)
+project(leviosam CXX C)
 
-set(PROJECT_URL "https://github.com/alshai/liftover")
-set(PROJECT_DESCRIPTION "liftover: library for moving alignments between aligned genomes")
+set(PROJECT_URL "https://github.com/alshai/leviosam")
+set(PROJECT_DESCRIPTION "leviosam: library for moving alignments between aligned genomes")
 set(CMAKE_CXX_STANDARD 11)
 
 # Note: when I installed htslib and sdsl-lite on my Mac using brew,
@@ -22,8 +22,9 @@ pkg_search_module(PKG_HTSLIB REQUIRED htslib)
 # sdsl
 pkg_search_module(PKG_LIBDIVSUFSORT REQUIRED libdivsufsort)
 
-add_executable(liftover liftover.cpp)
-target_link_libraries(liftover ${PKG_HTSLIB_LDFLAGS})
-target_link_libraries(liftover sdsl)
+add_executable(leviosam leviosam.cpp)
+target_link_libraries(leviosam ${PKG_HTSLIB_LDFLAGS})
+target_link_libraries(leviosam sdsl)
+target_link_libraries(leviosam pthread)
 
-INSTALL(TARGETS liftover DESTINATION bin)
+INSTALL(TARGETS leviosam DESTINATION bin)

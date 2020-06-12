@@ -1,4 +1,4 @@
-#include "liftover.hpp"
+#include "leviosam.hpp"
 #include <vector>
 #include <tuple>
 #include <unordered_map>
@@ -74,7 +74,7 @@ void serialize_run(lift_opts args) {
     }
     std::ofstream o(args.outpre + ".lft", std::ios::binary);
     l.serialize(o);
-    fprintf(stderr, "liftover file saved to %s\n", (args.outpre + ".lft").data());
+    fprintf(stderr, "levioSAM file saved to %s\n", (args.outpre + ".lft").data());
 }
 
 
@@ -284,7 +284,7 @@ void read_and_lift(
 }
 
 void lift_run(lift_opts args) {
-    // if "-l" not specified, then create a liftover
+    // if "-l" not specified, then create a levioSAM
     lift::LiftMap l = [&]{
         if (args.lift_fname != "") {
             std::ifstream in(args.lift_fname, std::ios::binary);
@@ -307,7 +307,7 @@ void lift_run(lift_opts args) {
     samFile* sam_fp = sam_open(args.sam_fname.data(), "r");
     bam_hdr_t* hdr = sam_hdr_read(sam_fp);
 
-    // the "ref" lengths are all stored in the liftover structure. How do we loop over it?
+    // the "ref" lengths are all stored in the levio structure. How do we loop over it?
     std::vector<std::string> contig_names;
     std::vector<size_t> contig_reflens;
     std::tie(contig_names, contig_reflens) = l.get_s1_lens();
@@ -322,7 +322,7 @@ void lift_run(lift_opts args) {
         fprintf(out_sam_fp, "@SQ\tSN:%s\tLN:%ld\n", contig_names[i].data(), contig_reflens[i]);
     }
     for (auto i = 0; i < hdr->n_targets; i++){
-        // if a contig is not found in vcf/lft, print it as it was before liftover
+        // if a contig is not found in vcf/lft, print it as it was before levio
         if (std::find(contig_names.begin(), contig_names.end(), hdr->target_name[i]) == contig_names.end()){
             fprintf(out_sam_fp, "@SQ\tSN:%s\tLN:%u\n", hdr->target_name[i], hdr->target_len[i]);
         }
@@ -337,7 +337,7 @@ void lift_run(lift_opts args) {
     char* prev_pg = get_PG(hdr);
     fprintf(out_sam_fp, "%s\n", prev_pg);
     free(prev_pg);
-    fprintf(out_sam_fp, "@PG\tID:liftover\tPN:liftover\tCL:\"%s\"\n", args.cmd.data());
+    fprintf(out_sam_fp, "@PG\tID:leviosam\tPN:leviosam\tCL:\"%s\"\n", args.cmd.data());
     
     // store chromosomes found in SAM but not in lft
     // use a vector to avoid printing out the same warning msg multiple times
@@ -403,7 +403,7 @@ int main(int argc, char** argv) {
         {"vcf", required_argument, 0, 'v'},
         {"sample", required_argument, 0, 's'},
         {"prefix", required_argument, 0, 'p'},
-        {"liftover", required_argument, 0, 'l'},
+        {"leviosam", required_argument, 0, 'l'},
         {"sam", required_argument, 0, 'a'},
         {"haplotype", required_argument, 0, 'g'},
         {"threads", required_argument, 0, 't'},
