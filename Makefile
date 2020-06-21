@@ -1,4 +1,4 @@
-PRGNAME=liftover
+PRGNAME=leviosam
 CXX=g++
 CXX_FLAGS=--std=c++11 -lpthread
 INC=
@@ -6,10 +6,10 @@ LIB=-lsdsl -lhts
 
 all: $(PRGNAME)
 
-liftover: liftover.cpp liftover.hpp
+leviosam: leviosam.cpp leviosam.hpp
 	$(CXX) -o $@ $< $(LIB) $(CXX_FLAGS)
 
-test: test.cpp liftover.hpp
+test: test.cpp leviosam.hpp
 	$(CXX) -o $@ $< $(LIB) $(CXX_FLAGS)
 
 clean:
