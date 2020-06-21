@@ -577,5 +577,8 @@ class LiftMap {
 };
 };
 
+void print_main_help_msg();
+void print_lift_help_msg();
+void print_serialize_help_msg();
 
 #endif

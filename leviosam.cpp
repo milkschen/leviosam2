@@ -70,6 +70,7 @@ void serialize_run(lift_opts args) {
     lift::LiftMap l(lift_from_vcf(args.vcf_fname, args.sample, args.haplotype, args.name_map, args.length_map));
     if (args.outpre == "") {
         fprintf(stderr, "no output prefix specified! Use -p \n");
+        print_serialize_help_msg();
         exit(1);
     }
     std::ofstream o(args.outpre + ".lft", std::ios::binary);
@@ -293,6 +294,7 @@ void lift_run(lift_opts args) {
             return lift::LiftMap(lift_from_vcf(args.vcf_fname, args.sample, args.haplotype, args.name_map, args.length_map));
         } else {
             fprintf(stderr, "not enough parameters specified to build/load lift-over\n");
+            print_lift_help_msg();
             exit(1);
         }
     } ();
@@ -378,6 +380,7 @@ lift::LiftMap lift_from_vcf(std::string fname,
                             NameMap names, LengthMap lengths) {
     if (fname == "" && sample == "") {
         fprintf(stderr, "vcf file name and sample name are required!! \n");
+        print_serialize_help_msg();
         exit(1);
     }
     vcfFile* fp = bcf_open(fname.data(), "r");
@@ -393,7 +396,41 @@ std::string make_cmd(int argc, char** argv) {
     }
     return cmd;
 }
+void print_serialize_help_msg(){
+    fprintf(stderr, "\n");
+    fprintf(stderr, "Usage:   leviosam serialize [options]\n\n");
+    fprintf(stderr, "Options:\n");
+    fprintf(stderr, "         -s string The sample used to build the leviosam index (-v needs to be set).\n");
+    fprintf(stderr, "         -p string The prefix of the output files.\n");
+    fprintf(stderr, "         -g 0/1    The haplotype used to index leviosam. [0] \n");
+    fprintf(stderr, "         -n string Path to a name map file.\n");
+    fprintf(stderr, "                   This can be used to map '1' to 'chr1', or vice versa.\n");
+    fprintf(stderr, "         -k string Path to a length map file.\n");
+    fprintf(stderr, "\n");
+}
 
+void print_lift_help_msg(){
+    fprintf(stderr, "\n");
+    fprintf(stderr, "Usage:   leviosam lift [options]\n\n");
+    fprintf(stderr, "Options:\n");
+    fprintf(stderr, "         -a string The SAM file to be lifted.\n");
+    fprintf(stderr, "         -l string Path to a pre-built leviosam index.\n");
+    fprintf(stderr, "         -v string If -l is not specified, can build indexes using a VCF file.\n");
+    fprintf(stderr, "         -t INT    Number of threads used. [1] \n");
+    fprintf(stderr, "         -T INT    Size of a processing chunk. [64] \n");
+    fprintf(stderr, "\n");
+    fprintf(stderr, "The options for serialize can also be used here, if -v is set:");
+    print_serialize_help_msg();
+}
+
+void print_main_help_msg(){
+    fprintf(stderr, "\n");
+    fprintf(stderr, "Program: leviosam (lift over SAM based on VCF)\n");
+    fprintf(stderr, "Usage:   leviosam <command> [options]\n\n");
+    fprintf(stderr, "Command: serialize build leviosam indexes\n");
+    fprintf(stderr, "         lift      perform lifting\n");
+    fprintf(stderr, "\n");
+}
 
 int main(int argc, char** argv) {
     int c;
@@ -451,6 +488,7 @@ int main(int argc, char** argv) {
 
     if (argc - optind < 1) {
         fprintf(stderr, "no argument provided\n");
+        print_main_help_msg();
         exit(1);
     }
     if (args.haplotype != "0" && args.haplotype != "1"){
