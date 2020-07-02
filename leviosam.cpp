@@ -320,12 +320,16 @@ void lift_run(lift_opts args) {
     else 
         out_sam_fp = fopen((args.outpre + ".sam").data(), "w");
     fprintf(out_sam_fp, "@HD\tVN:1.6\tSO:unknown\n");
-    for (auto i = 0; i < contig_names.size(); ++i) {
-        fprintf(out_sam_fp, "@SQ\tSN:%s\tLN:%ld\n", contig_names[i].data(), contig_reflens[i]);
-    }
     for (auto i = 0; i < hdr->n_targets; i++){
+        auto contig_itr = std::find(contig_names.begin(), contig_names.end(), hdr->target_name[i]);
+        // If a contig is in contig_names, look up the associated length.
+        if (contig_itr != contig_names.end()){
+            fprintf(out_sam_fp, "@SQ\tSN:%s\tLN:%ld\n",
+                    contig_names[contig_itr - contig_names.begin()].data(),
+                    contig_reflens[contig_itr - contig_names.begin()]);
+        }
         // if a contig is not found in vcf/lft, print it as it was before levio
-        if (std::find(contig_names.begin(), contig_names.end(), hdr->target_name[i]) == contig_names.end()){
+        else{
             fprintf(out_sam_fp, "@SQ\tSN:%s\tLN:%u\n", hdr->target_name[i], hdr->target_len[i]);
         }
     }
