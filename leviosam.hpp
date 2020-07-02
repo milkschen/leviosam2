@@ -114,7 +114,7 @@ class Lift {
                     out_cigar += "M";
                 }
                 else
-                    out_cigar += "I";
+                    out_cigar += (cop == BAM_CINS)? "I" : "S";
                 ++y;
             } else if (cop == BAM_CBACK || cop == BAM_CHARD_CLIP || cop == BAM_CPAD) {
                 // skip, these are fluff bases
