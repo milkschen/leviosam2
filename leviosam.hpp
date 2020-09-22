@@ -108,39 +108,44 @@ class Lift {
                 else
                     out_cigar += "D";
                 ++x;
-            } else if (cop == BAM_CINS || cop == BAM_CSOFT_CLIP) { // skip ahead in read2alt cigar
+            } else if (cop == BAM_CINS) { // skip ahead in read2alt cigar
                 if (out_cigar[out_cigar.length()-1] == 'D'){
                     out_cigar.pop_back();
                     out_cigar += "M";
                 }
                 else
-                    out_cigar += (cop == BAM_CINS)? "I" : "S";
+                    out_cigar += "I";
                 ++y;
-            } else if (cop == BAM_CBACK || cop == BAM_CHARD_CLIP || cop == BAM_CPAD) {
-                // skip, these are fluff bases
+            } else if (cop == BAM_CSOFT_CLIP || cop == BAM_CHARD_CLIP || cop == BAM_CPAD){
+                out_cigar += (cop == BAM_CSOFT_CLIP)? "S" :
+                    (cop == BAM_CHARD_CLIP)? "H" : "P";
+                ++y;
+            } else if (cop == BAM_CBACK) {
+                // skip. We don't support B Ops.
+                fprintf(stderr, "Warning: B operators are not supported\n");
                 ++y;
             } else if (cop == BAM_CMATCH || cop == BAM_CDIFF || cop == BAM_CEQUAL) { // M
-                    if (ins[x]){
-                        if (out_cigar[out_cigar.length()-1] == 'D'){
-                            out_cigar.pop_back();
-                            out_cigar += "M";
-                        }
-                        else
-                            out_cigar += "I"; // IM
+                if (ins[x]){
+                    if (out_cigar[out_cigar.length()-1] == 'D'){
+                        out_cigar.pop_back();
+                        out_cigar += "M";
                     }
-                    else out_cigar += "M"; // MM
-                    ++x; ++y;
+                    else
+                        out_cigar += "I"; // IM
+                }
+                else out_cigar += "M"; // MM
+                ++x; ++y;
             } else if (cop == BAM_CDEL || cop == BAM_CREF_SKIP) { // D
-                    if (ins[x]) out_cigar += ""; // ID - insertion is invalidated
-                    else{
-                        if (out_cigar[out_cigar.length()-1] == 'I'){
-                            out_cigar.pop_back();
-                            out_cigar += "M";
-                        }
-                        else
-                            out_cigar += "D"; // MD
+                if (ins[x]) out_cigar += ""; // ID - insertion is invalidated
+                else{
+                    if (out_cigar[out_cigar.length()-1] == 'I'){
+                        out_cigar.pop_back();
+                        out_cigar += "M";
                     }
-                    ++x; ++y;
+                    else
+                        out_cigar += "D"; // MD
+                }
+                ++x; ++y;
             }
         }
 
@@ -427,6 +432,12 @@ class LiftMap {
                         out_cigar += "D";
                     else if (bam_cigar_op(cigar[i]) == BAM_CMATCH)
                         out_cigar += "M";
+                    else if (bam_cigar_op(cigar[i]) == BAM_CSOFT_CLIP)
+                        out_cigar += "S";
+                    else if (bam_cigar_op(cigar[i]) == BAM_CHARD_CLIP)
+                        out_cigar += "H";
+                    else if (bam_cigar_op(cigar[i]) == BAM_CPAD)
+                        out_cigar += "P";
                 }
             }
             std::string out = "";
