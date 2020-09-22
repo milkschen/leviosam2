@@ -91,14 +91,6 @@ char* get_PG(bam_hdr_t* hdr) {
         }
         token = std::strtok(NULL, "\n");
     }
-    // char* token = std::strtok(hdr_txt, "@");
-    // while (token != NULL) {
-    //     if (token[0] == 'P' && token[1] == 'G') {
-    //         strcat(buf, "@");
-    //         strcat(buf, token);
-    //     }
-    //     token = std::strtok(NULL, "@");
-    // }
     free(hdr_txt);
     return buf;
 }
@@ -404,7 +396,8 @@ void print_serialize_help_msg(){
     fprintf(stderr, "\n");
     fprintf(stderr, "Usage:   leviosam serialize [options]\n\n");
     fprintf(stderr, "Options:\n");
-    fprintf(stderr, "         -s string The sample used to build the leviosam index (-v needs to be set).\n");
+    fprintf(stderr, "         -v string Build a leviosam index using a VCF file.\n");
+    fprintf(stderr, "         -s string The sample used to build leviosam index (-v needs to be set).\n");
     fprintf(stderr, "         -p string The prefix of the output files.\n");
     fprintf(stderr, "         -g 0/1    The haplotype used to index leviosam. [0] \n");
     fprintf(stderr, "         -n string Path to a name map file.\n");
