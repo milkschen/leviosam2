@@ -1,6 +1,5 @@
 import unittest
 import subprocess
-from parameterized import parameterized, parameterized_class
 
 BWA_OP_GOLD = 'testdata/bwa-single_end-cigar_op-grch38.sam'
 BWA_OP_SAM = 'testdata/bwa-single_end-cigar_op-major.sam'
