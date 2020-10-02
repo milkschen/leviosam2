@@ -153,10 +153,10 @@ void read_and_lift(
             sam_out += "\t";
             std::string s1_name, s2_name;
             size_t pos;
-            if (c.flag & 4){
-                // if   (1) paired-end, and mate unmapped
-                //      (2) single-end
-                if (((c.flag & 1) && (c.flag & 8)) || !(c.flag & 1)){
+            if (c.flag & BAM_FUNMAP){ // If unmapped
+                if (((c.flag & BAM_FPAIRED) && (c.flag & BAM_FMUNMAP)) || // paired-end, and mate unmapped
+                    !(c.flag & BAM_FPAIRED) // single-end
+                ){
                     sam_out += "*\t0\t0\t*\t";
                 }
                 else {
@@ -170,8 +170,7 @@ void read_and_lift(
                     // POS
                     sam_out += std::to_string(pos);
                     sam_out += "\t";
-                    // QUAL
-                    // CIGAR
+                    // QUAL & CIGAR
                     sam_out += "0\t*\t";
                 }
             }
@@ -207,26 +206,10 @@ void read_and_lift(
                     // RNEXT
                     // If IDs match, print "="; else, print RNAME for the mate
                     sam_out += (c.tid == c.mtid)? "=" : ms1_name.data();
-                    // sam_out += (c.tid == c.mtid)? "=" : (l->get_other_name(hdr->target_name[c.mtid])).data();
                     sam_out += "\t";
                     sam_out += std::to_string(mpos); // PNEXT
-                    int isize;
-                    size_t pos_5, mpos_5; // 5'-end
-                    if (c.tid == c.mtid){
-                        if (c.flag & BAM_FREVERSE)
-                            pos_5 = pos + size_t(c.l_qseq);
-                        else
-                            pos_5 = pos;
-                        if (c.flag & BAM_FMREVERSE)
-                            mpos_5 = mpos + size_t(c.l_qseq);
-                        else
-                            mpos_5 = mpos;
-                        isize = int(mpos_5 - pos_5);
-                        if (!(c.flag & BAM_FREVERSE) && !(c.flag & BAM_FMREVERSE))
-                            isize = 0;
-                    }
-                    else
-                        isize = 0;
+                    size_t pos_5, mpos_5; // 5'-end position
+                    int isize = (c.isize == 0)? 0 : c.isize + (mpos - c.mpos) - (pos - c.pos);
                     sam_out += "\t";
                     sam_out += std::to_string(isize); // TLEN (or ISIZE)
                     sam_out += "\t";
