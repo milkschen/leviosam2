@@ -193,8 +193,8 @@ void read_and_lift(
                 sam_out += l->cigar_s2_to_s1(s2_name, aln).data();
                 sam_out += "\t";
             }
-            if (c.flag & 1) { // mate information
-                if (c.flag & 8){ // mate is unmapped
+            if (c.flag & BAM_FPAIRED) { // mate information
+                if (c.flag & BAM_FMUNMAP){ // mate is unmapped
                     size_t mpos = l->s2_to_s1(s2_name, c.pos, chroms_not_found, mutex_vec) + 1;
                     sam_out += "=\t";
                     sam_out += std::to_string(mpos);
@@ -213,16 +213,16 @@ void read_and_lift(
                     int isize;
                     size_t pos_5, mpos_5; // 5'-end
                     if (c.tid == c.mtid){
-                        if (c.flag & 16)
+                        if (c.flag & BAM_FREVERSE)
                             pos_5 = pos + size_t(c.l_qseq);
                         else
                             pos_5 = pos;
-                        if (c.flag & 32)
+                        if (c.flag & BAM_FMREVERSE)
                             mpos_5 = mpos + size_t(c.l_qseq);
                         else
                             mpos_5 = mpos;
                         isize = int(mpos_5 - pos_5);
-                        if (!(c.flag & 16) && !(c.flag & 32))
+                        if (!(c.flag & BAM_FREVERSE) && !(c.flag & BAM_FMREVERSE))
                             isize = 0;
                     }
                     else
@@ -293,12 +293,13 @@ void lift_run(lift_opts args) {
 
     fprintf(stderr, "loaded liftmap!\n");
 
+    samFile* sam_fp;
     // read sam file here
     if (args.sam_fname == "") {
-        fprintf(stderr, "no sam file specified! Use -a option\n");
-        exit(1);
+        sam_fp = sam_open("-", "r");
     }
-    samFile* sam_fp = sam_open(args.sam_fname.data(), "r");
+    else
+        sam_fp = sam_open(args.sam_fname.data(), "r");
     bam_hdr_t* hdr = sam_hdr_read(sam_fp);
 
     // the "ref" lengths are all stored in the levio structure. How do we loop over it?
@@ -394,7 +395,7 @@ std::string make_cmd(int argc, char** argv) {
 }
 void print_serialize_help_msg(){
     fprintf(stderr, "\n");
-    fprintf(stderr, "Usage:   leviosam serialize [options]\n\n");
+    fprintf(stderr, "Usage:   leviosam serialize [options]\n");
     fprintf(stderr, "Options:\n");
     fprintf(stderr, "         -v string Build a leviosam index using a VCF file.\n");
     fprintf(stderr, "         -s string The sample used to build leviosam index (-v needs to be set).\n");
@@ -408,15 +409,15 @@ void print_serialize_help_msg(){
 
 void print_lift_help_msg(){
     fprintf(stderr, "\n");
-    fprintf(stderr, "Usage:   leviosam lift [options]\n\n");
+    fprintf(stderr, "Usage:   leviosam lift [options]\n");
     fprintf(stderr, "Options:\n");
-    fprintf(stderr, "         -a string The SAM file to be lifted.\n");
+    fprintf(stderr, "         -a string The SAM file to be lifted. \n");
+    fprintf(stderr, "                   Leave empty or set to \"-\" to read from stdin.\n");
     fprintf(stderr, "         -l string Path to a pre-built leviosam index.\n");
     fprintf(stderr, "         -v string If -l is not specified, can build indexes using a VCF file.\n");
     fprintf(stderr, "         -t INT    Number of threads used. [1] \n");
     fprintf(stderr, "         -T INT    Size of a processing chunk. [64] \n");
-    fprintf(stderr, "\n");
-    fprintf(stderr, "The options for serialize can also be used here, if -v is set:");
+    fprintf(stderr, "         The options for serialize can also be used here, if -v is set.\n");
     print_serialize_help_msg();
 }
 
@@ -424,8 +425,9 @@ void print_main_help_msg(){
     fprintf(stderr, "\n");
     fprintf(stderr, "Program: leviosam (lift over SAM based on VCF)\n");
     fprintf(stderr, "Usage:   leviosam <command> [options]\n\n");
-    fprintf(stderr, "Command: serialize build leviosam indexes\n");
+    fprintf(stderr, "Commands:serialize build leviosam indexes\n");
     fprintf(stderr, "         lift      perform lifting\n");
+    fprintf(stderr, "Options: -h        Print detailed usage.\n");
     fprintf(stderr, "\n");
 }
 
@@ -445,7 +447,7 @@ int main(int argc, char** argv) {
         {"verbose", no_argument, &args.verbose, 1},
     };
     int long_index = 0;
-    while((c = getopt_long(argc, argv, "v:s:p:l:a:g:n:k:t:T:", long_options, &long_index)) != -1) {
+    while((c = getopt_long(argc, argv, "hv:s:p:l:a:g:n:k:t:T:", long_options, &long_index)) != -1) {
         switch (c) {
             case 'v':
                 args.vcf_fname = optarg;
@@ -477,6 +479,9 @@ int main(int argc, char** argv) {
             case 'T':
                 args.chunk_size = atoi(optarg);
                 break;
+            case 'h':
+                print_lift_help_msg();
+                exit(1);
             default:
                 fprintf(stderr, "ignoring option %c\n", c);
                 exit(1);
