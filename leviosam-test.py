@@ -42,6 +42,7 @@ dict_test_field = {
     'SEQ': SAM_SEQ, 'QUAL': SAM_QUAL}
     # 'MAPQ': SAM_MAPQ,
 
+
 class SamProcessing(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -81,7 +82,7 @@ class SamProcessing(unittest.TestCase):
             assert param['mode'] in ['SE', 'PE']
             
             # Each subtest here is one parameter set (e.g. BWA-SE, BT2-PE)
-            with self.subTest(class_idx=i):
+            with self.subTest(aln_param_idx=i):
                 dict_lifted = self.read_sam_file_as_dict(f'{param["out_prefix"]}.sam')
                 dict_gold = self.read_sam_file_as_dict(f'{param["gold"]}')
 
@@ -111,95 +112,25 @@ class SamProcessing(unittest.TestCase):
                                     aln_gold_second[dict_test_field[test_field]])
                         print(f'[PASSED] {len(dict_lifted.keys())} {test_field} for {param["name"]}')
 
-
-# class TestSingleEnd(unittest.TestCase):
-#     @classmethod
-#     def setUpClass(cls):
-#         for param in params:
-#             process = subprocess.Popen(
-#                 ['./leviosam', 
-#                 'lift', '-l', 'testdata/wg-maj.lft', '-a', param['sam'], '-p', param['out_prefix']],
-#                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-#             stdout, stderr = process.communicate()
-#             print(f'Lifted {param["out_prefix"]}.sam')
-# 
-#     @classmethod
-#     def tearDownClass(cls):
-#         for param in params:
-#             cmd = f'rm {param["out_prefix"]}.sam; rm {param["out_prefix"]}-RG.sam'
-#             process_rm = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True)
-#             stdout, stderr = process_rm.communicate()
-#             print(f'Cleaned up {param["out_prefix"]}-lifted.sam and {param["out_prefix"]}-RG.sam')
-# 
-#     '''
-#     Test if the lifted POSs are identical to the alignments against standard reference.
-# 
-#     This is not globally true, since some reads could be mapped to other regions in an augmented
-#     reference, but we only provide cases where mapping positions are not altered in the test case.
-#     '''
-#     def test_identical_pos(self):
-#         for i, param in enumerate(params):
-#             with self.subTest(i=i):
-#                 dict_name_pos_lifted = {}
-#                 with open(f'{param["out_prefix"]}.sam', 'r') as f:
-#                     for line in f:
-#                         if line[0] != '@':
-#                             line = line.split()
-#                             dict_name_pos_lifted[line[0]] = f'{line[2]}_{line[3]}'
-#                 dict_name_pos_gold = {}
-#                 with open(f'{param["gold"]}', 'r') as f:
-#                     for line in f:
-#                         if line[0] != '@':
-#                             line = line.split()
-#                             dict_name_pos_gold[line[0]] = f'{line[2]}_{line[3]}'
-#                 for k in dict_name_pos_lifted.keys():
-#                     self.assertEqual(dict_name_pos_lifted[k], dict_name_pos_gold[k])
-#                 print(f'[PASSED] {len(dict_name_pos_lifted.keys())} contig-position pairs match')
-# 
-#     '''
-#     Test if the lifted CIGARs are identical to the alignments against standard reference.
-# 
-#     This is not globally true, since some reads could be mapped to other regions in an augmented
-#     reference, but we only provide cases where CIGARs are not altered in the test case.
-#     '''
-#     def test_identical_cigar(self):
-#         for i, param in enumerate(params):
-#             with self.subTest(i=i):
-#                 dict_cigar_lifted = {}
-#                 with open(f'{param["out_prefix"]}.sam', 'r') as f:
-#                     for line in f:
-#                         if line[0] != '@':
-#                             line = line.split()
-#                             dict_cigar_lifted[line[0]] = f'{line[5]}'
-#                 dict_cigar_gold = {}
-#                 with open(f'{param["gold"]}', 'r') as f:
-#                     for line in f:
-#                         if line[0] != '@':
-#                             line = line.split()
-#                             dict_cigar_gold[line[0]] = f'{line[5]}'
-#                 for k in dict_cigar_lifted.keys():
-#                     self.assertEqual(dict_cigar_lifted[k], dict_cigar_gold[k])
-#                 print(f'[PASSED] {len(dict_cigar_lifted.keys())} CIGAR pairs match')
-# 
-#     ''' Test if the lifted SAM file passes `picard ValidateSamFile`. '''
-#     def test_picard_validate(self):
-#         for i, param in enumerate(params):
-#             with self.subTest(i=i):
-#                 process = subprocess.Popen(
-#                     ['picard',
-#                         f'AddOrReplaceReadGroups I={param["out_prefix"]}.sam \
-#                         O={param["out_prefix"]}-RG.sam \
-#                         RGID=test RGLB=test RGPL=illumina RGSM=test RGPU=TEST'],
-#                     stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-#                 stdout, stderr = process.communicate()
-#                 process2 = subprocess.Popen(
-#                     ['picard',
-#                         f'ValidateSamFile I={param["out_prefix"]}-RG.sam MODE= VERBOSE'],
-#                     stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-#                 stdout, stderr = process2.communicate()
-#                 self.assertNotIn(
-#                     'ERROR', stderr.decode(), msg='Check "No errors found"')
-#                 print('[PASSED] Picard AddOrReplaceReadGroups & ValidateSamFile')
+    ''' Test if the lifted SAM file passes `picard ValidateSamFile`. '''
+    def test_picard_validate(self):
+        for i, param in enumerate(params):
+            with self.subTest(aln_param_idx=i):
+                process = subprocess.Popen(
+                    ['picard',
+                        f'AddOrReplaceReadGroups I={param["out_prefix"]}.sam \
+                        O={param["out_prefix"]}-RG.sam \
+                        RGID=test RGLB=test RGPL=illumina RGSM=test RGPU=TEST'],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                stdout, stderr = process.communicate()
+                process2 = subprocess.Popen(
+                    ['picard',
+                        f'ValidateSamFile I={param["out_prefix"]}-RG.sam MODE= VERBOSE'],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                stdout, stderr = process2.communicate()
+                self.assertNotIn(
+                    'ERROR', stderr.decode(), msg='Check "No errors found"')
+                print('[PASSED] Picard AddOrReplaceReadGroups & ValidateSamFile')
 
 
 if __name__ == '__main__':
