@@ -1,6 +1,6 @@
 # levioSAM lifts alignments to the reference genome
 
-Use a VCF file containing alternative haplotype information to lift SAM alignments
+Use a VCF file containing alternative haplotype information to lift SAM/BAM alignments
 from that haplotype to the reference sequence
 
 ## Building
@@ -69,7 +69,7 @@ $ ./levioSAM serialize -v <vcf> -s <sample_name> -p <output prefix>
 
 The levioSAM file saved to `<output prefix>.lft`.
 
-To lift over coordinates given from a sam file using a serialized `.lft` file:
+To lift over coordinates given from a SAM/BAM file using a serialized `.lft` file:
 
 ```
 $ ./levioSAM lift -a <sam> -l <lft> -p <output prefix>
@@ -82,6 +82,9 @@ To lift over coordinates without serializing (note: this will be slower):
 ```
 $ ./levioSAM lift -a <sam> -v <vcf> -s <sample_name> -p <output prefix>
 ```
+
+To read from stdin, use `-a -` or exclude `-a`.
+
 
 ## Usage (C++)
 
@@ -127,11 +130,11 @@ To load from a serialized file
 ## Features Currently Supporte:
 
 - Serialized lift-over information VCF file w/ FMT/GT field for a specified sample.
-- convert SAM records from haplotype to reference.
-- multithreading support **new**
-- recalculate read-pair information. **new**
+- Convert SAM/BAM records from haplotype to reference.
+- Multithreading support.
+- Recalculate read-pair information.
 
 ## TODO
 
-- ~~convert CIGAR strings for alignments (requires additional SNP information)~~ (additional testing required)
-- recalculate MAPQ
+- Recalculate MAPQ
+- Support chain format
