@@ -117,7 +117,8 @@ void read_and_lift(
     std::mutex* mutex_fwrite,
     std::mutex* mutex_vec,
     samFile* sam_fp,
-    FILE* out_sam_fp,
+    // FILE* out_sam_fp,
+    samFile* out_sam_fp,
     bam_hdr_t* hdr,
     int chunk_size,
     lift::LiftMap* l,
@@ -163,7 +164,9 @@ void read_and_lift(
                     s2_name = hdr->target_name[c.mtid];
                     s1_name = l->get_other_name(s2_name);
                     // chroms_not_found needs to be protected because chroms_not_found is shared
-                    pos = l->s2_to_s1(s2_name, c.mpos, chroms_not_found, mutex_vec) + 1;
+                    pos = l->s2_to_s1(s2_name, c.mpos, chroms_not_found, mutex_vec);
+                    // pos = l->s2_to_s1(s2_name, c.mpos, chroms_not_found, mutex_vec) + 1;
+                    aln->core.pos = pos;
                     // REF
                     sam_out += s1_name.data();
                     sam_out += "\t";
@@ -178,7 +181,8 @@ void read_and_lift(
                 s2_name = hdr->target_name[c.tid];
                 s1_name = l->get_other_name(s2_name);
                 // chroms_not_found needs to be protected because chroms_not_found is shared
-                pos = l->s2_to_s1(s2_name, c.pos, chroms_not_found, mutex_vec) + 1;
+                pos = l->s2_to_s1(s2_name, c.pos, chroms_not_found, mutex_vec);
+                // pos = l->s2_to_s1(s2_name, c.pos, chroms_not_found, mutex_vec) + 1;
                 // REF
                 sam_out += s1_name.data();
                 sam_out += "\t";
@@ -189,12 +193,20 @@ void read_and_lift(
                 sam_out += std::to_string(c.qual); 
                 sam_out += "\t";
                 // CIGAR
-                sam_out += l->cigar_s2_to_s1(s2_name, aln).data();
-                sam_out += "\t";
+                l->cigar_s2_to_s1(s2_name, aln);
+                aln->core.pos = pos;
+                // auto new_cigar = l->cigar_s2_to_s1(s2_name, aln);
+                // c.n_cigar = new_cigar.size();
+                // auto cigar = bam_get_cigar(aln);
+                // cigar = &new_cigar[0];
+                // sam_out += l->cigar_s2_to_s1(s2_name, aln).data();
+                // sam_out += "\t";
             }
             if (c.flag & BAM_FPAIRED) { // mate information
                 if (c.flag & BAM_FMUNMAP){ // mate is unmapped
-                    size_t mpos = l->s2_to_s1(s2_name, c.pos, chroms_not_found, mutex_vec) + 1;
+                    size_t mpos = l->s2_to_s1(s2_name, c.pos, chroms_not_found, mutex_vec);
+                    // size_t mpos = l->s2_to_s1(s2_name, c.pos, chroms_not_found, mutex_vec) + 1;
+                    aln->core.mpos = mpos;
                     sam_out += "=\t";
                     sam_out += std::to_string(mpos);
                     sam_out += "\t0\t";
@@ -202,7 +214,9 @@ void read_and_lift(
                 else{ // mate is mapped
                     std::string ms2_name(hdr->target_name[c.mtid]);
                     std::string ms1_name(l->get_other_name(ms2_name));
-                    size_t mpos = l->s2_to_s1(ms2_name, c.mpos, chroms_not_found, mutex_vec) + 1;
+                    size_t mpos = l->s2_to_s1(ms2_name, c.mpos, chroms_not_found, mutex_vec);
+                    // size_t mpos = l->s2_to_s1(ms2_name, c.mpos, chroms_not_found, mutex_vec) + 1;
+                    aln->core.mpos = mpos;
                     // RNEXT
                     // If IDs match, print "="; else, print RNAME for the mate
                     sam_out += (c.tid == c.mtid)? "=" : ms1_name.data();
@@ -210,6 +224,7 @@ void read_and_lift(
                     sam_out += std::to_string(mpos); // PNEXT
                     size_t pos_5, mpos_5; // 5'-end position
                     int isize = (c.isize == 0)? 0 : c.isize + (mpos - c.mpos) - (pos - c.pos);
+                    aln->core.isize = isize;
                     sam_out += "\t";
                     sam_out += std::to_string(isize); // TLEN (or ISIZE)
                     sam_out += "\t";
@@ -249,7 +264,8 @@ void read_and_lift(
             std::lock_guard<std::mutex> g(*mutex_fwrite);
             // std::thread::id this_id = std::this_thread::get_id();
             for (int i = 0; i < num_actual_reads; i++){
-                fprintf(out_sam_fp, "%s", tmp_write_buffer[i].c_str());
+                sam_write1(out_sam_fp, hdr, aln_vec[i]);
+                // fprintf(out_sam_fp, "%s", tmp_write_buffer[i].c_str());
             }
         }
     }
@@ -289,37 +305,14 @@ void lift_run(lift_opts args) {
     std::vector<std::string> contig_names;
     std::vector<size_t> contig_reflens;
     std::tie(contig_names, contig_reflens) = l.get_s1_lens();
-    // for now we'll just write out the samfile raw
-    FILE* out_sam_fp;
-    if (args.outpre == "") 
-        out_sam_fp = stdout;
-    else 
-        out_sam_fp = fopen((args.outpre + ".sam").data(), "w");
-    fprintf(out_sam_fp, "@HD\tVN:1.6\tSO:unknown\n");
-    for (auto i = 0; i < hdr->n_targets; i++){
-        auto contig_itr = std::find(contig_names.begin(), contig_names.end(), hdr->target_name[i]);
-        // If a contig is in contig_names, look up the associated length.
-        if (contig_itr != contig_names.end()){
-            fprintf(out_sam_fp, "@SQ\tSN:%s\tLN:%ld\n",
-                    contig_names[contig_itr - contig_names.begin()].data(),
-                    contig_reflens[contig_itr - contig_names.begin()]);
-        }
-        // if a contig is not found in vcf/lft, print it as it was before levio
-        else{
-            fprintf(out_sam_fp, "@SQ\tSN:%s\tLN:%u\n", hdr->target_name[i], hdr->target_len[i]);
-        }
-    }
-    /* This is only supported in the latest dev release of htslib as of July 22. 
-     * add back in at next htslib release
-    kstring_t s = KS_INITIALIZE;
-    sam_hdr_find_line_id(hdr, "PG", NULL, NULL, &s);
-    fprintf(out_sam_fp, "%s\n", s.s);
-    ks_free(&s);
-    */
-    char* prev_pg = get_PG(hdr);
-    fprintf(out_sam_fp, "%s\n", prev_pg);
-    free(prev_pg);
-    fprintf(out_sam_fp, "@PG\tID:leviosam\tPN:leviosam\tCL:\"%s\"\n", args.cmd.data());
+
+    samFile* out_sam_fp;
+    if (args.outpre == "-" || args.outpre == "")
+        out_sam_fp = sam_open("-", "w");
+    else
+        out_sam_fp = sam_open((args.outpre + ".sam").data(), "w");
+    sam_hdr_add_pg(hdr, "leviosam", "VN", VERSION, "CL", args.cmd.data(), NULL);
+    auto write_hdr = sam_hdr_write(out_sam_fp, hdr);
     
     // store chromosomes found in SAM but not in lft
     // use a vector to avoid printing out the same warning msg multiple times
@@ -351,7 +344,7 @@ void lift_run(lift_opts args) {
             threads[j].join();
     }
     threads.clear();
-    fclose(out_sam_fp);
+    sam_close(out_sam_fp);
 }
 
 lift::LiftMap lift_from_vcf(std::string fname, 
@@ -376,6 +369,8 @@ std::string make_cmd(int argc, char** argv) {
     }
     return cmd;
 }
+
+
 void print_serialize_help_msg(){
     fprintf(stderr, "\n");
     fprintf(stderr, "Usage:   leviosam serialize [options]\n");

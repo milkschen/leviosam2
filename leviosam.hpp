@@ -20,6 +20,8 @@
  * Created: July 2019
  */
 
+const char* VERSION("0.2");
+
 static inline void die(std::string msg) {
     fprintf(stderr, "%s\n", msg.data());
     exit(1);
@@ -86,17 +88,32 @@ class Lift {
     // convert a CIGAR string in an s2 alignment to the corresponding CIGAR string in the s1 alignment
     // input: bam1_t alignment record against s2 sequence
     // output: CIGAR string (as std::string) wrt s1 sequence
-    std::string cigar_s2_to_s1(bam1_t* b) {
-        auto x = del_sls0(b->core.pos+1);
+    // std::string cigar_s2_to_s1(bam1_t* b) {
+    void cigar_s2_to_s1(bam1_t* b) {
+        // std::cerr << "cigar conversion" << bam_get_qname(b) << "\n";
+        auto x = del_sls0(b->core.pos + 1);
         int y = 0; // read2alt cigar pointer
         uint32_t* cigar = bam_get_cigar(b);
         std::string out_cigar = "";
         std::vector<uint32_t> cigar_ops;
+        std::vector<uint32_t> new_cigar_ops;
         for (int i = 0; i < b->core.n_cigar; ++i) {
             for (int j = 0; j < bam_cigar_oplen(cigar[i]); ++j) {
                 cigar_ops.push_back(bam_cigar_op(cigar[i]));
             }
         }
+        // int l = 0;
+        // for (int i = 0; i < b->core.n_cigar; i++){
+        //     l += bam_cigar_oplen(cigar[i]);
+        //     for (int j = 0; j < bam_cigar_oplen(cigar[i]); j++){
+        //         std::cerr << bam_cigar_opchr(cigar[i]);
+        //     }
+        // }
+        // std::cerr << l << "\n" << b->core.n_cigar << "\n";
+        // for (int i = 0; i < cigar_ops.size(); i++){
+        //     std::cerr << bam_cigar_opchr(cigar_ops[i]);
+        // }
+        // std::cerr << "\n";
         int iters = cigar_ops.size();
         while (y < iters) {
             int cop = cigar_ops[y];
@@ -104,21 +121,26 @@ class Lift {
                 if (out_cigar[out_cigar.length()-1] == 'I'){
                     out_cigar.pop_back();
                     out_cigar += "M";
-                }
-                else
+                    new_cigar_ops[new_cigar_ops.size() - 1] = BAM_CMATCH;
+                } else {
                     out_cigar += "D";
+                    new_cigar_ops.push_back(BAM_CDEL);
+                }
                 ++x;
             } else if (cop == BAM_CINS) { // skip ahead in read2alt cigar
                 if (out_cigar[out_cigar.length()-1] == 'D'){
                     out_cigar.pop_back();
                     out_cigar += "M";
-                }
-                else
+                    new_cigar_ops[new_cigar_ops.size() - 1] = BAM_CMATCH;
+                } else {
                     out_cigar += "I";
+                    new_cigar_ops.push_back(BAM_CINS);
+                }
                 ++y;
             } else if (cop == BAM_CSOFT_CLIP || cop == BAM_CHARD_CLIP || cop == BAM_CPAD){
                 out_cigar += (cop == BAM_CSOFT_CLIP)? "S" :
                     (cop == BAM_CHARD_CLIP)? "H" : "P";
+                new_cigar_ops.push_back(cop);
                 ++y;
             } else if (cop == BAM_CBACK) {
                 // skip. We don't support B Ops.
@@ -129,26 +151,35 @@ class Lift {
                     if (out_cigar[out_cigar.length()-1] == 'D'){
                         out_cigar.pop_back();
                         out_cigar += "M";
-                    }
-                    else
+                        new_cigar_ops[new_cigar_ops.size() - 1] = BAM_CMATCH;
+                    } else {
                         out_cigar += "I"; // IM
+                        new_cigar_ops.push_back(BAM_CINS);
+                    }
+                } else {
+                    out_cigar += "M"; // MM
+                    new_cigar_ops.push_back(BAM_CMATCH);
                 }
-                else out_cigar += "M"; // MM
                 ++x; ++y;
             } else if (cop == BAM_CDEL || cop == BAM_CREF_SKIP) { // D
-                if (ins[x]) out_cigar += ""; // ID - insertion is invalidated
-                else{
+                if (ins[x]) {
+                    out_cigar += ""; // ID - insertion is invalidated
+                } else {
                     if (out_cigar[out_cigar.length()-1] == 'I'){
                         out_cigar.pop_back();
                         out_cigar += "M";
-                    }
-                    else
+                        new_cigar_ops[new_cigar_ops.size() - 1] = BAM_CMATCH;
+                    } else {
                         out_cigar += "D"; // MD
+                        new_cigar_ops.push_back(BAM_CDEL);
+                    }
                 }
                 ++x; ++y;
             }
         }
 
+        std::vector<int> cigar_op_len;
+        std::vector<char> cigar_op;
         std::string out = "";
         int z = 1;
         for (size_t i = 1; i < out_cigar.size(); ++i) {
@@ -157,12 +188,75 @@ class Lift {
             } else {
                 out += std::to_string(z);
                 out += out_cigar[i-1];
+                cigar_op_len.push_back(z);
+                cigar_op.push_back(new_cigar_ops[i - 1]);
                 z = 1;
             }
         }
         out += std::to_string(z);
         out += out_cigar[out_cigar.size() - 1];
-        return out;
+        cigar_op_len.push_back(z);
+        cigar_op.push_back(new_cigar_ops[new_cigar_ops.size() - 1]);
+        // std::cerr << cigar_op_len.size() << "\n";
+        // uint32_t* new_cigar = new uint32_t [cigar_op_len.size()];
+        std::vector<uint32_t> new_cigar;
+        for (int i = 0; i < cigar_op_len.size(); i++){
+            // std::cerr << cigar_op[i] << '\n';
+            // std::cerr << cigar_op_len[i] << '\n';
+            // new_cigar[i] = bam_cigar_gen(cigar_op_len[i], cigar_op[i]);
+            new_cigar.push_back(bam_cigar_gen(cigar_op_len[i], cigar_op[i]));
+        }
+        // *cigar = new_cigar[0];
+        if (b->core.n_cigar == cigar_op_len.size()){
+            for (int i = 0; i < b->core.n_cigar; i++){
+                *(cigar + i) = new_cigar[i];
+            }
+        } else if (b->core.n_cigar > cigar_op_len.size()){
+            // Move data left.
+            std::cerr << "have not handled\n";
+            exit(1);
+        } else {
+            // Move data right.
+            // https://github.com/samtools/htslib/blob/2264113e5df1946210828e45d29c605915bd3733/sam.c#L515
+            auto cigar_st = (uint8_t*)bam_get_cigar(b) - b->data;
+            auto fake_bytes = b->core.n_cigar * 4;
+            b->core.n_cigar = (uint32_t)cigar_op_len.size();
+            auto n_cigar4 = b->core.n_cigar * 4;
+            auto orig_len = b->l_data;
+            // Need `c->n_cigar-fake_bytes` bytes to swap CIGAR 
+            // to the right place.
+            b->l_data = b->l_data - fake_bytes + n_cigar4;
+            // Insert c->n_cigar-fake_bytes empty space to make room.
+            memmove(b->data + cigar_st + n_cigar4,
+                    b->data + cigar_st + fake_bytes,
+                    orig_len - (cigar_st + fake_bytes));
+            // Copy the real CIGAR to the right place; -fake_bytes for the fake CIGAR
+            memcpy(b->data + cigar_st,
+                   b->data + (n_cigar4 - fake_bytes) + 8,
+                   n_cigar4);
+            // 8: CGBI (4 bytes) and CGBI length (4)
+            // b->l_data -= n_cigar4 + 8;
+            // b->core.bin = hts_reg2bin(b->core.pos, bam_endpos(b), 14, 5);
+        }
+        b->core.n_cigar = cigar_op_len.size();
+        for (int i = 0; i < b->core.n_cigar; i++){
+            *(cigar + i) = new_cigar[i];
+        }
+        // *(cigar + b->core.n_cigar) = 0;
+        // for (int i = 0; i < new_cigar.size(); i++){
+        //     for (int j = 0; j < bam_cigar_oplen(new_cigar[i]); j++){
+        //         std::cerr << bam_cigar_opchr(new_cigar[i]);
+        //     }
+        // }
+        // std::cerr << '\n';
+        // for (int i = 0; i < b->core.n_cigar; i++){
+        //     for (int j = 0; j < bam_cigar_oplen(cigar[i]); j++){
+        //         std::cerr << bam_cigar_opchr(cigar[i]);
+        //     }
+        // }
+        // std::cerr << '\n' << out << '\n';
+        // return out;
+        // return new_cigar();
     }
 
     // returns size of s1 sequence
@@ -417,43 +511,48 @@ class LiftMap {
     // input: sequence name, bam1_t alignment record object (via htslib)
     // ouput: CIGAR string of s1 alignment (as std::string)
     // if liftover is not defined, then returns empty string
-    std::string cigar_s2_to_s1(std::string n, bam1_t* b) {
+    // std::string cigar_s2_to_s1(std::string n, bam1_t* b) {
+    void cigar_s2_to_s1(const std::string& n, bam1_t* b) {
         auto it = s2_map.find(n);
         if (it != s2_map.end()) {
-            return lmap[it->second].cigar_s2_to_s1(b);
+            lmap[it->second].cigar_s2_to_s1(b);
+            // return lmap[it->second].cigar_s2_to_s1(b);
         } else { // returns original cigar string
-            std::string out_cigar = "";
-            auto cigar = bam_get_cigar(b);
-            for (int i = 0; i < b->core.n_cigar; ++i) {
-                for (int j = 0; j < bam_cigar_oplen(cigar[i]); ++j) {
-                    if (bam_cigar_op(cigar[i]) == BAM_CINS)
-                        out_cigar += "I";
-                    else if (bam_cigar_op(cigar[i]) == BAM_CDEL)
-                        out_cigar += "D";
-                    else if (bam_cigar_op(cigar[i]) == BAM_CMATCH)
-                        out_cigar += "M";
-                    else if (bam_cigar_op(cigar[i]) == BAM_CSOFT_CLIP)
-                        out_cigar += "S";
-                    else if (bam_cigar_op(cigar[i]) == BAM_CHARD_CLIP)
-                        out_cigar += "H";
-                    else if (bam_cigar_op(cigar[i]) == BAM_CPAD)
-                        out_cigar += "P";
-                }
-            }
-            std::string out = "";
-            int z = 1;
-            for (size_t i = 1; i < out_cigar.size(); ++i) {
-                if (out_cigar[i] == out_cigar[i-1]) {
-                    z++;
-                } else {
-                    out += std::to_string(z);
-                    out += out_cigar[i-1];
-                    z = 1;
-                }
-            }
-            out += std::to_string(z);
-            out += out_cigar[out_cigar.size() - 1];
-            return out;
+            return;
+            // std::string out_cigar = "";
+            // auto cigar = bam_get_cigar(b);
+            // std::vector<uint32_t> new_cigar(b->core.n_cigar, cigar);
+            // return new_cigar;
+            // for (int i = 0; i < b->core.n_cigar; ++i) {
+            //     for (int j = 0; j < bam_cigar_oplen(cigar[i]); ++j) {
+            //         if (bam_cigar_op(cigar[i]) == BAM_CINS)
+            //             out_cigar += "I";
+            //         else if (bam_cigar_op(cigar[i]) == BAM_CDEL)
+            //             out_cigar += "D";
+            //         else if (bam_cigar_op(cigar[i]) == BAM_CMATCH)
+            //             out_cigar += "M";
+            //         else if (bam_cigar_op(cigar[i]) == BAM_CSOFT_CLIP)
+            //             out_cigar += "S";
+            //         else if (bam_cigar_op(cigar[i]) == BAM_CHARD_CLIP)
+            //             out_cigar += "H";
+            //         else if (bam_cigar_op(cigar[i]) == BAM_CPAD)
+            //             out_cigar += "P";
+            //     }
+            // }
+            // std::string out = "";
+            // int z = 1;
+            // for (size_t i = 1; i < out_cigar.size(); ++i) {
+            //     if (out_cigar[i] == out_cigar[i-1]) {
+            //         z++;
+            //     } else {
+            //         out += std::to_string(z);
+            //         out += out_cigar[i-1];
+            //         z = 1;
+            //     }
+            // }
+            // out += std::to_string(z);
+            // out += out_cigar[out_cigar.size() - 1];
+            // return out;
         }
     }
 
