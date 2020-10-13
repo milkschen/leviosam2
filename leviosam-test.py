@@ -50,7 +50,7 @@ class SamProcessing(unittest.TestCase):
             process = subprocess.Popen(
                 ['./leviosam', 
                 'lift', '-l', 'testdata/wg-maj.lft', '-a', param['sam'],
-                '-p', param['out_prefix'] + '.sam'],
+                '-p', param['out_prefix']],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             stdout, stderr = process.communicate()
             print(f'Lifted {param["out_prefix"]}.sam')
@@ -59,9 +59,9 @@ class SamProcessing(unittest.TestCase):
     def tearDownClass(cls):
         for param in params:
             cmd = f'rm {param["out_prefix"]}.sam; rm {param["out_prefix"]}-RG.sam'
-            #process_rm = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True)
-            #stdout, stderr = process_rm.communicate()
-            #print(f'Cleaned up {param["out_prefix"]}-lifted.sam and {param["out_prefix"]}-RG.sam')
+            process_rm = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True)
+            stdout, stderr = process_rm.communicate()
+            print(f'Cleaned up {param["out_prefix"]}-lifted.sam and {param["out_prefix"]}-RG.sam')
 
     """Read a SAM file as a dict."""
     def read_sam_file_as_dict(self, fn):
