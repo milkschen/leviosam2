@@ -49,7 +49,8 @@ class SamProcessing(unittest.TestCase):
         for param in params:
             process = subprocess.Popen(
                 ['./leviosam', 
-                'lift', '-l', 'testdata/wg-maj.lft', '-a', param['sam'], '-p', param['out_prefix']],
+                'lift', '-l', 'testdata/wg-maj.lft', '-a', param['sam'],
+                '-p', param['out_prefix'] + '.sam'],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             stdout, stderr = process.communicate()
             print(f'Lifted {param["out_prefix"]}.sam')
@@ -58,9 +59,9 @@ class SamProcessing(unittest.TestCase):
     def tearDownClass(cls):
         for param in params:
             cmd = f'rm {param["out_prefix"]}.sam; rm {param["out_prefix"]}-RG.sam'
-            process_rm = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True)
-            stdout, stderr = process_rm.communicate()
-            print(f'Cleaned up {param["out_prefix"]}-lifted.sam and {param["out_prefix"]}-RG.sam')
+            #process_rm = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True)
+            #stdout, stderr = process_rm.communicate()
+            #print(f'Cleaned up {param["out_prefix"]}-lifted.sam and {param["out_prefix"]}-RG.sam')
 
     """Read a SAM file as a dict."""
     def read_sam_file_as_dict(self, fn):
@@ -82,12 +83,12 @@ class SamProcessing(unittest.TestCase):
             assert param['mode'] in ['SE', 'PE']
             
             # Each subtest here is one parameter set (e.g. BWA-SE, BT2-PE)
-            with self.subTest(aln_param_idx=i):
+            with self.subTest(aln_param_idx=param):
                 dict_lifted = self.read_sam_file_as_dict(f'{param["out_prefix"]}.sam')
                 dict_gold = self.read_sam_file_as_dict(f'{param["gold"]}')
 
                 for test_idx, test_field in enumerate(dict_test_field.keys()):
-                    with self.subTest(test_idx=test_idx):
+                    with self.subTest(test_idx=test_field):
                         for k in dict_lifted.keys():
                             # Single-end files.
                             if param['mode'] == 'SE':
