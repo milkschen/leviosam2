@@ -79,45 +79,11 @@ void serialize_run(lift_opts args) {
 }
 
 
-char* get_PG(bam_hdr_t* hdr) {
-    char* hdr_txt = (char*) malloc(sizeof(char) * hdr->l_text + 1);
-    char* buf = (char*) malloc(sizeof(char) * hdr->l_text);
-    buf[0] = '\0';
-    std::strcpy(hdr_txt, hdr->text);
-    char* token = std::strtok(hdr_txt, "\n");
-    while (token != NULL) {
-        if (token[0] == '@' && token[1] == 'P' && token[2] == 'G') {
-            strcat(buf, token);
-        }
-        token = std::strtok(NULL, "\n");
-    }
-    free(hdr_txt);
-    return buf;
-}
-
-/* just gets AS for now till I get around to iterating through all the tags 
- */
-std::string tag_to_string(const bam1_t* rec) {
-    std::string tag_string("");
-    uint8_t* aux = bam_aux_get(rec, "AS");
-    if (aux != NULL) {
-        tag_string += "AS:i:";
-        tag_string += std::to_string(bam_aux2i(aux));
-    }
-    aux = bam_aux_get(rec, "NM");
-    if (aux != NULL) {
-        tag_string += "\tNM:i:";
-        tag_string += std::to_string(bam_aux2i(aux));
-    }
-    return tag_string;
-}
-
 void read_and_lift(
     std::mutex* mutex_fread,
     std::mutex* mutex_fwrite,
     std::mutex* mutex_vec,
     samFile* sam_fp,
-    // FILE* out_sam_fp,
     samFile* out_sam_fp,
     bam_hdr_t* hdr,
     int chunk_size,
@@ -125,7 +91,6 @@ void read_and_lift(
     std::vector<std::string>* chroms_not_found
 ){
     std::vector<bam1_t*> aln_vec;
-    std::vector<std::string> tmp_write_buffer(chunk_size);
     for (int i = 0; i < chunk_size; i++){
         bam1_t* aln = bam_init1();
         aln_vec.push_back(aln);
@@ -145,36 +110,21 @@ void read_and_lift(
             }
         }
         for (int i = 0; i < num_actual_reads; i++){
-            std::string sam_out;
             bam1_t* aln = aln_vec[i];
             bam1_core_t c = aln->core;
-            sam_out += bam_get_qname(aln);
-            sam_out += "\t";
-            sam_out += std::to_string(c.flag);
-            sam_out += "\t";
             std::string s1_name, s2_name;
             size_t pos;
             if (c.flag & BAM_FUNMAP){ // If unmapped
                 if (((c.flag & BAM_FPAIRED) && (c.flag & BAM_FMUNMAP)) || // paired-end, and mate unmapped
                     !(c.flag & BAM_FPAIRED) // single-end
                 ){
-                    sam_out += "*\t0\t0\t*\t";
                 }
                 else {
                     s2_name = hdr->target_name[c.mtid];
                     s1_name = l->get_other_name(s2_name);
                     // chroms_not_found needs to be protected because chroms_not_found is shared
                     pos = l->s2_to_s1(s2_name, c.mpos, chroms_not_found, mutex_vec);
-                    // pos = l->s2_to_s1(s2_name, c.mpos, chroms_not_found, mutex_vec) + 1;
                     aln->core.pos = pos;
-                    // REF
-                    sam_out += s1_name.data();
-                    sam_out += "\t";
-                    // POS
-                    sam_out += std::to_string(pos);
-                    sam_out += "\t";
-                    // QUAL & CIGAR
-                    sam_out += "0\t*\t";
                 }
             }
             else {
@@ -182,90 +132,35 @@ void read_and_lift(
                 s1_name = l->get_other_name(s2_name);
                 // chroms_not_found needs to be protected because chroms_not_found is shared
                 pos = l->s2_to_s1(s2_name, c.pos, chroms_not_found, mutex_vec);
-                // pos = l->s2_to_s1(s2_name, c.pos, chroms_not_found, mutex_vec) + 1;
-                // REF
-                sam_out += s1_name.data();
-                sam_out += "\t";
-                // POS
-                sam_out += std::to_string(pos);
-                sam_out += "\t";
-                // QUAL
-                sam_out += std::to_string(c.qual); 
-                sam_out += "\t";
                 // CIGAR
                 l->cigar_s2_to_s1(s2_name, aln);
                 aln->core.pos = pos;
-                // auto new_cigar = l->cigar_s2_to_s1(s2_name, aln);
-                // c.n_cigar = new_cigar.size();
-                // auto cigar = bam_get_cigar(aln);
-                // cigar = &new_cigar[0];
-                // sam_out += l->cigar_s2_to_s1(s2_name, aln).data();
-                // sam_out += "\t";
             }
             if (c.flag & BAM_FPAIRED) { // mate information
                 if (c.flag & BAM_FMUNMAP){ // mate is unmapped
                     size_t mpos = l->s2_to_s1(s2_name, c.pos, chroms_not_found, mutex_vec);
-                    // size_t mpos = l->s2_to_s1(s2_name, c.pos, chroms_not_found, mutex_vec) + 1;
                     aln->core.mpos = mpos;
-                    sam_out += "=\t";
-                    sam_out += std::to_string(mpos);
-                    sam_out += "\t0\t";
                 }
                 else{ // mate is mapped
                     std::string ms2_name(hdr->target_name[c.mtid]);
                     std::string ms1_name(l->get_other_name(ms2_name));
                     size_t mpos = l->s2_to_s1(ms2_name, c.mpos, chroms_not_found, mutex_vec);
-                    // size_t mpos = l->s2_to_s1(ms2_name, c.mpos, chroms_not_found, mutex_vec) + 1;
                     aln->core.mpos = mpos;
-                    // RNEXT
-                    // If IDs match, print "="; else, print RNAME for the mate
-                    sam_out += (c.tid == c.mtid)? "=" : ms1_name.data();
-                    sam_out += "\t";
-                    sam_out += std::to_string(mpos); // PNEXT
-                    size_t pos_5, mpos_5; // 5'-end position
                     int isize = (c.isize == 0)? 0 : c.isize + (mpos - c.mpos) - (pos - c.pos);
                     aln->core.isize = isize;
-                    sam_out += "\t";
-                    sam_out += std::to_string(isize); // TLEN (or ISIZE)
-                    sam_out += "\t";
                 }
             }
-            else { // single-end
-                sam_out += "*\t0\t0\t";
-            }
-            // get query sequence
-            std::string query_seq("");
-            uint8_t* seq = bam_get_seq(aln);
-            for (auto i = 0; i < c.l_qseq; ++i) {
-                query_seq += seq_nt16_str[bam_seqi(seq, i)];
-            }
-            sam_out += query_seq.data();
-            sam_out += "\t";
-            // get quality
-            std::string qual_seq("");
-            uint8_t* qual = bam_get_qual(aln);
-            if (qual[0] == 255) qual_seq = "*";
-            else {
-                for (auto i = 0; i < c.l_qseq; ++i) {
-                    qual_seq += (char) (qual[i] + 33);
-                }
-            }
-            sam_out += qual_seq.data();
-            sam_out += "\t";
-            // TODO reconcile any tags that also need to be added.
-            sam_out += tag_to_string(aln).data();
-            sam_out += "\n";
-
-            tmp_write_buffer[i] = sam_out;
-            // fprintf(out_sam_fp, "%s", sam_out.c_str());
         }
         {
             // write to file, thread corruption protected by lock_guard
             std::lock_guard<std::mutex> g(*mutex_fwrite);
             // std::thread::id this_id = std::this_thread::get_id();
             for (int i = 0; i < num_actual_reads; i++){
-                sam_write1(out_sam_fp, hdr, aln_vec[i]);
-                // fprintf(out_sam_fp, "%s", tmp_write_buffer[i].c_str());
+                auto flag_write = sam_write1(out_sam_fp, hdr, aln_vec[i]);
+                if (flag_write < 0){
+                    std::cerr << "[Error] Failed to write record " << bam_get_qname(aln_vec[i]) << "\n";
+                    exit(1);
+                }
             }
         }
     }
