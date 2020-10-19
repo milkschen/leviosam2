@@ -9,13 +9,11 @@
 #include <htslib/sam.h>
 #include <htslib/kstring.h>
 
-using NameMap = std::vector<std::pair<std::string,std::string>>;
-using LengthMap = std::unordered_map<std::string,size_t>;
-
 struct lift_opts {
     std::string vcf_fname = "";
     std::string sample = "";
     std::string outpre = "";
+    std::string out_format = "sam";
     std::string lift_fname = "";
     std::string sam_fname = "";
     std::string cmd = "";
@@ -61,10 +59,6 @@ LengthMap parse_length_map(const char* fname) {
     return lengths;
 }
 
-lift::LiftMap lift_from_vcf(std::string fname, 
-                            std::string sample, 
-                            std::string haplotype, 
-                            NameMap names, LengthMap lengths);
 
 void serialize_run(lift_opts args) {
     lift::LiftMap l(lift_from_vcf(args.vcf_fname, args.sample, args.haplotype, args.name_map, args.length_map));
@@ -201,11 +195,12 @@ void lift_run(lift_opts args) {
     std::vector<size_t> contig_reflens;
     std::tie(contig_names, contig_reflens) = l.get_s1_lens();
 
+    std::string out_mode = (args.out_format == "sam")? "w" : "wb";
     samFile* out_sam_fp;
     if (args.outpre == "-" || args.outpre == "")
-        out_sam_fp = sam_open("-", "w");
+        out_sam_fp = sam_open("-", out_mode.data());
     else
-        out_sam_fp = sam_open((args.outpre + ".sam").data(), "w");
+        out_sam_fp = sam_open((args.outpre + "." + args.out_format).data(), out_mode.data());
     sam_hdr_add_pg(hdr, "leviosam", "VN", VERSION, "CL", args.cmd.data(), NULL);
     auto write_hdr = sam_hdr_write(out_sam_fp, hdr);
     
@@ -272,7 +267,8 @@ void print_serialize_help_msg(){
     fprintf(stderr, "Options:\n");
     fprintf(stderr, "         -v string Build a leviosam index using a VCF file.\n");
     fprintf(stderr, "         -s string The sample used to build leviosam index (-v needs to be set).\n");
-    fprintf(stderr, "         -p string The prefix of the output files.\n");
+    fprintf(stderr, "         -p string The prefix of the output file.\n");
+    fprintf(stderr, "         -O format Output file format, can be sam or bam. [sam]\n");
     fprintf(stderr, "         -g 0/1    The haplotype used to index leviosam. [0] \n");
     fprintf(stderr, "         -n string Path to a name map file.\n");
     fprintf(stderr, "                   This can be used to map '1' to 'chr1', or vice versa.\n");
@@ -314,13 +310,14 @@ int main(int argc, char** argv) {
         {"prefix", required_argument, 0, 'p'},
         {"leviosam", required_argument, 0, 'l'},
         {"sam", required_argument, 0, 'a'},
+        {"out_format", required_argument, 0, 'O'},
         {"haplotype", required_argument, 0, 'g'},
         {"threads", required_argument, 0, 't'},
         {"chunk_size", required_argument, 0, 'T'},
         {"verbose", no_argument, &args.verbose, 1},
     };
     int long_index = 0;
-    while((c = getopt_long(argc, argv, "hv:s:p:l:a:g:n:k:t:T:", long_options, &long_index)) != -1) {
+    while((c = getopt_long(argc, argv, "hv:s:p:l:a:O:g:n:k:t:T:", long_options, &long_index)) != -1) {
         switch (c) {
             case 'v':
                 args.vcf_fname = optarg;
@@ -336,6 +333,9 @@ int main(int argc, char** argv) {
                 break;
             case 'a':
                 args.sam_fname = optarg;
+                break;
+            case 'O':
+                args.out_format = optarg;
                 break;
             case 'g':
                 args.haplotype = optarg;
@@ -370,6 +370,12 @@ int main(int argc, char** argv) {
         fprintf(stderr, "invalid haplotype %s\n", args.haplotype.c_str());
         exit(1);
     }
+
+    if (args.out_format != "sam" && args.out_format != "bam") {
+        fprintf(stderr, "Not supported extension format %s\n", args.out_format.c_str());
+        exit(1);
+    }
+
     if (!strcmp(argv[optind], "lift")) {
         lift_run(args);
     } else if (!strcmp(argv[optind], "serialize")) {

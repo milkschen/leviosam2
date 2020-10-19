@@ -22,6 +22,10 @@
 
 const char* VERSION("0.2");
 
+using NameMap = std::vector<std::pair<std::string,std::string>>;
+using LengthMap = std::unordered_map<std::string,size_t>;
+
+
 static inline void die(std::string msg) {
     fprintf(stderr, "%s\n", msg.data());
     exit(1);
@@ -647,6 +651,12 @@ class LiftMap {
     }
 };
 };
+
+lift::LiftMap lift_from_vcf(std::string fname, 
+                            std::string sample, 
+                            std::string haplotype, 
+                            NameMap names, LengthMap lengths);
+
 
 void print_main_help_msg();
 void print_lift_help_msg();
