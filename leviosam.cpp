@@ -109,11 +109,12 @@ void read_and_lift(
             std::string s1_name, s2_name;
             size_t pos;
             if (c.flag & BAM_FUNMAP){ // If unmapped
-                if (((c.flag & BAM_FPAIRED) && (c.flag & BAM_FMUNMAP)) || // paired-end, and mate unmapped
-                    !(c.flag & BAM_FPAIRED) // single-end
-                ){
-                }
-                else {
+                // if (((c.flag & BAM_FPAIRED) && (c.flag & BAM_FMUNMAP)) || // paired-end, and mate unmapped
+                //     !(c.flag & BAM_FPAIRED) // single-end
+                // ){
+                // }
+                // else {
+                if ((c.flag & BAM_FPAIRED) && (!c.flag & BAM_FMUNMAP)) {
                     s2_name = hdr->target_name[c.mtid];
                     s1_name = l->get_other_name(s2_name);
                     // chroms_not_found needs to be protected because chroms_not_found is shared
@@ -134,8 +135,7 @@ void read_and_lift(
                 if (c.flag & BAM_FMUNMAP){ // mate is unmapped
                     size_t mpos = l->s2_to_s1(s2_name, c.pos, chroms_not_found, mutex_vec);
                     aln->core.mpos = mpos;
-                }
-                else{ // mate is mapped
+                } else { // mate is mapped
                     std::string ms2_name(hdr->target_name[c.mtid]);
                     std::string ms1_name(l->get_other_name(ms2_name));
                     size_t mpos = l->s2_to_s1(ms2_name, c.mpos, chroms_not_found, mutex_vec);
@@ -181,13 +181,8 @@ void lift_run(lift_opts args) {
 
     fprintf(stderr, "loaded liftmap!\n");
 
-    samFile* sam_fp;
-    // read sam file here
-    if (args.sam_fname == "") {
-        sam_fp = sam_open("-", "r");
-    }
-    else
-        sam_fp = sam_open(args.sam_fname.data(), "r");
+    samFile* sam_fp = (args.sam_fname == "")?
+        sam_open("-", "r") : sam_open(args.sam_fname.data(), "r");
     bam_hdr_t* hdr = sam_hdr_read(sam_fp);
 
     // the "ref" lengths are all stored in the levio structure. How do we loop over it?
@@ -196,23 +191,36 @@ void lift_run(lift_opts args) {
     std::tie(contig_names, contig_reflens) = l.get_s1_lens();
 
     std::string out_mode = (args.out_format == "sam")? "w" : "wb";
-    samFile* out_sam_fp;
-    if (args.outpre == "-" || args.outpre == "")
-        out_sam_fp = sam_open("-", out_mode.data());
-    else
-        out_sam_fp = sam_open((args.outpre + "." + args.out_format).data(), out_mode.data());
+    samFile* out_sam_fp = (args.outpre == "-" || args.outpre == "")?
+        sam_open("-", out_mode.data()) :
+        sam_open((args.outpre + "." + args.out_format).data(), out_mode.data());
+
+    // Write SAM headers. We update contig lengths if needed.
     sam_hdr_add_pg(hdr, "leviosam", "VN", VERSION, "CL", args.cmd.data(), NULL);
+    for (auto i = 0; i < hdr->n_targets; i++) {
+        auto contig_itr = std::find(contig_names.begin(), contig_names.end(), hdr->target_name[i]);
+        // If a contig is in contig_names, look up the associated length.
+        if (contig_itr != contig_names.end()) {
+            auto len_str = std::to_string(contig_reflens[contig_itr - contig_names.begin()]);
+            if (sam_hdr_update_line(
+                    hdr, "SQ",
+                    "SN", contig_names[contig_itr - contig_names.begin()].data(),
+                    "LN", len_str.data(), NULL) < 0) {
+                std::cerr << "[Error] failed when converting contig length for "
+                          << hdr->target_name[i] << "\n";
+                exit(1);
+            }
+        }
+    }
     auto write_hdr = sam_hdr_write(out_sam_fp, hdr);
     
-    // store chromosomes found in SAM but not in lft
-    // use a vector to avoid printing out the same warning msg multiple times
+    // Store chromosomes found in SAM but not in the VCF.
+    // We use a vector to avoid printing out the same warning msg multiple times.
     std::vector<std::string> chroms_not_found;
     const int num_threads = args.threads;
     const int chunk_size = args.chunk_size;
     std::vector<std::thread> threads;
-    std::mutex mutex_fread;
-    std::mutex mutex_fwrite;
-    std::mutex mutex_vec;
+    std::mutex mutex_fread, mutex_fwrite, mutex_vec;
     for (int j = 0; j < num_threads; j++){
         threads.push_back(
             std::thread(
