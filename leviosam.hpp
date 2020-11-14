@@ -117,7 +117,7 @@ class Lift {
                 if (new_cigar_ops.empty()){
                     new_cigar_ops.push_back(BAM_CDEL);
                 } else {
-                    if (new_cigar_ops.back() == BAM_CDEL){
+                    if (new_cigar_ops.back() == BAM_CINS){
                         new_cigar_ops[new_cigar_ops.size() - 1] = BAM_CMATCH;
                     } else {
                         new_cigar_ops.push_back(BAM_CDEL);
