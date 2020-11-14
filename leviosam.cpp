@@ -108,21 +108,10 @@ void read_and_lift(
             bam1_core_t c = aln->core;
             std::string s1_name, s2_name;
             size_t pos;
-            if (c.flag & BAM_FUNMAP){ // If unmapped
-                // if (((c.flag & BAM_FPAIRED) && (c.flag & BAM_FMUNMAP)) || // paired-end, and mate unmapped
-                //     !(c.flag & BAM_FPAIRED) // single-end
-                // ){
-                // }
-                // else {
-                if ((c.flag & BAM_FPAIRED) && (!c.flag & BAM_FMUNMAP)) {
-                    s2_name = hdr->target_name[c.mtid];
-                    s1_name = l->get_other_name(s2_name);
-                    // chroms_not_found needs to be protected because chroms_not_found is shared
-                    pos = l->s2_to_s1(s2_name, c.mpos, chroms_not_found, mutex_vec);
-                    aln->core.pos = pos;
-                }
-            }
-            else {
+            // If a read is mapped, lift its position.
+            // If a read is unmapped, but its mate is mapped, lift its mates position.
+            // Otherwise leave it unchanged.
+            if (!(c.flag & BAM_FUNMAP)) {
                 s2_name = hdr->target_name[c.tid];
                 s1_name = l->get_other_name(s2_name);
                 // chroms_not_found needs to be protected because chroms_not_found is shared
@@ -130,12 +119,20 @@ void read_and_lift(
                 // CIGAR
                 l->cigar_s2_to_s1(s2_name, aln);
                 aln->core.pos = pos;
+            } else if ((c.flag & BAM_FPAIRED) && !(c.flag & BAM_FMUNMAP)) {
+                s2_name = hdr->target_name[c.mtid];
+                s1_name = l->get_other_name(s2_name);
+                // chroms_not_found needs to be protected because chroms_not_found is shared
+                pos = l->s2_to_s1(s2_name, c.mpos, chroms_not_found, mutex_vec);
+                aln->core.pos = pos;
             }
-            if (c.flag & BAM_FPAIRED) { // mate information
-                if (c.flag & BAM_FMUNMAP){ // mate is unmapped
-                    size_t mpos = l->s2_to_s1(s2_name, c.pos, chroms_not_found, mutex_vec);
-                    aln->core.mpos = mpos;
-                } else { // mate is mapped
+            // Lift mate position.
+            if (c.flag & BAM_FPAIRED) {
+                // If the mate is unmapped, use the lifted position of the read.
+                // If the mate is mapped, lift its position.
+                if (c.flag & BAM_FMUNMAP){
+                    aln->core.mpos = aln->core.pos;
+                } else {
                     std::string ms2_name(hdr->target_name[c.mtid]);
                     std::string ms1_name(l->get_other_name(ms2_name));
                     size_t mpos = l->s2_to_s1(ms2_name, c.mpos, chroms_not_found, mutex_vec);
