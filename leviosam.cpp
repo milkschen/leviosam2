@@ -19,7 +19,7 @@ struct lift_opts {
     std::string cmd = "";
     std::string haplotype = "0";
     int threads = 1;
-    int chunk_size = 64;
+    int chunk_size = 256;
     int verbose = 0;
     NameMap name_map;
     LengthMap length_map;
@@ -90,7 +90,7 @@ void read_and_lift(
         aln_vec.push_back(aln);
     }
     int read = 1;
-    while(read >= 0){
+    while (read >= 0){
         int num_actual_reads = chunk_size;
         {
             // read from SAM, protected by mutex
@@ -242,6 +242,7 @@ void lift_run(lift_opts args) {
     sam_close(out_sam_fp);
 }
 
+
 lift::LiftMap lift_from_vcf(std::string fname, 
                             std::string sample, 
                             std::string haplotype, 
@@ -285,22 +286,24 @@ void print_lift_help_msg(){
     fprintf(stderr, "\n");
     fprintf(stderr, "Usage:   leviosam lift [options]\n");
     fprintf(stderr, "Options:\n");
-    fprintf(stderr, "         -a string The SAM file to be lifted. \n");
+    fprintf(stderr, "         -a string Path to the SAM/BAM file to be lifted. \n");
     fprintf(stderr, "                   Leave empty or set to \"-\" to read from stdin.\n");
-    fprintf(stderr, "         -l string Path to a pre-built leviosam index.\n");
+    fprintf(stderr, "         -l string Path to a leviosam index.\n");
     fprintf(stderr, "         -v string If -l is not specified, can build indexes using a VCF file.\n");
     fprintf(stderr, "         -t INT    Number of threads used. [1] \n");
-    fprintf(stderr, "         -T INT    Size of a processing chunk. [64] \n");
+    fprintf(stderr, "         -T INT    Chunk size for each thread. [256] \n");
+    fprintf(stderr, "                   Each thread queries <-T> reads, lifts, and writes.\n");
+    fprintf(stderr, "                   Setting a higher <-T> uses slightly more memory but might benefit thread scaling.\n");
     fprintf(stderr, "         The options for serialize can also be used here, if -v is set.\n");
     print_serialize_help_msg();
 }
 
 void print_main_help_msg(){
     fprintf(stderr, "\n");
-    fprintf(stderr, "Program: leviosam (lift over SAM based on VCF)\n");
+    fprintf(stderr, "Program: leviosam (lift over SAM/BAM based on VCF)\n");
     fprintf(stderr, "Usage:   leviosam <command> [options]\n\n");
     fprintf(stderr, "Commands:serialize build leviosam indexes\n");
-    fprintf(stderr, "         lift      perform lifting\n");
+    fprintf(stderr, "         lift      lift alignments\n");
     fprintf(stderr, "Options: -h        Print detailed usage.\n");
     fprintf(stderr, "\n");
 }
