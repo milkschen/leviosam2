@@ -9,19 +9,17 @@
 #include <htslib/sam.h>
 #include <htslib/kstring.h>
 
-using NameMap = std::vector<std::pair<std::string,std::string>>;
-using LengthMap = std::unordered_map<std::string,size_t>;
-
 struct lift_opts {
     std::string vcf_fname = "";
     std::string sample = "";
     std::string outpre = "";
+    std::string out_format = "sam";
     std::string lift_fname = "";
     std::string sam_fname = "";
     std::string cmd = "";
     std::string haplotype = "0";
     int threads = 1;
-    int chunk_size = 64;
+    int chunk_size = 256;
     int verbose = 0;
     NameMap name_map;
     LengthMap length_map;
@@ -61,10 +59,6 @@ LengthMap parse_length_map(const char* fname) {
     return lengths;
 }
 
-lift::LiftMap lift_from_vcf(std::string fname, 
-                            std::string sample, 
-                            std::string haplotype, 
-                            NameMap names, LengthMap lengths);
 
 void serialize_run(lift_opts args) {
     lift::LiftMap l(lift_from_vcf(args.vcf_fname, args.sample, args.haplotype, args.name_map, args.length_map));
@@ -79,58 +73,24 @@ void serialize_run(lift_opts args) {
 }
 
 
-char* get_PG(bam_hdr_t* hdr) {
-    char* hdr_txt = (char*) malloc(sizeof(char) * hdr->l_text + 1);
-    char* buf = (char*) malloc(sizeof(char) * hdr->l_text);
-    buf[0] = '\0';
-    std::strcpy(hdr_txt, hdr->text);
-    char* token = std::strtok(hdr_txt, "\n");
-    while (token != NULL) {
-        if (token[0] == '@' && token[1] == 'P' && token[2] == 'G') {
-            strcat(buf, token);
-        }
-        token = std::strtok(NULL, "\n");
-    }
-    free(hdr_txt);
-    return buf;
-}
-
-/* just gets AS for now till I get around to iterating through all the tags 
- */
-std::string tag_to_string(const bam1_t* rec) {
-    std::string tag_string("");
-    uint8_t* aux = bam_aux_get(rec, "AS");
-    if (aux != NULL) {
-        tag_string += "AS:i:";
-        tag_string += std::to_string(bam_aux2i(aux));
-    }
-    aux = bam_aux_get(rec, "NM");
-    if (aux != NULL) {
-        tag_string += "\tNM:i:";
-        tag_string += std::to_string(bam_aux2i(aux));
-    }
-    return tag_string;
-}
-
 void read_and_lift(
     std::mutex* mutex_fread,
     std::mutex* mutex_fwrite,
     std::mutex* mutex_vec,
     samFile* sam_fp,
-    FILE* out_sam_fp,
+    samFile* out_sam_fp,
     bam_hdr_t* hdr,
     int chunk_size,
     lift::LiftMap* l,
     std::vector<std::string>* chroms_not_found
 ){
     std::vector<bam1_t*> aln_vec;
-    std::vector<std::string> tmp_write_buffer(chunk_size);
     for (int i = 0; i < chunk_size; i++){
         bam1_t* aln = bam_init1();
         aln_vec.push_back(aln);
     }
     int read = 1;
-    while(read >= 0){
+    while (read >= 0){
         int num_actual_reads = chunk_size;
         {
             // read from SAM, protected by mutex
@@ -144,112 +104,54 @@ void read_and_lift(
             }
         }
         for (int i = 0; i < num_actual_reads; i++){
-            std::string sam_out;
             bam1_t* aln = aln_vec[i];
             bam1_core_t c = aln->core;
-            sam_out += bam_get_qname(aln);
-            sam_out += "\t";
-            sam_out += std::to_string(c.flag);
-            sam_out += "\t";
             std::string s1_name, s2_name;
             size_t pos;
-            if (c.flag & BAM_FUNMAP){ // If unmapped
-                if (((c.flag & BAM_FPAIRED) && (c.flag & BAM_FMUNMAP)) || // paired-end, and mate unmapped
-                    !(c.flag & BAM_FPAIRED) // single-end
-                ){
-                    sam_out += "*\t0\t0\t*\t";
-                }
-                else {
-                    s2_name = hdr->target_name[c.mtid];
-                    s1_name = l->get_other_name(s2_name);
-                    // chroms_not_found needs to be protected because chroms_not_found is shared
-                    pos = l->s2_to_s1(s2_name, c.mpos, chroms_not_found, mutex_vec) + 1;
-                    // REF
-                    sam_out += s1_name.data();
-                    sam_out += "\t";
-                    // POS
-                    sam_out += std::to_string(pos);
-                    sam_out += "\t";
-                    // QUAL & CIGAR
-                    sam_out += "0\t*\t";
-                }
-            }
-            else {
+            // If a read is mapped, lift its position.
+            // If a read is unmapped, but its mate is mapped, lift its mates position.
+            // Otherwise leave it unchanged.
+            if (!(c.flag & BAM_FUNMAP)) {
                 s2_name = hdr->target_name[c.tid];
                 s1_name = l->get_other_name(s2_name);
                 // chroms_not_found needs to be protected because chroms_not_found is shared
-                pos = l->s2_to_s1(s2_name, c.pos, chroms_not_found, mutex_vec) + 1;
-                // REF
-                sam_out += s1_name.data();
-                sam_out += "\t";
-                // POS
-                sam_out += std::to_string(pos);
-                sam_out += "\t";
-                // QUAL
-                sam_out += std::to_string(c.qual); 
-                sam_out += "\t";
+                pos = l->s2_to_s1(s2_name, c.pos, chroms_not_found, mutex_vec);
                 // CIGAR
-                sam_out += l->cigar_s2_to_s1(s2_name, aln).data();
-                sam_out += "\t";
+                l->cigar_s2_to_s1(s2_name, aln);
+                aln->core.pos = pos;
+            } else if ((c.flag & BAM_FPAIRED) && !(c.flag & BAM_FMUNMAP)) {
+                s2_name = hdr->target_name[c.mtid];
+                s1_name = l->get_other_name(s2_name);
+                // chroms_not_found needs to be protected because chroms_not_found is shared
+                pos = l->s2_to_s1(s2_name, c.mpos, chroms_not_found, mutex_vec);
+                aln->core.pos = pos;
             }
-            if (c.flag & BAM_FPAIRED) { // mate information
-                if (c.flag & BAM_FMUNMAP){ // mate is unmapped
-                    size_t mpos = l->s2_to_s1(s2_name, c.pos, chroms_not_found, mutex_vec) + 1;
-                    sam_out += "=\t";
-                    sam_out += std::to_string(mpos);
-                    sam_out += "\t0\t";
-                }
-                else{ // mate is mapped
+            // Lift mate position.
+            if (c.flag & BAM_FPAIRED) {
+                // If the mate is unmapped, use the lifted position of the read.
+                // If the mate is mapped, lift its position.
+                if (c.flag & BAM_FMUNMAP){
+                    aln->core.mpos = aln->core.pos;
+                } else {
                     std::string ms2_name(hdr->target_name[c.mtid]);
                     std::string ms1_name(l->get_other_name(ms2_name));
-                    size_t mpos = l->s2_to_s1(ms2_name, c.mpos, chroms_not_found, mutex_vec) + 1;
-                    // RNEXT
-                    // If IDs match, print "="; else, print RNAME for the mate
-                    sam_out += (c.tid == c.mtid)? "=" : ms1_name.data();
-                    sam_out += "\t";
-                    sam_out += std::to_string(mpos); // PNEXT
-                    size_t pos_5, mpos_5; // 5'-end position
+                    size_t mpos = l->s2_to_s1(ms2_name, c.mpos, chroms_not_found, mutex_vec);
+                    aln->core.mpos = mpos;
                     int isize = (c.isize == 0)? 0 : c.isize + (mpos - c.mpos) - (pos - c.pos);
-                    sam_out += "\t";
-                    sam_out += std::to_string(isize); // TLEN (or ISIZE)
-                    sam_out += "\t";
+                    aln->core.isize = isize;
                 }
             }
-            else { // single-end
-                sam_out += "*\t0\t0\t";
-            }
-            // get query sequence
-            std::string query_seq("");
-            uint8_t* seq = bam_get_seq(aln);
-            for (auto i = 0; i < c.l_qseq; ++i) {
-                query_seq += seq_nt16_str[bam_seqi(seq, i)];
-            }
-            sam_out += query_seq.data();
-            sam_out += "\t";
-            // get quality
-            std::string qual_seq("");
-            uint8_t* qual = bam_get_qual(aln);
-            if (qual[0] == 255) qual_seq = "*";
-            else {
-                for (auto i = 0; i < c.l_qseq; ++i) {
-                    qual_seq += (char) (qual[i] + 33);
-                }
-            }
-            sam_out += qual_seq.data();
-            sam_out += "\t";
-            // TODO reconcile any tags that also need to be added.
-            sam_out += tag_to_string(aln).data();
-            sam_out += "\n";
-
-            tmp_write_buffer[i] = sam_out;
-            // fprintf(out_sam_fp, "%s", sam_out.c_str());
         }
         {
             // write to file, thread corruption protected by lock_guard
             std::lock_guard<std::mutex> g(*mutex_fwrite);
             // std::thread::id this_id = std::this_thread::get_id();
             for (int i = 0; i < num_actual_reads; i++){
-                fprintf(out_sam_fp, "%s", tmp_write_buffer[i].c_str());
+                auto flag_write = sam_write1(out_sam_fp, hdr, aln_vec[i]);
+                if (flag_write < 0){
+                    std::cerr << "[Error] Failed to write record " << bam_get_qname(aln_vec[i]) << "\n";
+                    exit(1);
+                }
             }
         }
     }
@@ -276,60 +178,46 @@ void lift_run(lift_opts args) {
 
     fprintf(stderr, "loaded liftmap!\n");
 
-    samFile* sam_fp;
-    // read sam file here
-    if (args.sam_fname == "") {
-        sam_fp = sam_open("-", "r");
-    }
-    else
-        sam_fp = sam_open(args.sam_fname.data(), "r");
+    samFile* sam_fp = (args.sam_fname == "")?
+        sam_open("-", "r") : sam_open(args.sam_fname.data(), "r");
     bam_hdr_t* hdr = sam_hdr_read(sam_fp);
 
     // the "ref" lengths are all stored in the levio structure. How do we loop over it?
     std::vector<std::string> contig_names;
     std::vector<size_t> contig_reflens;
     std::tie(contig_names, contig_reflens) = l.get_s1_lens();
-    // for now we'll just write out the samfile raw
-    FILE* out_sam_fp;
-    if (args.outpre == "") 
-        out_sam_fp = stdout;
-    else 
-        out_sam_fp = fopen((args.outpre + ".sam").data(), "w");
-    fprintf(out_sam_fp, "@HD\tVN:1.6\tSO:unknown\n");
-    for (auto i = 0; i < hdr->n_targets; i++){
+
+    std::string out_mode = (args.out_format == "sam")? "w" : "wb";
+    samFile* out_sam_fp = (args.outpre == "-" || args.outpre == "")?
+        sam_open("-", out_mode.data()) :
+        sam_open((args.outpre + "." + args.out_format).data(), out_mode.data());
+
+    // Write SAM headers. We update contig lengths if needed.
+    sam_hdr_add_pg(hdr, "leviosam", "VN", VERSION, "CL", args.cmd.data(), NULL);
+    for (auto i = 0; i < hdr->n_targets; i++) {
         auto contig_itr = std::find(contig_names.begin(), contig_names.end(), hdr->target_name[i]);
         // If a contig is in contig_names, look up the associated length.
-        if (contig_itr != contig_names.end()){
-            fprintf(out_sam_fp, "@SQ\tSN:%s\tLN:%ld\n",
-                    contig_names[contig_itr - contig_names.begin()].data(),
-                    contig_reflens[contig_itr - contig_names.begin()]);
-        }
-        // if a contig is not found in vcf/lft, print it as it was before levio
-        else{
-            fprintf(out_sam_fp, "@SQ\tSN:%s\tLN:%u\n", hdr->target_name[i], hdr->target_len[i]);
+        if (contig_itr != contig_names.end()) {
+            auto len_str = std::to_string(contig_reflens[contig_itr - contig_names.begin()]);
+            if (sam_hdr_update_line(
+                    hdr, "SQ",
+                    "SN", contig_names[contig_itr - contig_names.begin()].data(),
+                    "LN", len_str.data(), NULL) < 0) {
+                std::cerr << "[Error] failed when converting contig length for "
+                          << hdr->target_name[i] << "\n";
+                exit(1);
+            }
         }
     }
-    /* This is only supported in the latest dev release of htslib as of July 22. 
-     * add back in at next htslib release
-    kstring_t s = KS_INITIALIZE;
-    sam_hdr_find_line_id(hdr, "PG", NULL, NULL, &s);
-    fprintf(out_sam_fp, "%s\n", s.s);
-    ks_free(&s);
-    */
-    char* prev_pg = get_PG(hdr);
-    fprintf(out_sam_fp, "%s\n", prev_pg);
-    free(prev_pg);
-    fprintf(out_sam_fp, "@PG\tID:leviosam\tPN:leviosam\tCL:\"%s\"\n", args.cmd.data());
+    auto write_hdr = sam_hdr_write(out_sam_fp, hdr);
     
-    // store chromosomes found in SAM but not in lft
-    // use a vector to avoid printing out the same warning msg multiple times
+    // Store chromosomes found in SAM but not in the VCF.
+    // We use a vector to avoid printing out the same warning msg multiple times.
     std::vector<std::string> chroms_not_found;
     const int num_threads = args.threads;
     const int chunk_size = args.chunk_size;
     std::vector<std::thread> threads;
-    std::mutex mutex_fread;
-    std::mutex mutex_fwrite;
-    std::mutex mutex_vec;
+    std::mutex mutex_fread, mutex_fwrite, mutex_vec;
     for (int j = 0; j < num_threads; j++){
         threads.push_back(
             std::thread(
@@ -351,8 +239,9 @@ void lift_run(lift_opts args) {
             threads[j].join();
     }
     threads.clear();
-    fclose(out_sam_fp);
+    sam_close(out_sam_fp);
 }
+
 
 lift::LiftMap lift_from_vcf(std::string fname, 
                             std::string sample, 
@@ -376,13 +265,16 @@ std::string make_cmd(int argc, char** argv) {
     }
     return cmd;
 }
+
+
 void print_serialize_help_msg(){
     fprintf(stderr, "\n");
     fprintf(stderr, "Usage:   leviosam serialize [options]\n");
     fprintf(stderr, "Options:\n");
     fprintf(stderr, "         -v string Build a leviosam index using a VCF file.\n");
     fprintf(stderr, "         -s string The sample used to build leviosam index (-v needs to be set).\n");
-    fprintf(stderr, "         -p string The prefix of the output files.\n");
+    fprintf(stderr, "         -p string The prefix of the output file.\n");
+    fprintf(stderr, "         -O format Output file format, can be sam or bam. [sam]\n");
     fprintf(stderr, "         -g 0/1    The haplotype used to index leviosam. [0] \n");
     fprintf(stderr, "         -n string Path to a name map file.\n");
     fprintf(stderr, "                   This can be used to map '1' to 'chr1', or vice versa.\n");
@@ -394,22 +286,24 @@ void print_lift_help_msg(){
     fprintf(stderr, "\n");
     fprintf(stderr, "Usage:   leviosam lift [options]\n");
     fprintf(stderr, "Options:\n");
-    fprintf(stderr, "         -a string The SAM file to be lifted. \n");
+    fprintf(stderr, "         -a string Path to the SAM/BAM file to be lifted. \n");
     fprintf(stderr, "                   Leave empty or set to \"-\" to read from stdin.\n");
-    fprintf(stderr, "         -l string Path to a pre-built leviosam index.\n");
+    fprintf(stderr, "         -l string Path to a leviosam index.\n");
     fprintf(stderr, "         -v string If -l is not specified, can build indexes using a VCF file.\n");
     fprintf(stderr, "         -t INT    Number of threads used. [1] \n");
-    fprintf(stderr, "         -T INT    Size of a processing chunk. [64] \n");
+    fprintf(stderr, "         -T INT    Chunk size for each thread. [256] \n");
+    fprintf(stderr, "                   Each thread queries <-T> reads, lifts, and writes.\n");
+    fprintf(stderr, "                   Setting a higher <-T> uses slightly more memory but might benefit thread scaling.\n");
     fprintf(stderr, "         The options for serialize can also be used here, if -v is set.\n");
     print_serialize_help_msg();
 }
 
 void print_main_help_msg(){
     fprintf(stderr, "\n");
-    fprintf(stderr, "Program: leviosam (lift over SAM based on VCF)\n");
+    fprintf(stderr, "Program: leviosam (lift over SAM/BAM based on VCF)\n");
     fprintf(stderr, "Usage:   leviosam <command> [options]\n\n");
     fprintf(stderr, "Commands:serialize build leviosam indexes\n");
-    fprintf(stderr, "         lift      perform lifting\n");
+    fprintf(stderr, "         lift      lift alignments\n");
     fprintf(stderr, "Options: -h        Print detailed usage.\n");
     fprintf(stderr, "\n");
 }
@@ -424,13 +318,14 @@ int main(int argc, char** argv) {
         {"prefix", required_argument, 0, 'p'},
         {"leviosam", required_argument, 0, 'l'},
         {"sam", required_argument, 0, 'a'},
+        {"out_format", required_argument, 0, 'O'},
         {"haplotype", required_argument, 0, 'g'},
         {"threads", required_argument, 0, 't'},
         {"chunk_size", required_argument, 0, 'T'},
         {"verbose", no_argument, &args.verbose, 1},
     };
     int long_index = 0;
-    while((c = getopt_long(argc, argv, "hv:s:p:l:a:g:n:k:t:T:", long_options, &long_index)) != -1) {
+    while((c = getopt_long(argc, argv, "hv:s:p:l:a:O:g:n:k:t:T:", long_options, &long_index)) != -1) {
         switch (c) {
             case 'v':
                 args.vcf_fname = optarg;
@@ -446,6 +341,9 @@ int main(int argc, char** argv) {
                 break;
             case 'a':
                 args.sam_fname = optarg;
+                break;
+            case 'O':
+                args.out_format = optarg;
                 break;
             case 'g':
                 args.haplotype = optarg;
@@ -480,6 +378,12 @@ int main(int argc, char** argv) {
         fprintf(stderr, "invalid haplotype %s\n", args.haplotype.c_str());
         exit(1);
     }
+
+    if (args.out_format != "sam" && args.out_format != "bam") {
+        fprintf(stderr, "Not supported extension format %s\n", args.out_format.c_str());
+        exit(1);
+    }
+
     if (!strcmp(argv[optind], "lift")) {
         lift_run(args);
     } else if (!strcmp(argv[optind], "serialize")) {

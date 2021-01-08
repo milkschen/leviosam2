@@ -20,6 +20,12 @@
  * Created: July 2019
  */
 
+const char* VERSION("0.2");
+
+using NameMap = std::vector<std::pair<std::string,std::string>>;
+using LengthMap = std::unordered_map<std::string,size_t>;
+
+
 static inline void die(std::string msg) {
     fprintf(stderr, "%s\n", msg.data());
     exit(1);
@@ -83,15 +89,22 @@ class Lift {
         return del_rs0(ins_sls0(p+1));
     }
 
-    // convert a CIGAR string in an s2 alignment to the corresponding CIGAR string in the s1 alignment
-    // input: bam1_t alignment record against s2 sequence
-    // output: CIGAR string (as std::string) wrt s1 sequence
-    std::string cigar_s2_to_s1(bam1_t* b) {
-        auto x = del_sls0(b->core.pos+1);
+
+    /* Core function to lift a CIGAR string from s1 to s2 space.
+     * 
+     * Input:
+     *   An alignment struct we'd like to update.
+     *   This function is not going to update the bam1_t stuct.
+     *
+     * Output:
+     *   A vector, each element is an unit32_t corresponding to htslib CIGAR value
+     */
+    std::vector<uint32_t> cigar_s2_to_s1_core(bam1_t* b){
+        auto x = del_sls0(b->core.pos + 1);
         int y = 0; // read2alt cigar pointer
         uint32_t* cigar = bam_get_cigar(b);
-        std::string out_cigar = "";
         std::vector<uint32_t> cigar_ops;
+        std::vector<uint32_t> new_cigar_ops;
         for (int i = 0; i < b->core.n_cigar; ++i) {
             for (int j = 0; j < bam_cigar_oplen(cigar[i]); ++j) {
                 cigar_ops.push_back(bam_cigar_op(cigar[i]));
@@ -101,24 +114,30 @@ class Lift {
         while (y < iters) {
             int cop = cigar_ops[y];
             if (del[x]) { // skip ahead in alt2ref cigar
-                if (out_cigar[out_cigar.length()-1] == 'I'){
-                    out_cigar.pop_back();
-                    out_cigar += "M";
+                if (new_cigar_ops.empty()){
+                    new_cigar_ops.push_back(BAM_CDEL);
+                } else {
+                    if (new_cigar_ops.back() == BAM_CINS){
+                        new_cigar_ops[new_cigar_ops.size() - 1] = BAM_CMATCH;
+                    } else {
+                        new_cigar_ops.push_back(BAM_CDEL);
+                    }
                 }
-                else
-                    out_cigar += "D";
                 ++x;
             } else if (cop == BAM_CINS) { // skip ahead in read2alt cigar
-                if (out_cigar[out_cigar.length()-1] == 'D'){
-                    out_cigar.pop_back();
-                    out_cigar += "M";
+                if (!new_cigar_ops.empty()){
+                    if (new_cigar_ops.back() == BAM_CDEL){
+                        new_cigar_ops[new_cigar_ops.size() - 1] = BAM_CMATCH;
+                    } else{
+                        new_cigar_ops.push_back(BAM_CINS);
+                    }
+                } else {
+                    new_cigar_ops.push_back(BAM_CINS);
                 }
-                else
-                    out_cigar += "I";
                 ++y;
             } else if (cop == BAM_CSOFT_CLIP || cop == BAM_CHARD_CLIP || cop == BAM_CPAD){
-                out_cigar += (cop == BAM_CSOFT_CLIP)? "S" :
-                    (cop == BAM_CHARD_CLIP)? "H" : "P";
+                // TODO: check the case where S is followed by D
+                new_cigar_ops.push_back(cop);
                 ++y;
             } else if (cop == BAM_CBACK) {
                 // skip. We don't support B Ops.
@@ -126,43 +145,114 @@ class Lift {
                 ++y;
             } else if (cop == BAM_CMATCH || cop == BAM_CDIFF || cop == BAM_CEQUAL) { // M
                 if (ins[x]){
-                    if (out_cigar[out_cigar.length()-1] == 'D'){
-                        out_cigar.pop_back();
-                        out_cigar += "M";
+                    if (new_cigar_ops.empty()){
+                        new_cigar_ops.push_back(BAM_CINS);
+                    } else if (new_cigar_ops.back() == BAM_CDEL){
+                        new_cigar_ops[new_cigar_ops.size() - 1] = BAM_CMATCH;
+                    } else {
+                        new_cigar_ops.push_back(BAM_CINS);
                     }
-                    else
-                        out_cigar += "I"; // IM
+                } else {
+                    new_cigar_ops.push_back(BAM_CMATCH);
                 }
-                else out_cigar += "M"; // MM
                 ++x; ++y;
             } else if (cop == BAM_CDEL || cop == BAM_CREF_SKIP) { // D
-                if (ins[x]) out_cigar += ""; // ID - insertion is invalidated
-                else{
-                    if (out_cigar[out_cigar.length()-1] == 'I'){
-                        out_cigar.pop_back();
-                        out_cigar += "M";
+                if (!ins[x]) {
+                    if (new_cigar_ops.empty()){
+                        new_cigar_ops.push_back(BAM_CDEL);
+                    } else if (new_cigar_ops.back() == BAM_CINS){
+                        new_cigar_ops[new_cigar_ops.size() - 1] = BAM_CMATCH;
+                    } else {
+                        new_cigar_ops.push_back(BAM_CDEL);
                     }
-                    else
-                        out_cigar += "D"; // MD
                 }
                 ++x; ++y;
             }
         }
+        return new_cigar_ops;
+    }
 
-        std::string out = "";
+
+    /* Convert a CIGAR string in an s2 alignment to the corresponding CIGAR string in the s1 alignment
+     *
+     * Input: bam1_t alignment record against s2 sequence
+     *
+     * Output:
+     *   The bam1_t struct is updated if there's a change in its CIGAR.
+     *   bam1_t->core.n_cigar specifies numbers of operators in a CIGAR;
+     *   bam_get_cigar(bam1_t) points to the occurrences.
+     */
+    void cigar_s2_to_s1(bam1_t* b) {
+        uint32_t* cigar = bam_get_cigar(b);
+        // Get lifted CIGAR.
+        auto new_cigar_ops = cigar_s2_to_s1_core(b);
+        // Prepare to update CIGAR in the bam1_t struct.
+        std::vector<int> cigar_op_len;
+        std::vector<char> cigar_op;
         int z = 1;
-        for (size_t i = 1; i < out_cigar.size(); ++i) {
-            if (out_cigar[i] == out_cigar[i-1]) {
+        for (int i = 1; i < new_cigar_ops.size(); i++){
+            if (new_cigar_ops[i] == new_cigar_ops[i-1]){
                 z++;
             } else {
-                out += std::to_string(z);
-                out += out_cigar[i-1];
+                cigar_op_len.push_back(z);
+                cigar_op.push_back(new_cigar_ops[i - 1]);
                 z = 1;
             }
         }
-        out += std::to_string(z);
-        out += out_cigar[out_cigar.size() - 1];
-        return out;
+        cigar_op_len.push_back(z);
+        cigar_op.push_back(new_cigar_ops[new_cigar_ops.size() - 1]);
+        std::vector<uint32_t> new_cigar;
+        for (int i = 0; i < cigar_op_len.size(); i++){
+            new_cigar.push_back(bam_cigar_gen(cigar_op_len[i], cigar_op[i]));
+        }
+        // Adjust data position when n_cigar is changed by levioSAM. n_cigar could either be
+        // increased or decreased.
+        //
+        // Adapted from samtools/sam.c
+        // https://github.com/samtools/htslib/blob/2264113e5df1946210828e45d29c605915bd3733/sam.c#L515
+        if (b->core.n_cigar != cigar_op_len.size()){
+            auto cigar_st = (uint8_t*)bam_get_cigar(b) - b->data;
+            auto fake_bytes = b->core.n_cigar * 4;
+            b->core.n_cigar = (uint32_t)cigar_op_len.size();
+            auto n_cigar4 = b->core.n_cigar * 4;
+            auto orig_len = b->l_data;
+            if (n_cigar4 > fake_bytes){
+                // Check if we need to update `b->m_data`.
+                //
+                // Adapted from htslib/sam_internal.h
+                // https://github.com/samtools/htslib/blob/31f0a76d338c9bf3a6893b71dd437ef5fcaaea0e/sam_internal.h#L48
+                auto new_m_data = (size_t) b->l_data + n_cigar4 - fake_bytes;
+                kroundup32(new_m_data);
+                if (new_m_data > b->m_data){
+                    auto new_data = static_cast<uint8_t *>(realloc(b->data, new_m_data));
+                    if (!new_data){
+                        std::cerr << "[Error] Failed to expand a bam1_t struct for " << bam_get_qname(b) << "\n";
+                        std::cerr << "This is likely due to out of memory\n";
+                        exit(1);
+                    }
+                    b->data = new_data;
+                    b->m_data = new_m_data;
+                    cigar = bam_get_cigar(b);
+                }
+            }
+            // Update memory usage of data.
+            b->l_data = b->l_data - fake_bytes + n_cigar4;
+            // Move data to the correct place.
+            memmove(b->data + cigar_st + n_cigar4,
+                    b->data + cigar_st + fake_bytes,
+                    orig_len - (cigar_st + fake_bytes));
+            // If new n_cigar is greater, copy the real CIGAR to the right place.
+            // Skipped this if new n_cigar is smaller than the original value.
+            if (n_cigar4 > fake_bytes){
+                memcpy(b->data + cigar_st,
+                       b->data + (n_cigar4 - fake_bytes) + 8,
+                       n_cigar4);
+            }
+            b->core.n_cigar = cigar_op_len.size();
+        }
+        for (int i = 0; i < b->core.n_cigar; i++){
+            *(cigar + i) = new_cigar[i];
+        }
     }
 
     // returns size of s1 sequence
@@ -413,48 +503,22 @@ class LiftMap {
             return n;
     }
 
-    // converts CIGAR string of s2 alignment to corresponding CIGAR string for the s1 alignment
-    // input: sequence name, bam1_t alignment record object (via htslib)
-    // ouput: CIGAR string of s1 alignment (as std::string)
-    // if liftover is not defined, then returns empty string
-    std::string cigar_s2_to_s1(std::string n, bam1_t* b) {
+    /* Convert a CIGAR string in an s2 alignment to the corresponding CIGAR string in the s1 alignment
+     *
+     * Input: bam1_t alignment record against s2 sequence
+     *
+     * The bam1_t struct is updated if there's a change in its CIGAR.
+     * bam1_t->core.n_cigar specifies numbers of operators in a CIGAR;
+     * bam_get_cigar(bam1_t) points to the occurrences.
+     *
+     * If liftover is not defined, do not update the bam1_t struct.
+     */
+    void cigar_s2_to_s1(const std::string& n, bam1_t* b) {
         auto it = s2_map.find(n);
         if (it != s2_map.end()) {
-            return lmap[it->second].cigar_s2_to_s1(b);
-        } else { // returns original cigar string
-            std::string out_cigar = "";
-            auto cigar = bam_get_cigar(b);
-            for (int i = 0; i < b->core.n_cigar; ++i) {
-                for (int j = 0; j < bam_cigar_oplen(cigar[i]); ++j) {
-                    if (bam_cigar_op(cigar[i]) == BAM_CINS)
-                        out_cigar += "I";
-                    else if (bam_cigar_op(cigar[i]) == BAM_CDEL)
-                        out_cigar += "D";
-                    else if (bam_cigar_op(cigar[i]) == BAM_CMATCH)
-                        out_cigar += "M";
-                    else if (bam_cigar_op(cigar[i]) == BAM_CSOFT_CLIP)
-                        out_cigar += "S";
-                    else if (bam_cigar_op(cigar[i]) == BAM_CHARD_CLIP)
-                        out_cigar += "H";
-                    else if (bam_cigar_op(cigar[i]) == BAM_CPAD)
-                        out_cigar += "P";
-                }
-            }
-            std::string out = "";
-            int z = 1;
-            for (size_t i = 1; i < out_cigar.size(); ++i) {
-                if (out_cigar[i] == out_cigar[i-1]) {
-                    z++;
-                } else {
-                    out += std::to_string(z);
-                    out += out_cigar[i-1];
-                    z = 1;
-                }
-            }
-            out += std::to_string(z);
-            out += out_cigar[out_cigar.size() - 1];
-            return out;
+            lmap[it->second].cigar_s2_to_s1(b);
         }
+        // If not found, no update.
     }
 
     // saves to stream
@@ -587,6 +651,12 @@ class LiftMap {
     }
 };
 };
+
+lift::LiftMap lift_from_vcf(std::string fname, 
+                            std::string sample, 
+                            std::string haplotype, 
+                            NameMap names, LengthMap lengths);
+
 
 void print_main_help_msg();
 void print_lift_help_msg();
