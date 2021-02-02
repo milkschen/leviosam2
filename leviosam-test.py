@@ -1,6 +1,8 @@
 import unittest
 import subprocess
 
+WG_MAJOR_LFT = 'testdata/wg-maj.lft'
+
 BWA_SE_GOLD = 'testdata/bwa-single_end-cigar_op-grch38.sam'
 BWA_SE_SAM = 'testdata/bwa-single_end-cigar_op-major.sam'
 BWA_SE_OUT_PREFIX = 'testdata/bwa-single_end-cigar_op-major-lifted'
@@ -17,11 +19,17 @@ BT2_PE_GOLD = 'testdata/bt2-paired_end-grch38.sam'
 BT2_PE_SAM = 'testdata/bt2-paired_end-major.sam'
 BT2_PE_OUT_PREFIX = 'testdata/bt2-paired_end-major-lifted'
 
+OVRLP_LFT = 'testdata/overlapping_example.lft'
+OVRLP_GOLD = 'testdata/overlapping_example-lifted-gold.sam'
+OVRLP_SAM = 'testdata/overlapping_example.sam'
+OVRLP_OUT_PREFIX = 'testdata/overlapping_example-lifted'
+
 params = [
-    {'name': 'BWA-SE', 'gold': BWA_SE_GOLD, 'sam': BWA_SE_SAM, 'out_prefix': BWA_SE_OUT_PREFIX, 'mode': 'SE'},
-    {'name': 'BT2-PE', 'gold': BT2_SE_GOLD, 'sam': BT2_SE_SAM, 'out_prefix': BT2_SE_OUT_PREFIX, 'mode': 'SE'},
-    {'name': 'BWA-PE', 'gold': BWA_PE_GOLD, 'sam': BWA_PE_SAM, 'out_prefix': BWA_PE_OUT_PREFIX, 'mode': 'PE'},
-    {'name': 'BT2-PE','gold': BT2_PE_GOLD, 'sam': BT2_PE_SAM, 'out_prefix': BT2_PE_OUT_PREFIX, 'mode': 'PE'}
+    {'name': 'BWA-SE', 'gold': BWA_SE_GOLD, 'sam': BWA_SE_SAM, 'out_prefix': BWA_SE_OUT_PREFIX, 'lft': WG_MAJOR_LFT, 'mode': 'SE'},
+    {'name': 'BT2-PE', 'gold': BT2_SE_GOLD, 'sam': BT2_SE_SAM, 'out_prefix': BT2_SE_OUT_PREFIX, 'lft': WG_MAJOR_LFT, 'mode': 'SE'},
+    {'name': 'BWA-PE', 'gold': BWA_PE_GOLD, 'sam': BWA_PE_SAM, 'out_prefix': BWA_PE_OUT_PREFIX, 'lft': WG_MAJOR_LFT, 'mode': 'PE'},
+    {'name': 'BT2-PE', 'gold': BT2_PE_GOLD, 'sam': BT2_PE_SAM, 'out_prefix': BT2_PE_OUT_PREFIX, 'lft': WG_MAJOR_LFT, 'mode': 'PE'},
+    {'name': 'OVRLP', 'gold': OVRLP_GOLD, 'sam': OVRLP_SAM, 'out_prefix': OVRLP_OUT_PREFIX, 'lft': OVRLP_LFT, 'mode': 'SE'}
 ]
 
 
@@ -49,7 +57,8 @@ class SamProcessing(unittest.TestCase):
         for param in params:
             process = subprocess.Popen(
                 ['./leviosam', 
-                'lift', '-l', 'testdata/wg-maj.lft', '-a', param['sam'],
+                'lift', '-l', param['lft'], '-a', param['sam'],
+                #'lift', '-l', 'testdata/wg-maj.lft', '-a', param['sam'],
                 '-p', param['out_prefix']],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             stdout, stderr = process.communicate()
