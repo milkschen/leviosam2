@@ -301,10 +301,11 @@ void print_lift_help_msg(){
 void print_main_help_msg(){
     fprintf(stderr, "\n");
     fprintf(stderr, "Program: leviosam (lift over SAM/BAM based on VCF)\n");
+    fprintf(stderr, "Version: %s\n", VERSION);
     fprintf(stderr, "Usage:   leviosam <command> [options]\n\n");
-    fprintf(stderr, "Commands:serialize build leviosam indexes\n");
-    fprintf(stderr, "         lift      lift alignments\n");
-    fprintf(stderr, "Options: -h        Print detailed usage.\n");
+    fprintf(stderr, "Commands:serialize   Build a leviosam index.\n");
+    fprintf(stderr, "         lift        Lift alignments.\n");
+    fprintf(stderr, "Options: -h          Print detailed usage.\n");
     fprintf(stderr, "\n");
 }
 
