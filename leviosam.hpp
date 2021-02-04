@@ -20,7 +20,7 @@
  * Created: July 2019
  */
 
-const char* VERSION("0.3.0");
+const char* VERSION("0.3.1");
 
 using NameMap = std::vector<std::pair<std::string,std::string>>;
 using LengthMap = std::unordered_map<std::string,size_t>;
