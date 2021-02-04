@@ -26,7 +26,7 @@ class Summary():
         self.pos_diff = []
         self.mapq_diff = []
         self.cigar_diff = []
-        self.pos_diff_records = []
+        self.records = []
 
     def update(self, query, baseline):
         if len(query) == 0 or len(baseline) == 0:
@@ -35,16 +35,20 @@ class Summary():
             self.pos_diff.append(abs(query[1] - baseline[1]))
         else:
             self.pos_diff.append(-1)
-        if not (query[0] == baseline[0] and query[1] == baseline[1]):
-            self.pos_diff_records.append([query, baseline])
+        self.records.append([query, baseline])
         self.mapq_diff.append(query[2] - baseline[2])
         self.cigar_diff.append(query[3] == baseline[3])
 
     def report(self, f_out):
         print('## Position', file=f_out)
         print(f'{self.pos_diff.count(0) / len(self.pos_diff)} ({self.pos_diff.count(0)}/{len(self.pos_diff)})', file=f_out)
-        for i in range(30):
-            print(self.pos_diff_records[i], file=f_out)
+        cnt = 0
+        for i in range(len(self.records)):
+            if self.pos_diff[i] < 100 and self.pos_diff[i] > 0:
+                print(self.pos_diff[i], self.records[i], file=f_out)
+                cnt += 1
+            if cnt >= 20:
+                break
 
         print('## MAPQ', file=f_out)
         print(f'{self.mapq_diff.count(0) / len(self.mapq_diff)} ({self.mapq_diff.count(0)}/{len(self.mapq_diff)})', file=f_out)
@@ -66,10 +70,10 @@ def process_sam_line(line, dict_sam):
     if flag & 4:
         return
 
-    if flag & 64:
+    if (flag & 1 and flag & 64) or (not (flag & 1)):
         if dict_sam.setdefault(name, [[], []]):
             dict_sam[name][0] = [contig, pos, mapq, cigar]
-    elif flag & 128:
+    elif (flag & 1 and flag & 128):
         if dict_sam.setdefault(name, [[], []]):
             dict_sam[name][1] = [contig, pos, mapq, cigar]
     else:
