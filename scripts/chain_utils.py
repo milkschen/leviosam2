@@ -6,9 +6,9 @@ chain2vcf: Converts a chain file to a VCF file.
     This conversion is not capble of handling translocations and inversions. Users should specify
     a list of "chain ids" that contain only indels.
 
-Example: 
-    # This output VCF is used to convert h38 coordinates to T2T coordinates.
-    python chain_utils.py chain2vcf -i hg38.t2t-chm13-v1.0.over.chain -c 1-23 -o main_chain-h38.t2t_chm13.vcf
+    Example:
+        # This output VCF is used to convert h38 coordinates to T2T coordinates.
+        python chain_utils.py chain2vcf -i hg38.t2t-chm13-v1.0.over.chain -c 1-23 -o main_chain-h38.t2t_chm13.vcf
 
 
 chain2bed: Converts a chain file to a BED file.
@@ -16,6 +16,9 @@ chain2bed: Converts a chain file to a BED file.
     The conversion only supports one chain per contig (we currently don't support translocations).
     Users need to provide a list of chain ids for conversion.
     The output BED file will contain the "chain block" regions.
+
+    Example:
+        python chain_utils.py chain2bed -i hg38.t2t-chm13-v1.0.over.chain -c 1-23 -o hg38.t2t-chm13-v1.0.conf_regions.bed
 '''
 
 import argparse
