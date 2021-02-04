@@ -17,6 +17,10 @@ def parse_args():
         '-o', '--out', default=sys.stdout,
         help='Path to the ouput report. [stdout]'
     )
+    parser.add_argument(
+        '-c', '--num_err_printed', default=20, type=int,
+        help='Number of printed errors. Set to -1 to print all. [20]'
+    )
     args = parser.parse_args()
     return args
 
@@ -39,7 +43,7 @@ class Summary():
         self.mapq_diff.append(query[2] - baseline[2])
         self.cigar_diff.append(query[3] == baseline[3])
 
-    def report(self, f_out):
+    def report(self, f_out, num_err_printed):
         print('## Position', file=f_out)
         print(f'{self.pos_diff.count(0) / len(self.pos_diff)} ({self.pos_diff.count(0)}/{len(self.pos_diff)})', file=f_out)
         cnt = 0
@@ -47,7 +51,7 @@ class Summary():
             if self.pos_diff[i] < 100 and self.pos_diff[i] > 0:
                 print(self.pos_diff[i], self.records[i], file=f_out)
                 cnt += 1
-            if cnt >= 20:
+            if cnt >= num_err_printed and num_err_printed >= 0:
                 break
 
         print('## MAPQ', file=f_out)
@@ -97,7 +101,7 @@ def compare_sam(args):
         if dict_baseline.get(name):
             summary.update(first_seg, dict_baseline[name][0])
             summary.update(second_seg, dict_baseline[name][1])
-    summary.report(args.out)
+    summary.report(args.out, args.num_err_printed)
 
 
 if __name__ == '__main__':
