@@ -420,16 +420,26 @@ class LiftMap {
                 int var_type = bcf_get_variant_type(rec, var);
                 int rlen = strlen(rec->d.allele[0]);
                 int alen = strlen(rec->d.allele[var]);
-                // determine if overlap
-                // logic copied from https://github.com/samtools/bcftools/blob/2299ab6acceae2658b1de480535346b30624caa8/consensus.c#L546
+
+                // Determine if overlap. Logic copied from bcftools consensus`:
+                // https://github.com/samtools/bcftools/blob/df43fd4781298e961efc951ba33fc4cdcc165a19/consensus.c#L579
+
+                // For some variant types POS+REF refer to the base *before* the event; in such case set trim_beg
+                int trim_beg = 0;
+                int var_len  = rec->d.var[var].n;
+                if ( var_type & VCF_INDEL ) trim_beg = 1;
+                else if ( (var_type & VCF_OTHER) && !strcasecmp(rec->d.allele[var],"<DEL>") ) {
+                    trim_beg = 1;
+                    var_len  = 1 - rec->rlen;
+                }
+                else if ( (var_type & VCF_OTHER) && !strncasecmp(rec->d.allele[var],"<INS",4) )
+                    trim_beg = 1;
+
                 if (rec->pos <= tppos) {
                     int overlap = 0;
-                    // check if occ before or if SNP
-                    if (rec->pos < tppos || !(var_type == VCF_INDEL)) overlap = 1;
-                    // if occ after and not snp, check if del, or if overlapping ins
-                    else if (rec->d.var[var].n <= 0 || prev_is_ins) overlap = 1;
+                    if ( rec->pos < tppos || !trim_beg || var_len==0 || prev_is_ins ) overlap = 1;
                     if (overlap) {
-                        if (verbose) fprintf(stderr, "skipping variant %s:%d\n", bcf_seqname(hdr, rec), rec->pos + 1);
+                        if (verbose) fprintf(stderr, "Skipping variant %s:%d\n", bcf_seqname(hdr, rec), rec->pos + 1);
                         continue;
                     }
                 }
