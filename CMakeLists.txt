@@ -1,10 +1,11 @@
 cmake_minimum_required(VERSION 3.10)
 
-project(liftover CXX C)
+project(leviosam CXX C)
 
-set(PROJECT_URL "https://github.com/alshai/liftover")
-set(PROJECT_DESCRIPTION "liftover: library for moving alignments between aligned genomes")
-set(CMAKE_CXX_STANDARD 14)
+set(PROJECT_URL "https://github.com/alshai/leviosam")
+set(PROJECT_DESCRIPTION "leviosam: library for moving alignments between aligned genomes")
+set(CMAKE_CXX_STANDARD 11)
+
 
 # Note: when I installed htslib and sdsl-lite on my Mac using brew,
 # it created pkgconfig directories but no .cmake files or equivalent.
@@ -21,7 +22,6 @@ pkg_search_module(PKG_HTSLIB REQUIRED htslib)
 
 # sdsl
 pkg_search_module(PKG_LIBDIVSUFSORT REQUIRED libdivsufsort)
-
 
 
 # Download and unpack googletest at configure time
@@ -51,13 +51,19 @@ add_subdirectory(${CMAKE_CURRENT_BINARY_DIR}/googletest-src
                  ${CMAKE_CURRENT_BINARY_DIR}/googletest-build
                  EXCLUDE_FROM_ALL)
 
-add_executable(liftover liftover.cpp)
-target_link_libraries(liftover ${PKG_HTSLIB_LDFLAGS})
-target_link_libraries(liftover sdsl)
+add_executable(leviosam leviosam.cpp)
+target_link_libraries(leviosam ${PKG_HTSLIB_LDFLAGS})
+target_link_libraries(leviosam sdsl)
+target_link_libraries(leviosam pthread)
 
-add_executable(liftover_test liftover_test.cpp)
-target_link_libraries(liftover_test ${PKG_HTSLIB_LDFLAGS})
-target_link_libraries(liftover_test sdsl)
-target_link_libraries(liftover_test gtest gtest_main)
 
-add_test(liftover_test liftover_test)
+add_executable(leviosam_test liftover_test.cpp)
+target_link_libraries(leviosam_test ${PKG_HTSLIB_LDFLAGS})
+target_link_libraries(leviosam_test sdsl)
+target_link_libraries(leviosam_test gtest gtest_main)
+
+add_test(leviosam_test leviosam_test)
+
+INSTALL(TARGETS leviosam DESTINATION bin)
+
+
