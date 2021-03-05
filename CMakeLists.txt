@@ -57,7 +57,7 @@ target_link_libraries(leviosam sdsl)
 target_link_libraries(leviosam pthread)
 
 
-add_executable(leviosam_test liftover_test.cpp)
+add_executable(leviosam_test leviosam_test.cpp)
 target_link_libraries(leviosam_test ${PKG_HTSLIB_LDFLAGS})
 target_link_libraries(leviosam_test sdsl)
 target_link_libraries(leviosam_test gtest gtest_main)
