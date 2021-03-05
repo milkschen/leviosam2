@@ -2,7 +2,7 @@
 #include "gtest/gtest.h"
 
 //
-// bit_veector tests
+// bit_vector tests
 //
 
 typedef sdsl::bit_vector::size_type size_type;
@@ -73,7 +73,7 @@ TEST(CompressedVector, CreateAndRead) {
     EXPECT_EQ(0, sv[501]);
     EXPECT_EQ(0, sv[10000-2]);
     EXPECT_EQ(1, sv[10000-1]);
-    
+
     sdsl::rrr_vector<63> rv{bv};
     EXPECT_EQ(1, rv[0]);
     EXPECT_EQ(0, rv[1]);
@@ -113,4 +113,65 @@ TEST(CompressedVector, SelectSupport) {
     EXPECT_EQ(0, ss.select(1));
     EXPECT_EQ(500, ss.select(2));
     EXPECT_EQ(10000-1, ss.select(3));
+}
+
+/* Lift tests */
+
+TEST(Lift, EmptyLift) {
+    sdsl::bit_vector ibv;
+    sdsl::bit_vector dbv;
+    sdsl::bit_vector sbv; // ins, del, snp
+    ibv.resize(20);
+    dbv.resize(20);
+    sbv.resize(20);
+    lift::Lift lift(ibv, dbv, sbv);
+    EXPECT_EQ(lift.s2_to_s1(5), 5);
+}
+
+TEST(Lift, SimpleInsLift) {
+    sdsl::bit_vector ibv;
+    sdsl::bit_vector dbv;
+    sdsl::bit_vector sbv; // ins, del, snp
+    ibv.resize(20);
+    dbv.resize(20);
+    sbv.resize(20);
+    ibv[5] = 1;
+    //     01234 56
+    // I : 00000100000000000000
+    // D : 00000000000000000000
+    //     01234567
+    lift::Lift lift(ibv, dbv, sbv);
+    EXPECT_EQ(lift.s2_to_s1(7), 6);
+}
+
+TEST(Lift, SimpleDelLift) {
+    sdsl::bit_vector ibv;
+    sdsl::bit_vector dbv;
+    sdsl::bit_vector sbv; // ins, del, snp
+    ibv.resize(20);
+    dbv.resize(20);
+    sbv.resize(20);
+    dbv[5] = 1;
+    //     01234567
+    // I : 00000000000000000000
+    // D : 00000100000000000000
+    //     01234 56
+    lift::Lift lift(ibv, dbv, sbv);
+    EXPECT_EQ(lift.s2_to_s1(6), 7);
+}
+
+TEST(Lift, SimpleDelLift) {
+    sdsl::bit_vector ibv;
+    sdsl::bit_vector dbv;
+    sdsl::bit_vector sbv; // ins, del, snp
+    ibv.resize(20);
+    dbv.resize(20);
+    sbv.resize(20);
+    dbv[5] = 1;
+    //     01234567
+    // I : 00000000000000000000
+    // D : 00000100000000000000
+    //     01234 56
+    lift::Lift lift(ibv, dbv, sbv);
+    EXPECT_EQ(lift.s2_to_s1(6), 7);
 }
