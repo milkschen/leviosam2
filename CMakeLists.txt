@@ -62,7 +62,9 @@ target_link_libraries(leviosam_test ${PKG_HTSLIB_LDFLAGS})
 target_link_libraries(leviosam_test sdsl)
 target_link_libraries(leviosam_test gtest gtest_main)
 
-add_test(leviosam_test leviosam_test)
+add_test(NAME leviosam_test COMMAND leviosam_test
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/testdata
+)
 
 INSTALL(TARGETS leviosam DESTINATION bin)
 
