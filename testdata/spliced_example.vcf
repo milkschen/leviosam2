@@ -1,0 +1,8 @@
+##fileformat=VCFv4.3
+##FILTER=<ID=PASS,Description="All filters passed">
+##reference=ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/GRCh38_reference_genome/GRCh38_full_analysis_set_plus_decoy_hla.fa
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##contig=<ID=chr21, length=46709983>
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	MAJOR_ALLELE
+chr21	5313310	.	ACT	A	.	PASS	.	GT	1|1
+chr21	7947480	.	C	CTTCCA	.	PASS	.	GT	1|1
