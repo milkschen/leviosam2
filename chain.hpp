@@ -10,7 +10,7 @@ namespace chain {
 class Interval {
     public:
     Interval() {
-        source = "";
+        // source = "";
         target = "";
         offset = 0;
         source_start = 0;
@@ -19,9 +19,10 @@ class Interval {
     }
 
     Interval(
-        std::string s, std::string t, int so, int se, int o, bool ss
+        // std::string s, 
+        std::string t, int so, int se, int o, bool ss
     ) {
-        source = s;
+        // source = s;
         target = t;
         offset = o;
         source_start = so;
@@ -31,10 +32,11 @@ class Interval {
 
     void debug_print_interval() {
         std::string ss = (same_strand)? "+" : "-";
-        std::cerr << source << "[" << source_start << ":" << source_end << ")->" << target << " (" << ss << "); offset = " << offset << "\n";
+        std::cerr << "[" << source_start << ":" << source_end << ")->" << target << " (" << ss << "); offset = " << offset << "\n";
+        // std::cerr << source << "[" << source_start << ":" << source_end << ")->" << target << " (" << ss << "); offset = " << offset << "\n";
     }
 
-    std::string source;
+    // std::string source;
     std::string target;
     int offset;
     int source_start, source_end;
