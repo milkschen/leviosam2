@@ -399,8 +399,8 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
-    lift_from_chain(args.chain_fname);
-    exit(1);
+    // lift_from_chain(args.chain_fname);
+    // exit(1);
 
     if (!strcmp(argv[optind], "lift")) {
         lift_run(args);
