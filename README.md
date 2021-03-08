@@ -127,7 +127,7 @@ To load from a serialized file
 ```
 
 
-## Features Currently Supporte:
+## Features Currently Support:
 
 - Serialized lift-over information VCF file w/ FMT/GT field for a specified sample.
 - Convert SAM/BAM records from haplotype to reference.
