@@ -4,13 +4,6 @@
 #include "leviosam.hpp"
 #include "gtest/gtest.h"
 
-TEST(Ctest, WorkingDir) {
-    char buf[1024];
-    std::string cwd(getcwd(buf, 1024));
-    std::string x("/storage/tmun/levioSAM_exps/levioSAM/testdata");
-    EXPECT_EQ(buf, x);
-}
-
 //
 // bit_vector tests
 //
