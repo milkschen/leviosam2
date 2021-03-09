@@ -240,14 +240,13 @@ void lift_run(lift_opts args) {
 }
 
 
-lift::LiftMap lift_from_chain(std::string fname) {
-                              //NameMap names, LengthMap lengths) {
-    if (fname == "") {
+lift::LiftMap lift_from_chain(lift_opts args) {
+    if (args.chain_fname == "") {
         fprintf(stderr, "chain file name is required!! \n");
         print_serialize_help_msg();
         exit(1);
     }
-    chain::ChainFile* cfp = chain::chain_open(fname);
+    chain::ChainFile* cfp = chain::chain_open(args.chain_fname, args.verbose);
     // chain::bcf_hdr_t* hdr = bcf_hdr_read(fp);
     return lift::LiftMap(cfp);
 }
@@ -316,6 +315,7 @@ void print_main_help_msg(){
     fprintf(stderr, "Commands:serialize   Build a leviosam index.\n");
     fprintf(stderr, "         lift        Lift alignments.\n");
     fprintf(stderr, "Options: -h          Print detailed usage.\n");
+    fprintf(stderr, "         -V          Verbose level [0].\n");
     fprintf(stderr, "\n");
 }
 
@@ -334,10 +334,11 @@ int main(int argc, char** argv) {
         {"haplotype", required_argument, 0, 'g'},
         {"threads", required_argument, 0, 't'},
         {"chunk_size", required_argument, 0, 'T'},
-        {"verbose", no_argument, &args.verbose, 1},
+        {"verbose", no_argument, 0, 'V'}
+        // {"verbose", no_argument, &args.verbose, 1},
     };
     int long_index = 0;
-    while((c = getopt_long(argc, argv, "hv:c:s:p:l:a:O:g:n:k:t:T:", long_options, &long_index)) != -1) {
+    while((c = getopt_long(argc, argv, "hv:c:s:p:l:a:O:g:n:k:t:T:V:", long_options, &long_index)) != -1) {
         switch (c) {
             case 'v':
                 args.vcf_fname = optarg;
@@ -375,6 +376,9 @@ int main(int argc, char** argv) {
             case 'T':
                 args.chunk_size = atoi(optarg);
                 break;
+            case 'V':
+                args.verbose = atoi(optarg);
+                break;
             case 'h':
                 print_lift_help_msg();
                 exit(1);
@@ -399,8 +403,9 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
-    // lift_from_chain(args.chain_fname);
-    // exit(1);
+    std::cerr << "TEST_CHAIN\n";
+    lift_from_chain(args);
+    exit(1);
 
     if (!strcmp(argv[optind], "lift")) {
         lift_run(args);

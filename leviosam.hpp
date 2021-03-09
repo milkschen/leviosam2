@@ -357,9 +357,6 @@ class LiftMap {
     }
 
     LiftMap(chain::ChainFile* fp) {
-        // , bcf_hdr_t* hdr,
-        //     std::vector<std::pair<std::string,std::string>> nm = {},
-        //     std::unordered_map<std::string,size_t> ls = {}) {
         std::cout << "liftmap with a chain file\n";
     }
 

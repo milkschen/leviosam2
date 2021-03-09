@@ -3,9 +3,8 @@
 
 using namespace chain;
 
-bool DEBUG = false;
-
-ChainFile::ChainFile(std::string fname) {
+ChainFile::ChainFile(std::string fname, int verbose) {
+    this->verbose = verbose;
     std::ifstream chain_f(fname);
     std::string line;
     if (chain_f.is_open())
@@ -23,18 +22,20 @@ ChainFile::ChainFile(std::string fname) {
         chain_f.close();
     }
     this->init_rs();
-    if (DEBUG) {
+    if (this->verbose > 1) {
         this->debug_print_interval_map();
         std::cerr << "\n\nsort intervals\n\n";
     }
     this->sort_interval_map();
-    if (DEBUG) {
+    if (this->verbose > 1) {
         this->debug_print_interval_map();
     }
 }
 
-// Create start and end bitvectors when see a new `source`.
-// Do nothing if `source` has been seen.
+
+/* Create start and end bitvectors when see a new `source`.
+ * Do nothing if `source` has been seen.
+ */
 void ChainFile::init_bitvectors(std::string source, int source_length) {
     std::unordered_map<std::string, sdsl::bit_vector>::const_iterator find_start = this->start_bv_map.find(source);
     if (find_start == this->start_bv_map.end()) {
@@ -44,13 +45,15 @@ void ChainFile::init_bitvectors(std::string source, int source_length) {
     }
 }
 
+
 void ChainFile::sort_interval_map() {
     for (auto &itr: this->interval_map) {
         this->sort_intervals(itr.first);
     }
 }
 
-// Sort the intervals in a ChainFile in ascending order.
+
+/* Sort the intervals in a ChainFile in ascending order. */
 void ChainFile::sort_intervals(std::string contig) {
     std::sort(
         this->interval_map[contig].begin(), this->interval_map[contig].end(),
@@ -59,13 +62,15 @@ void ChainFile::sort_intervals(std::string contig) {
     );
 }
 
+
 void ChainFile::debug_print_interval_map() {
     for (auto &intvl_map: this->interval_map) {
         this->debug_print_intervals(intvl_map.first);
     }
 }
 
-// Print the intervals in a ChainFile.
+
+/* Print the intervals in a ChainFile. */
 void ChainFile::debug_print_intervals(std::string contig) {
     for (auto &intvl: this->interval_map[contig]) {
         intvl.debug_print_interval();
@@ -73,6 +78,86 @@ void ChainFile::debug_print_intervals(std::string contig) {
     std::cerr << "\n";
 }
 
+
+/* Check if the interval map contains any overlaps.
+ * Logic:
+ *   For each interval, its ending position <= next starting position
+ * 
+ * Returns a bool:
+ *   true if pass; false otherwise
+ */
+bool ChainFile::interval_map_sanity_check() {
+    for (auto& itr : this->interval_map){
+            std::vector<chain::Interval> v = this->interval_map[itr.first];
+            for (int i = 0; i < v.size()-1; i++) {
+                if (v[i].source_end > v[i+1].source_start) {
+                    std::cerr << "Error: " << itr.first << "\n";
+                    v[i].debug_print_interval();
+                    return false;
+                }
+            }
+    }
+    return true;
+}
+
+/* Get the rank in the start bitvector at contig[pos]
+ * If pos > len(contig): return rank(contig[-1])
+ * Returns:
+ *   non-negative int: rank
+ *   -1: if pos < 0 or contig does not exist
+ */
+int ChainFile::get_start_rank(std::string contig, int pos) {
+    if (pos < 0) return -1;
+    std::unordered_map<std::string, sdsl::sd_vector<>>::const_iterator find_start = this->start_map.find(contig);
+    if (find_start == this->start_map.end()) {
+        return -1;
+    }
+    if (pos >= start_rs1_map[contig].size())
+        pos = start_rs1_map[contig].size() - 1;
+    return start_rs1_map[contig](pos);
+}
+
+/* Get the rank in the end bitvector at contig[pos]
+ * If pos > len(contig): return rank(contig[-1])
+ * Returns:
+ *   non-negative int: rank
+ *   -1: if pos < 0 or contig does not exist
+ */
+int ChainFile::get_end_rank(std::string contig, int pos) {
+    if (pos < 0) return -1;
+    std::unordered_map<std::string, sdsl::sd_vector<>>::const_iterator find_end = this->end_map.find(contig);
+    if (find_end == this->end_map.end()) {
+        return -1;
+    }
+    if (pos >= end_rs1_map[contig].size())
+        pos = end_rs1_map[contig].size() - 1;
+    return end_rs1_map[contig](pos);
+}
+
+/* Init rank support for all start/end bitvectors. */
+void ChainFile::init_rs() {
+    for (auto& it: this->start_bv_map) {
+        std::string contig = it.first;
+        std::unordered_map<std::string, sdsl::sd_vector<>>::const_iterator find_start = this->start_map.find(contig);
+        if (find_start == this->start_map.end()) {
+            this->start_map[contig] = sdsl::sd_vector<>(it.second);
+            this->start_rs1_map[contig] = sdsl::sd_vector<>::rank_1_type();
+        }
+        sdsl::util::init_support(this->start_rs1_map[contig], &this->start_map[contig]);
+    }
+    for (auto& it: this->end_bv_map) {
+        std::string contig = it.first;
+        std::unordered_map<std::string, sdsl::sd_vector<>>::const_iterator find_start = this->end_map.find(contig);
+        if (find_start == this->end_map.end()) {
+            this->end_map[contig] = sdsl::sd_vector<>(it.second);
+            this->end_rs1_map[contig] = sdsl::sd_vector<>::rank_1_type();
+        }
+        sdsl::util::init_support(this->end_rs1_map[contig], &this->end_map[contig]);
+    }
+}
+
+/* Parse a chain line and update the chain object.
+ */
 void ChainFile::parse_chain_line(
     std::string line, std::string &source, std::string &target,
     int &source_offset, int &target_offset, bool &same_strand
@@ -112,11 +197,10 @@ void ChainFile::parse_chain_line(
         this->start_bv_map[source][s_int_start] = 1;
         this->end_bv_map[source][s_int_end] = 1;
 
-        if (DEBUG)
+        if (this->verbose > 1)
             fprintf(stderr, "source (%d-%d), target (%d-%d)\n", s_int_start, s_int_end, t_int_start, t_int_end);
         Interval intvl(target, s_int_start, s_int_end, t_int_start-s_int_start, same_strand);
-        // Interval intvl(source, target, s_int_start, s_int_end, t_int_start-s_int_start, same_strand);
-        if (DEBUG)
+        if (this->verbose > 1)
             intvl.debug_print_interval();
 
         std::unordered_map<std::string, std::vector<chain::Interval>>::const_iterator find_start = this->interval_map.find(source);
@@ -137,42 +221,29 @@ void ChainFile::parse_chain_line(
         same_strand = true;
     }
 
-    // Check if there are overlapping intervals
-    // std::unordered_map<std::string, std::vector<chain::Interval>>::const_iterator imap_start = this->interval_map.begin();
-    // std::unordered_map<std::string, std::vector<chain::Interval>>::iterator itr;
-    // for (itr = this->interval_map.begin(); itr != this->interval_map.end(); itr++) {
-
-    // for (auto& itr : this->interval_map){
-    //         std::vector<chain::Interval> v = this->interval_map[itr.first];
-    //         for (int i = 0; i < v.size()-2; i++) {
-    //             v[i].debug_print_interval();
-    //             if (v[i].source_start == v[i+1].source_start) {
-    //                 std::cerr << "error: " << itr.first << "\n";
-    //             }
-    //         }
-    // }
-    
-    std::vector<chain::Interval> v = this->interval_map["chr2"];
-    for (int i = 0; i < 10; i++) {
-        v[i].debug_print_interval();
-    }
-
-    if (DEBUG) {
+    if (this->verbose > 1) {
         for (auto&& s: vec)
             std::cerr << s << " ";
         std::cerr << "\n";
     }
 }
 
-ChainFile* chain::chain_open(std::string fname) {
-    ChainFile *file = new ChainFile(fname);
-    
+ChainFile* chain::chain_open(std::string fname, int verbose) {
+    ChainFile *file = new ChainFile(fname, verbose);
+
+    if (verbose > 0) {
+        std::cerr << "Check if there are overlapping intervals...";
+        std::string is_overlap = (file->interval_map_sanity_check())? " pass" : " failed";
+        std::cerr << is_overlap << "\n";
+    }
+
     // TODO
     std::cerr << "TEST_RANK\n";
-    std::cerr << file->get_start_rank("chrM", 16000) << "\n";
+    std::cerr << file->get_start_rank("chrM", 15000) << "\n";
     std::cerr << file->get_start_rank("chr1", 16000000) << "\n";
-    // std::cerr << file->get_start_rank("chrY", 6436563) << "\n";
+    std::cerr << file->get_start_rank("chrY", 6436563) << "\n";
     std::cerr << file->get_start_rank("chrY", 9741965) << "\n";
+    std::cerr << file->get_start_rank("chrZ", 6436563) << "\n";
     std::cerr << "TEST_RANK_END\n";
 
     return file;
