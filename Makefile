@@ -14,8 +14,8 @@ all: $(MAIN)
 $(MAIN): $(OBJS)
 	$(CXX) -o $@ $^ $(LIB) $(CXX_FLAGS)
 
-test: test.cpp leviosam.hpp
-	$(CXX) -o $@ $< $(LIB) $(CXX_FLAGS)
+gtest: leviosam_test.cpp leviosam.hpp
+	$(CXX) -o $@ $< $(LIB) $(CXX_FLAGS) -lgtest_main -lgtest
 
 clean:
 	rm *.o $(MAIN)

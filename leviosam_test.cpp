@@ -4,13 +4,6 @@
 #include "leviosam.hpp"
 #include "gtest/gtest.h"
 
-TEST(Ctest, WorkingDir) {
-    char buf[1024];
-    std::string cwd(getcwd(buf, 1024));
-    std::string x("/storage/tmun/levioSAM_exps/levioSAM/testdata");
-    EXPECT_EQ(buf, x);
-}
-
 //
 // bit_vector tests
 //
@@ -248,5 +241,35 @@ TEST(LiftMap, DelInIndelBamCigarLift) {
     EXPECT_EQ(aln->core.n_cigar, 3);
     EXPECT_EQ(test_cigar[0], bam_cigar_gen( 8, BAM_CMATCH));
     EXPECT_EQ(test_cigar[1], bam_cigar_gen( 10, BAM_CDEL));
+    EXPECT_EQ(test_cigar[2], bam_cigar_gen( 8, BAM_CMATCH));
+}
+
+TEST(LiftMap, SimpleSplicedBamCigarLift) {
+    std::vector<std::string> chroms_not_found;
+    std::mutex mutex_vec;
+    vcfFile* vcf_fp = bcf_open("spliced_example.vcf", "r");
+    bcf_hdr_t* vcf_hdr = bcf_hdr_read(vcf_fp);
+    lift::LiftMap lmap(vcf_fp, vcf_hdr, "", "0");
+    samFile* sam_fp = sam_open("spliced_example.sam", "r");
+    bam_hdr_t* sam_hdr = sam_hdr_read(sam_fp);
+    bam1_t* aln = bam_init1();
+    int err;
+    size_t x;
+    uint32_t* test_cigar;
+    err = sam_read1(sam_fp, sam_hdr, aln);
+    lmap.cigar_s2_to_s1(sam_hdr->target_name[aln->core.tid], aln);
+    test_cigar = bam_get_cigar(aln);
+    EXPECT_EQ(aln->core.n_cigar, 3);
+    EXPECT_EQ(test_cigar[0], bam_cigar_gen( 7, BAM_CMATCH));
+    EXPECT_EQ(test_cigar[1], bam_cigar_gen( 15, BAM_CREF_SKIP));
+    EXPECT_EQ(test_cigar[2], bam_cigar_gen( 13, BAM_CMATCH));
+
+    err = sam_read1(sam_fp, sam_hdr, aln);
+    EXPECT_EQ(err, 0);
+    lmap.cigar_s2_to_s1(sam_hdr->target_name[aln->core.tid], aln);
+    test_cigar = bam_get_cigar(aln);
+    EXPECT_EQ(aln->core.n_cigar, 3);
+    EXPECT_EQ(test_cigar[0], bam_cigar_gen( 8, BAM_CMATCH));
+    EXPECT_EQ(test_cigar[1], bam_cigar_gen( 10, BAM_CREF_SKIP));
     EXPECT_EQ(test_cigar[2], bam_cigar_gen( 8, BAM_CMATCH));
 }

@@ -115,10 +115,12 @@ class Lift {
             int cop = cigar_ops[y];
             if (del[x]) { // skip ahead in alt2ref cigar
                 if (new_cigar_ops.empty()){
-                    new_cigar_ops.push_back(BAM_CDEL);
+                    new_cigar_ops.push_back(BAM_CDEL); // TODO: maybe change this to a padded skip?
                 } else {
                     if (new_cigar_ops.back() == BAM_CINS){
                         new_cigar_ops[new_cigar_ops.size() - 1] = BAM_CMATCH;
+                    } else if (new_cigar_ops.back() == BAM_CREF_SKIP) {
+                        new_cigar_ops.push_back(BAM_CREF_SKIP);
                     } else {
                         new_cigar_ops.push_back(BAM_CDEL);
                     }
@@ -156,7 +158,20 @@ class Lift {
                     new_cigar_ops.push_back(BAM_CMATCH);
                 }
                 ++x; ++y;
-            } else if (cop == BAM_CDEL || cop == BAM_CREF_SKIP) { // D
+            } else if (cop == BAM_CREF_SKIP) { // N 
+                // we separate this from the D branch in case we have to do something special
+                // ie. spliced alignments
+                if (!ins[x]) {
+                    if (new_cigar_ops.empty()){
+                        new_cigar_ops.push_back(BAM_CREF_SKIP);
+                    } else if (new_cigar_ops.back() == BAM_CINS){
+                        new_cigar_ops[new_cigar_ops.size() - 1] = BAM_CMATCH;
+                    } else {
+                        new_cigar_ops.push_back(BAM_CREF_SKIP);
+                    }
+                }
+                ++x; ++y;
+            } else if (cop == BAM_CDEL) { // D
                 if (!ins[x]) {
                     if (new_cigar_ops.empty()){
                         new_cigar_ops.push_back(BAM_CDEL);
