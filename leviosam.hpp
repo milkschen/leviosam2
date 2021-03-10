@@ -9,6 +9,8 @@
 #include <sdsl/bit_vectors.hpp>
 #include <sdsl/util.hpp>
 
+#include "chain.hpp"
+
 /*
  * liftover.hpp
  *
@@ -25,14 +27,12 @@ const char* VERSION("0.3.1");
 using NameMap = std::vector<std::pair<std::string,std::string>>;
 using LengthMap = std::unordered_map<std::string,size_t>;
 
-
 static inline void die(std::string msg) {
     fprintf(stderr, "%s\n", msg.data());
     exit(1);
 }
 
 namespace lift {
-
 // liftover data structure for a single sequence
 class Lift {
 
@@ -339,6 +339,13 @@ class LiftMap {
         s1_map = std::move(s1_map);
         s2_map = std::move(s2_map);
         return *this;
+    }
+
+    LiftMap(chain::ChainFile* fp) {
+        // , bcf_hdr_t* hdr,
+        //     std::vector<std::pair<std::string,std::string>> nm = {},
+        //     std::unordered_map<std::string,size_t> ls = {}) {
+        std::cout << "liftmap with a chain file\n";
     }
 
     /* creates a liftover from specified sample in VCF file.
