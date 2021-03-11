@@ -11,7 +11,6 @@
 #include <htslib/sam.h>
 #include <htslib/vcf.h>
 #include "leviosam.hpp"
-#include "chain.hpp"
 
 KSEQ_INIT(gzFile, gzread)
 ;;
@@ -195,6 +194,7 @@ void read_and_lift(
 }
 
 std::map<std::string, std::string> load_fasta(std::string ref_name) {
+    std::cerr << "Loading FASTA...";
     std::map<std::string, std::string> fmap;
     gzFile fp = gzopen(ref_name.data(), "r");
     kseq_t *seq;
@@ -204,10 +204,12 @@ std::map<std::string, std::string> load_fasta(std::string ref_name) {
     }
     kseq_destroy(seq);
     gzclose(fp);
+    std::cerr << "done\n";
     return fmap;
 }
 
 void lift_run(lift_opts args) {
+    std::cerr << "Loading levioSAM index...";
     // if "-l" not specified, then create a levioSAM
     lift::LiftMap l = [&]{
         if (args.lift_fname != "") {
@@ -216,13 +218,13 @@ void lift_run(lift_opts args) {
         } else if (args.vcf_fname != "") {
             return lift::LiftMap(lift_from_vcf(args.vcf_fname, args.sample, args.haplotype, args.name_map, args.length_map));
         } else {
-            fprintf(stderr, "not enough parameters specified to build/load lift-over\n");
+            fprintf(stderr, "Not enough parameters specified to build/load lift-over\n");
             print_lift_help_msg();
             exit(1);
         }
     } ();
 
-    fprintf(stderr, "loaded liftmap!\n");
+    std::cerr << "done\n";
 
     samFile* sam_fp = (args.sam_fname == "")?
         sam_open("-", "r") : sam_open(args.sam_fname.data(), "r");
@@ -301,7 +303,7 @@ void lift_run(lift_opts args) {
     sam_close(out_sam_fp);
 }
 
-
+/*
 lift::LiftMap lift_from_chain(std::string fname) {
     if (fname == "") {
         fprintf(stderr, "chain file name is required!! \n");
@@ -312,7 +314,7 @@ lift::LiftMap lift_from_chain(std::string fname) {
     // chain::bcf_hdr_t* hdr = bcf_hdr_read(fp);
     return lift::LiftMap(cfp);
 }
-
+*/
 
 lift::LiftMap lift_from_vcf(std::string fname, 
                             std::string sample, 
@@ -398,7 +400,7 @@ int main(int argc, char** argv) {
         {"threads", required_argument, 0, 't'},
         {"chunk_size", required_argument, 0, 'T'},
         {"md", required_argument, 0, 'm'},
-        {"nm", required_argument, 0, 'x'},
+        // {"nm", required_argument, 0, 'x'},
         {"reference", required_argument, 0, 'f'},
         {"verbose", no_argument, &args.verbose, 1},
     };
@@ -473,9 +475,6 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
-    // lift_from_chain(args.chain_fname);
-    // exit(1);
-
     if (!strcmp(argv[optind], "lift")) {
         lift_run(args);
     } else if (!strcmp(argv[optind], "serialize")) {
@@ -484,15 +483,3 @@ int main(int argc, char** argv) {
     return 0;
 }
 
-// chain::ChainFile* chain_open(std::string fname) {
-//     // ChainFile file(fname);
-//     chain::ChainFile *file = new chain::ChainFile(fname);
-    
-//     // TODO
-//     std::cerr << "TEST_RANK\n";
-//     std::cerr << file->get_start_rank("chrY", 6436563) << "\n";
-//     std::cerr << file->get_start_rank("chrY", 9741965) << "\n";
-//     std::cerr << "TEST_RANK_END\n";
-
-//     return file;
-// }
