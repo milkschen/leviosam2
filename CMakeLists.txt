@@ -51,7 +51,7 @@ add_subdirectory(${CMAKE_CURRENT_BINARY_DIR}/googletest-src
                  ${CMAKE_CURRENT_BINARY_DIR}/googletest-build
                  EXCLUDE_FROM_ALL)
 
-add_executable(leviosam leviosam.cpp chain.cpp bam_md.c bam_aux.c)
+add_executable(leviosam leviosam.cpp bam_md.c bam_aux.c)
 target_link_libraries(leviosam ${PKG_HTSLIB_LDFLAGS})
 target_link_libraries(leviosam sdsl)
 target_link_libraries(leviosam pthread)
