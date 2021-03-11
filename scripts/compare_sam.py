@@ -55,7 +55,7 @@ class Summary():
         #print(f'{self.pos_diff.count(0) / len(self.pos_diff)} ({self.pos_diff.count(0)}/{len(self.pos_diff)})', file=f_out)
         cnt = 0
         for i in range(len(self.records)):
-            if self.pos_diff[i] < 100 and self.pos_diff[i] > 0:
+            if self.pos_diff[i] < 100 and self.pos_diff[i] > self.allowed_pos_diff:
                 print(self.pos_diff[i], self.records[i], file=f_out)
                 cnt += 1
             if cnt >= num_err_printed and num_err_printed >= 0:
