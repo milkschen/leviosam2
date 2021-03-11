@@ -5,9 +5,9 @@ LIB=-lsdsl -lhts -lz
 CFLAGS=-g -Wall -O2
 CLIB=-lz -lhts
 
-OBJS = leviosam.o chain.o bam_aux.o bam_md.o
+OBJS = leviosam.o bam_aux.o bam_md.o
 CDEPS= bam.h
-DEPS = leviosam.hpp chain.hpp
+DEPS = leviosam.hpp
 
 all: $(MAIN)
 
