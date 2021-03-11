@@ -1,16 +1,27 @@
-PRGNAME=leviosam
+MAIN=leviosam
 CXX=g++
 CXX_FLAGS=--std=c++11 -lpthread
-INC=
-LIB=-lsdsl -lhts
+LIB=-lsdsl -lhts -lz
+CFLAGS=-g -Wall -O2
+CLIB=-lz -lhts
 
-all: $(PRGNAME)
+OBJS = leviosam.o chain.o bam_aux.o bam_md.o
+CDEPS= bam.h
+DEPS = leviosam.hpp chain.hpp
 
-leviosam: leviosam.cpp leviosam.hpp
-	$(CXX) -o $@ $< $(LIB) $(CXX_FLAGS)
+all: $(MAIN)
 
-test: test.cpp leviosam.hpp
-	$(CXX) -o $@ $< $(LIB) $(CXX_FLAGS)
+.c.o: %.c $(CDEPS)
+	    $(CC) -c -o $@ $< $(CLIB) $(CFLAGS)
+
+.cpp.o: %.cpp $(DEPS)
+	    $(CXX) -c -o $@ $< $(LIB) $(CXX_FLAGS)
+
+$(MAIN): $(OBJS)
+	    $(CXX) -o $@ $^ $(LIB) $(CXX_FLAGS)
+
+gtest: leviosam_test.cpp leviosam.hpp
+	    $(CXX) -o $@ $< $(LIB) $(CXX_FLAGS) -lgtest_main -lgtest
 
 clean:
-	rm *.o $(PRGNAME)
+	    rm *.o $(MAIN)
