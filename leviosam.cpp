@@ -399,10 +399,11 @@ int main(int argc, char** argv) {
         {"chunk_size", required_argument, 0, 'T'},
         {"md", required_argument, 0, 'm'},
         {"nm", required_argument, 0, 'x'},
+        {"reference", required_argument, 0, 'f'},
         {"verbose", no_argument, &args.verbose, 1},
     };
     int long_index = 0;
-    while((c = getopt_long(argc, argv, "hv:c:s:p:l:a:O:g:n:k:t:T:mf", long_options, &long_index)) != -1) {
+    while((c = getopt_long(argc, argv, "hmv:c:s:p:l:a:O:g:n:k:t:T:f:", long_options, &long_index)) != -1) {
         switch (c) {
             case 'v':
                 args.vcf_fname = optarg;
