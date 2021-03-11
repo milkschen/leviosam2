@@ -9,6 +9,8 @@
 #include <sdsl/bit_vectors.hpp>
 #include <sdsl/util.hpp>
 
+#include "chain.hpp"
+
 /*
  * liftover.hpp
  *
@@ -25,14 +27,12 @@ const char* VERSION("0.3.1");
 using NameMap = std::vector<std::pair<std::string,std::string>>;
 using LengthMap = std::unordered_map<std::string,size_t>;
 
-
 static inline void die(std::string msg) {
     fprintf(stderr, "%s\n", msg.data());
     exit(1);
 }
 
 namespace lift {
-
 // liftover data structure for a single sequence
 class Lift {
 
@@ -115,10 +115,12 @@ class Lift {
             int cop = cigar_ops[y];
             if (del[x]) { // skip ahead in alt2ref cigar
                 if (new_cigar_ops.empty()){
-                    new_cigar_ops.push_back(BAM_CDEL);
+                    new_cigar_ops.push_back(BAM_CDEL); // TODO: maybe change this to a padded skip?
                 } else {
                     if (new_cigar_ops.back() == BAM_CINS){
                         new_cigar_ops[new_cigar_ops.size() - 1] = BAM_CMATCH;
+                    } else if (new_cigar_ops.back() == BAM_CREF_SKIP) {
+                        new_cigar_ops.push_back(BAM_CREF_SKIP);
                     } else {
                         new_cigar_ops.push_back(BAM_CDEL);
                     }
@@ -156,7 +158,20 @@ class Lift {
                     new_cigar_ops.push_back(BAM_CMATCH);
                 }
                 ++x; ++y;
-            } else if (cop == BAM_CDEL || cop == BAM_CREF_SKIP) { // D
+            } else if (cop == BAM_CREF_SKIP) { // N 
+                // we separate this from the D branch in case we have to do something special
+                // ie. spliced alignments
+                if (!ins[x]) {
+                    if (new_cigar_ops.empty()){
+                        new_cigar_ops.push_back(BAM_CREF_SKIP);
+                    } else if (new_cigar_ops.back() == BAM_CINS){
+                        new_cigar_ops[new_cigar_ops.size() - 1] = BAM_CMATCH;
+                    } else {
+                        new_cigar_ops.push_back(BAM_CREF_SKIP);
+                    }
+                }
+                ++x; ++y;
+            } else if (cop == BAM_CDEL) { // D
                 if (!ins[x]) {
                     if (new_cigar_ops.empty()){
                         new_cigar_ops.push_back(BAM_CDEL);
@@ -339,6 +354,13 @@ class LiftMap {
         s1_map = std::move(s1_map);
         s2_map = std::move(s2_map);
         return *this;
+    }
+
+    LiftMap(chain::ChainFile* fp) {
+        // , bcf_hdr_t* hdr,
+        //     std::vector<std::pair<std::string,std::string>> nm = {},
+        //     std::unordered_map<std::string,size_t> ls = {}) {
+        std::cout << "liftmap with a chain file\n";
     }
 
     /* creates a liftover from specified sample in VCF file.

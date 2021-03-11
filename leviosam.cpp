@@ -1,16 +1,17 @@
-#include <vector>
-#include <tuple>
-#include <map>
 #include <cstdio>
-#include <thread>
-#include <getopt.h>
-#include <htslib/vcf.h>
-#include <htslib/sam.h>
-#include <htslib/kstring.h>
-#include <htslib/kseq.h>
-#include <zlib.h>
+#include <map>
 #include <stdio.h>
+#include <thread>
+#include <tuple>
+#include <vector>
+#include <zlib.h>
+#include <getopt.h>
+#include <htslib/kseq.h>
+#include <htslib/kstring.h>
+#include <htslib/sam.h>
+#include <htslib/vcf.h>
 #include "leviosam.hpp"
+#include "chain.hpp"
 
 KSEQ_INIT(gzFile, gzread)
 ;;
@@ -21,6 +22,7 @@ extern "C" {
 
 struct lift_opts {
     std::string vcf_fname = "";
+    std::string chain_fname = "";
     std::string sample = "";
     std::string outpre = "";
     std::string out_format = "sam";
@@ -70,7 +72,6 @@ LengthMap parse_length_map(const char* fname) {
     fclose(fp);
     return lengths;
 }
-
 
 void serialize_run(lift_opts args) {
     lift::LiftMap l(lift_from_vcf(args.vcf_fname, args.sample, args.haplotype, args.name_map, args.length_map));
@@ -301,9 +302,21 @@ void lift_run(lift_opts args) {
 }
 
 
-lift::LiftMap lift_from_vcf(std::string fname,
-                            std::string sample,
-                            std::string haplotype,
+lift::LiftMap lift_from_chain(std::string fname) {
+    if (fname == "") {
+        fprintf(stderr, "chain file name is required!! \n");
+        print_serialize_help_msg();
+        exit(1);
+    }
+    chain::ChainFile* cfp = chain::chain_open(fname);
+    // chain::bcf_hdr_t* hdr = bcf_hdr_read(fp);
+    return lift::LiftMap(cfp);
+}
+
+
+lift::LiftMap lift_from_vcf(std::string fname, 
+                            std::string sample, 
+                            std::string haplotype, 
                             NameMap names, LengthMap lengths) {
     if (fname == "" && sample == "") {
         fprintf(stderr, "vcf file name and sample name are required!! \n");
@@ -375,6 +388,7 @@ int main(int argc, char** argv) {
     args.cmd = make_cmd(argc,argv);
     static struct option long_options[] {
         {"vcf", required_argument, 0, 'v'},
+        {"chain", required_argument, 0, 'c'},
         {"sample", required_argument, 0, 's'},
         {"prefix", required_argument, 0, 'p'},
         {"leviosam", required_argument, 0, 'l'},
@@ -388,10 +402,13 @@ int main(int argc, char** argv) {
         {"verbose", no_argument, &args.verbose, 1},
     };
     int long_index = 0;
-    while((c = getopt_long(argc, argv, "hv:s:p:l:a:O:g:n:k:t:T:mf:", long_options, &long_index)) != -1) {
+    while((c = getopt_long(argc, argv, "hv:c:s:p:l:a:O:g:n:k:t:T:mf", long_options, &long_index)) != -1) {
         switch (c) {
             case 'v':
                 args.vcf_fname = optarg;
+                break;
+            case 'c':
+                args.chain_fname = optarg;
                 break;
             case 's':
                 args.sample = optarg;
@@ -455,6 +472,9 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
+    // lift_from_chain(args.chain_fname);
+    // exit(1);
+
     if (!strcmp(argv[optind], "lift")) {
         lift_run(args);
     } else if (!strcmp(argv[optind], "serialize")) {
@@ -462,3 +482,16 @@ int main(int argc, char** argv) {
     }
     return 0;
 }
+
+// chain::ChainFile* chain_open(std::string fname) {
+//     // ChainFile file(fname);
+//     chain::ChainFile *file = new chain::ChainFile(fname);
+    
+//     // TODO
+//     std::cerr << "TEST_RANK\n";
+//     std::cerr << file->get_start_rank("chrY", 6436563) << "\n";
+//     std::cerr << file->get_start_rank("chrY", 9741965) << "\n";
+//     std::cerr << "TEST_RANK_END\n";
+
+//     return file;
+// }
