@@ -14,8 +14,8 @@ def parse_args():
         help='Path to a baseline SAM file.'
     )
     parser.add_argument(
-        '-o', '--out', default=sys.stdout,
-        help='Path to the ouput report. [stdout]'
+        '-o', '--out', default='',
+        help='Path to the ouput report. ['': print to sys.stdout]'
     )
     parser.add_argument(
         '-c', '--num_err_printed', default=20, type=int,
@@ -48,7 +48,11 @@ class Summary():
         self.mapq_diff.append(query[2] - baseline[2])
         self.cigar_diff.append(query[3] == baseline[3])
 
-    def report(self, f_out, num_err_printed):
+    def report(self, fn_out, num_err_printed):
+        if fn_out == '':
+            f_out = sys.stdout
+        else:
+            f_out = open(fn_out, 'w')
         print('## Position', file=f_out)
         num_pos_match = sum([i >= 0 and i < self.allowed_pos_diff for i in self.pos_diff])
         print(f'{num_pos_match / len(self.pos_diff)} ({num_pos_match}/{len(self.pos_diff)})', file=f_out)
