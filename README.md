@@ -49,8 +49,9 @@ make
 Update `LD_LIBRARY_PATH` and `CPLUS_INCLUDE_PATH` paths after installing sdsl-lite and htslib and install with `make`:
 
 ```
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:<path/to/lib>
-export CPLUS_INCLUDE_PATH=$CPLUS_INCLUDE_PATH:<path/to/include>
+export LD_LIBRARY_PATH=<path/to/lib>:$LD_LIBRARY_PATH
+export C_INCLUDE_PATH=<path/to/include>:$C_INCLUDE_PATH
+export CPLUS_INCLUDE_PATH=<path/to/include>:$CPLUS_INCLUDE_PATH
 make
 ```
 
@@ -72,7 +73,7 @@ The levioSAM file saved to `<output prefix>.lft`.
 To lift over coordinates given from a SAM/BAM file using a serialized `.lft` file:
 
 ```
-$ ./levioSAM lift -a <sam> -l <lft> -p <output prefix>
+$ ./levioSAM lift -a <sam> -l <lft> -p <output prefix> -t <threads>
 ```
 
 The lifted coordinates will be saved to `<output prefix>.sam`.
