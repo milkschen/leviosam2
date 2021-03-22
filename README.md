@@ -133,6 +133,7 @@ To load from a serialized file
 - Convert SAM/BAM records from haplotype to reference.
 - Multithreading support.
 - Recalculate read-pair information.
+- Recalculate `MD:z` and `NM:i` tags with `-m` (optionally).
 
 ## TODO
 
