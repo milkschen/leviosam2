@@ -22,7 +22,7 @@
  * Created: July 2019
  */
 
-const char* VERSION("0.3.1-dev");
+const char* VERSION("0.4");
 
 using NameMap = std::vector<std::pair<std::string,std::string>>;
 using LengthMap = std::unordered_map<std::string,size_t>;
