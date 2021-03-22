@@ -73,7 +73,7 @@ The levioSAM file saved to `<output prefix>.lft`.
 To lift over coordinates given from a SAM/BAM file using a serialized `.lft` file:
 
 ```
-$ ./levioSAM lift -a <sam> -l <lft> -p <output prefix> -t <threads>
+$ ./levioSAM lift -a <sam> -l <lft> -p <output prefix>
 ```
 
 The lifted coordinates will be saved to `<output prefix>.sam`.
@@ -84,7 +84,12 @@ To lift over coordinates without serializing (note: this will be slower):
 $ ./levioSAM lift -a <sam> -v <vcf> -s <sample_name> -p <output prefix>
 ```
 
-To read from stdin, use `-a -` or exclude `-a`.
+Some common optional usages:
+
+- To read from stdin, use `-a -` or exclude `-a`.
+- To use multiple threads, use `-t <threads>`.
+- To lift `NM:i` and `MD:z` tags, add `-m`.
+- To write output as a BAM file, use `-O bam` (the lifted file will be `<output prefix>.bam`).
 
 
 ## Usage (C++)
