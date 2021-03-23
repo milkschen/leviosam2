@@ -7,6 +7,18 @@ set(PROJECT_DESCRIPTION "leviosam: library for moving alignments between aligned
 set(CMAKE_CXX_STANDARD 11)
 
 
+# check for hts divsufsort lsdsl and install if not found
+find_library(HTS_LIB hts)
+if(NOT HTS_LIB)
+    message(FATAL_ERROR "htslib not found. Please make sure libhts.a or libhts.so is found in \$LD_LIBRARY_PATH")
+endif()
+
+find_library(SDSL_LIB sdsl)
+if(NOT SDSL_LIB)
+    message(FATAL_ERROR "sdsl-lite not found. Please make sure libsdsl.a is found in \$LD_LIBRARY_PATH")
+endif()
+
+
 # Download and unpack googletest at configure time
 configure_file(CMakeLists.txt.in googletest-download/CMakeLists.txt)
 execute_process(COMMAND ${CMAKE_COMMAND} -G "${CMAKE_GENERATOR}" .
@@ -35,14 +47,14 @@ add_subdirectory(${CMAKE_CURRENT_BINARY_DIR}/googletest-src
                  EXCLUDE_FROM_ALL)
 
 add_executable(leviosam leviosam.cpp bam_md.c bam_aux.c)
-target_link_libraries(leviosam ${PKG_HTSLIB_LDFLAGS})
+target_link_libraries(leviosam hts)
 target_link_libraries(leviosam sdsl)
 target_link_libraries(leviosam pthread)
 target_link_libraries(leviosam z)
 
 
 add_executable(leviosam_test leviosam_test.cpp)
-target_link_libraries(leviosam_test ${PKG_HTSLIB_LDFLAGS})
+target_link_libraries(leviosam_test hts)
 target_link_libraries(leviosam_test sdsl)
 target_link_libraries(leviosam_test gtest gtest_main)
 
