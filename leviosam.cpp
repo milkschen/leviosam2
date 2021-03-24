@@ -375,7 +375,7 @@ void print_lift_help_msg(){
 
 void print_main_help_msg(){
     fprintf(stderr, "\n");
-    fprintf(stderr, "Program: leviosam (lift over SAM/BAM based on VCF)\n");
+    fprintf(stderr, "Program: leviosam v3.1.1 (lift SAM/BAM alignments using VCF)\n");
     fprintf(stderr, "Version: %s\n", VERSION);
     fprintf(stderr, "Usage:   leviosam <command> [options]\n\n");
     fprintf(stderr, "Commands:serialize   Build a leviosam index.\n");
@@ -453,7 +453,7 @@ int main(int argc, char** argv) {
             case 'h':
                 print_serialize_help_msg();
                 print_lift_help_msg();
-                exit(1);
+                exit(0);
             default:
                 fprintf(stderr, "ignoring option %c\n", c);
                 exit(1);
