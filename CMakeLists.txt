@@ -7,21 +7,16 @@ set(PROJECT_DESCRIPTION "leviosam: library for moving alignments between aligned
 set(CMAKE_CXX_STANDARD 11)
 
 
-# Note: when I installed htslib and sdsl-lite on my Mac using brew,
-# it created pkgconfig directories but no .cmake files or equivalent.
-# I'm not a CMake pro, but I think that means we have to do this in
-# two steps:
-# 1. Set CMAKE_PREFIX_PATH to include the pkgconfig subdirectories
-#    for htslib and sdsl-lite.  Mine is:
-#    CMAKE_PREFIX_PATH=/usr/local/Cellar/sdsl-lite/2.1.1_2/lib/pkgconfig
-# 2. Use the PkgConfig tool in CMake, as below
+# check for hts divsufsort lsdsl and install if not found
+find_library(HTS_LIB hts)
+if(NOT HTS_LIB)
+    message(FATAL_ERROR "htslib not found. Please make sure libhts.a or libhts.so is found in \$LD_LIBRARY_PATH")
+endif()
 
-# htslib
-find_package(PkgConfig REQUIRED)
-pkg_search_module(PKG_HTSLIB REQUIRED htslib)
-
-# sdsl
-pkg_search_module(PKG_LIBDIVSUFSORT REQUIRED libdivsufsort)
+find_library(SDSL_LIB sdsl)
+if(NOT SDSL_LIB)
+    message(FATAL_ERROR "sdsl-lite not found. Please make sure libsdsl.a is found in \$LD_LIBRARY_PATH")
+endif()
 
 
 # Download and unpack googletest at configure time
@@ -52,15 +47,15 @@ add_subdirectory(${CMAKE_CURRENT_BINARY_DIR}/googletest-src
                  EXCLUDE_FROM_ALL)
 
 add_executable(leviosam leviosam.cpp bam_md.c bam_aux.c)
-target_link_libraries(leviosam ${PKG_HTSLIB_LDFLAGS})
-target_link_libraries(leviosam sdsl)
+target_link_libraries(leviosam ${HTS_LIB})
+target_link_libraries(leviosam ${SDSL_LIB})
 target_link_libraries(leviosam pthread)
 target_link_libraries(leviosam z)
 
 
 add_executable(leviosam_test leviosam_test.cpp)
-target_link_libraries(leviosam_test ${PKG_HTSLIB_LDFLAGS})
-target_link_libraries(leviosam_test sdsl)
+target_link_libraries(leviosam_test ${HTS_LIB})
+target_link_libraries(leviosam_test ${SDSL_LIB})
 target_link_libraries(leviosam_test gtest gtest_main)
 
 add_test(NAME leviosam_test COMMAND leviosam_test
@@ -68,5 +63,5 @@ add_test(NAME leviosam_test COMMAND leviosam_test
 )
 
 INSTALL(TARGETS leviosam DESTINATION bin)
-
+INSTALL(FILES leviosam.hpp DESTINATION include)
 
