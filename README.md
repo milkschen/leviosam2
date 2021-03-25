@@ -59,7 +59,20 @@ $ ./levioSAM lift -a <sam> -l <lft> -p <output prefix>
 ```
 
 
-## Usage (C++)
+## Example (Command line)
+
+The `testdata` directory contains some toy data that you can play around with. It also
+contains a `.lft` file that will let you lift alignments from the [major allele reference](https://doi.org/10.1371/journal.pgen.1002280) to GRCh38.
+
+Here's an example using a small set of Bowtie 2 paired-end alignments against the major allele reference
+
+```
+leviosam -a testdata/bt2-paired_end-major.sam -l testdata/wg-maj.lft > out.sam
+```
+
+
+
+## Example (C++)
 
 Use the `LiftMap` class to generate lift-over information between a reference genome and an alternative genotype.
 
