@@ -20,7 +20,7 @@ to the reference sequence
 The easiest way to install levioSAM is by using [Conda](https://docs.conda.io/en/latest/):
 
 ```
-conda install -c bioconda leviosam
+conda install -c conda-forge -c bioconda leviosam
 ```
 
 We support a variety of other methods for getting levioSAM to work, including Docker, CMake and Make. See

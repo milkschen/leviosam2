@@ -14,7 +14,7 @@ This is our recommended method of installing levioSAM.
 To install, simpy run this command:
 
 ```
-conda install -c bioconda leviosam
+conda install -c conda-forge -c bioconda leviosam
 ```
 
 ## Docker
