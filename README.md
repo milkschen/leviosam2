@@ -35,7 +35,7 @@ bcftools norm <VCF> > <output VCF>
 
 Run this command to lift your alignments:
 ```
-$ ./levioSAM lift -t <nthreads> -a <sam> -v <vcf> -s <sample_name> -p <output prefix>
+$ ./levioSAM lift -t <nthreads> -a <sam> -v <vcf> -s <sample_name> -g <haplotype (0 or 1)> -p <output prefix>
 ```
 To read from stdin, use `-a -` or exclude `-a`.
 
