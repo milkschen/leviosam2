@@ -19,6 +19,12 @@ conda install -c bioconda leviosam
 
 ## Docker
 
+You can obtain a Docker image of the latest version from Docker hub:
+
+```
+docker pull alshai/leviosam
+```
+
 ## CMake and Make
 
 
