@@ -375,7 +375,7 @@ void print_lift_help_msg(){
 
 void print_main_help_msg(){
     fprintf(stderr, "\n");
-    fprintf(stderr, "Program: leviosam v3.1.1 (lift SAM/BAM alignments using VCF)\n");
+    fprintf(stderr, "Program: leviosam (lift SAM/BAM alignments using VCF)\n");
     fprintf(stderr, "Version: %s\n", VERSION);
     fprintf(stderr, "Usage:   leviosam <command> [options]\n\n");
     fprintf(stderr, "Commands:serialize   Build a leviosam index.\n");
