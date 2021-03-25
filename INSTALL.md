@@ -29,9 +29,13 @@ Make sure the following prerequisite libraries are installed on your system.
 
 An easy way to install these dependencies is to use your OS's existing package system:
 ```
-apt-get install htslib sdsl-lite # Debian/Ubuntu
-yum install htslib sdsl-lite # RedHat/fedora
+apt-get install libhts-dev libsdsl-dev # Debian/Ubuntu
 brew tap brewsci/bio; brew install htslib sdsl-lite # MacOS
+```
+
+If using RedHat or Fedora, then you must install sdsl-lite manually. But you can install htslib through yum:
+```
+yum install htslib
 ```
 
 Or you can choose to install them manually by following the install instructions on their respective pages.
