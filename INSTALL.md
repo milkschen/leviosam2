@@ -73,7 +73,8 @@ cmake -DHTS_LIB_DIR=<htslib lib directory> \
 Update `LD_LIBRARY_PATH` and `CPLUS_INCLUDE_PATH` paths after installing sdsl-lite and htslib and install with `make`:
 
 ```
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:<path/to/lib>
-export CPLUS_INCLUDE_PATH=$CPLUS_INCLUDE_PATH:<path/to/include>
+export LD_LIBRARY_PATH=<path/to/lib>:$LD_LIBRARY_PATH
+export C_INCLUDE_PATH=<path/to/include>:$C_INCLUDE_PATH
+export CPLUS_INCLUDE_PATH=<path/to/include>:$CPLUS_INCLUDE_PATH
 make
 ```
