@@ -1,6 +1,6 @@
-# Alignment with alternative reference genomes
+# Alignment with variant-aware reference genomes
 
-In this tutorial, we will demonstrate an alignment pipeline that utilized an alternative reference genome and `levioSAM` to enchance accuracy.
+In this tutorial, we will demonstrate an alignment pipeline that utilized an variant-aware reference genome and `levioSAM` to enchance accuracy.
 We use 8 threads whenever the program supports multi-threaded processing.
 
 ## Software and datasets involved in this pipeline
