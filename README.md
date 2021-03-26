@@ -62,15 +62,15 @@ $ ./levioSAM lift -a <sam> -l <lft> -p <output prefix>
 ## Example (Command line)
 
 The `testdata` directory contains some toy data that you can play around with. It also
-contains a `.lft` file that will let you lift alignments from the [major allele reference](https://doi.org/10.1371/journal.pgen.1002280) to GRCh38.
+contains a `.lft` file that will let you lift alignments from the [major-allele reference](https://doi.org/10.1371/journal.pgen.1002280) to GRCh38.
 
-Here's an example using a small set of Bowtie 2 paired-end alignments against the major allele reference
+Here's an example using a small set of Bowtie 2 paired-end alignments against the major-allele reference
 
 ```
 leviosam -a testdata/bt2-paired_end-major.sam -l testdata/wg-maj.lft > out.sam
 ```
 
-
+We provide instructions of how to use levioSAM in common variant-aware reference pipelines (major-allele reference and personalized reference) in the [levioSAM wiki](https://github.com/alshai/levioSAM/wiki/Alignment-with-variant-aware-reference-genomes).
 
 ## Example (C++)
 
