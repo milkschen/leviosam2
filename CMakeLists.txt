@@ -6,16 +6,33 @@ set(PROJECT_URL "https://github.com/alshai/leviosam")
 set(PROJECT_DESCRIPTION "leviosam: library for moving alignments between aligned genomes")
 set(CMAKE_CXX_STANDARD 11)
 
+set(HTS_LIB_DIR "" CACHE FILEPATH "path to htslib lib dir")
+set(HTS_INC_DIR "" CACHE FILEPATH "path to htslib include dir")
+set(SDSL_LIB_DIR "" CACHE FILEPATH "path to sdsl-lite lib dir")
+set(SDSL_INC_DIR "" CACHE FILEPATH "path to sdsl-lite include dir")
 
-# check for hts divsufsort lsdsl and install if not found
+if(EXISTS ${HTS_INC_DIR})
+    include_directories(${HTS_INC_DIR})
+endif()
+if(EXISTS ${SDSL_INC_DIR})
+    include_directories(${SDSL_INC_DIR})
+endif()
+if(EXISTS ${HTS_LIB_DIR})
+    link_directories(${HTS_LIB_DIR})
+endif()
+if(EXISTS ${SDSL_LIB_DIR})
+    link_directories(${SDSL_LIB_DIR})
+endif()
+
+
 find_library(HTS_LIB hts)
 if(NOT HTS_LIB)
-    message(FATAL_ERROR "htslib not found. Please make sure libhts.a or libhts.so is found in \$LD_LIBRARY_PATH")
+    message(FATAL_ERROR "htslib library not found. Please specify -D HTS_LIB_DIR and -D HTS_INC_DIR in the CMake command")
 endif()
 
 find_library(SDSL_LIB sdsl)
 if(NOT SDSL_LIB)
-    message(FATAL_ERROR "sdsl-lite not found. Please make sure libsdsl.a is found in \$LD_LIBRARY_PATH")
+    message(FATAL_ERROR "sdsl-lite library not found. Please specify -D SDSL_LIB_DIR and -D SDSL_INC_DIR in the CMake command")
 endif()
 
 
