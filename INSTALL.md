@@ -78,3 +78,11 @@ export C_INCLUDE_PATH=<path/to/include>:$C_INCLUDE_PATH
 export CPLUS_INCLUDE_PATH=<path/to/include>:$CPLUS_INCLUDE_PATH
 make
 ```
+
+## Test
+
+We provide an end-to-end test and a set of unit tests for levioSAM.
+
+- The end-to-end test can be run with `python leviosam-test.py`. This test includes running levioSAM on several test files in `testdata`. We also use `picard` to test if the lifted SAM files are valid.
+
+- The unit test can be run `cd build; ctest` if you use cmake to build levioSAM; or `make gtest; cd testdata; ../gtest` if you use make to build levioSAM.
