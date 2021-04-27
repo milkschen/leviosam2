@@ -85,9 +85,9 @@ class Lift {
     }
 
     // translate coordinate in s1-space to s2-space
-    size_t s1_to_s2(size_t p) const {
-        return del_rs0(ins_sls0(p+1));
-    }
+    // size_t s1_to_s2(size_t p) const {
+    //     return del_rs0(ins_sls0(p+1));
+    // }
 
 
     /* Core function to lift a CIGAR string from s1 to s2 space.
@@ -276,9 +276,9 @@ class Lift {
     }
 
     // returns size of s2 sequence
-    size_t s2_len() {
-        return del[del.size() - 1] ? del_rs0(del.size() - 1) : del_rs0(del.size() - 1) + 1;
-    }
+    // size_t s2_len() {
+    //     return del[del.size() - 1] ? del_rs0(del.size() - 1) : del_rs0(del.size() - 1) + 1;
+    // }
 
     // saves to stream
     size_t serialize(std::ofstream& out) const {
@@ -301,9 +301,9 @@ class Lift {
 
     void init_rs_sls() {
         sdsl::util::init_support(ins_rs0, &ins);
-        sdsl::util::init_support(del_rs0, &del);
+        // sdsl::util::init_support(del_rs0, &del);
         sdsl::util::init_support(snp_rs0, &snp);
-        sdsl::util::init_support(ins_sls0, &ins);
+        // sdsl::util::init_support(ins_sls0, &ins);
         sdsl::util::init_support(del_sls0, &del);
         sdsl::util::init_support(snp_sls0, &snp);
     }
@@ -312,9 +312,9 @@ class Lift {
     sdsl::sd_vector<> del;
     sdsl::sd_vector<> snp;
     sdsl::sd_vector<>::rank_0_type ins_rs0;
-    sdsl::sd_vector<>::rank_0_type del_rs0;
+    // sdsl::sd_vector<>::rank_0_type del_rs0;
     sdsl::sd_vector<>::rank_0_type snp_rs0;
-    sdsl::sd_vector<>::select_0_type ins_sls0;
+    // sdsl::sd_vector<>::select_0_type ins_sls0;
     sdsl::sd_vector<>::select_0_type del_sls0;
     sdsl::sd_vector<>::select_0_type snp_sls0;
 };
