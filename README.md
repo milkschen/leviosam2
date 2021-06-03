@@ -26,6 +26,7 @@ conda install -c conda-forge -c bioconda leviosam
 We support a variety of other methods for getting levioSAM to work, including Docker, CMake and Make. See
 [INSTALL.md](INSTALL.md) for more details.
 
+
 ## Usage (command line)
 
 We highly suggest you normalize and left-align your VCF file before using it to lift your alignments:
@@ -35,7 +36,7 @@ bcftools norm <VCF> > <output VCF>
 
 Run this command to lift your alignments:
 ```
-$ ./levioSAM lift -t <nthreads> -a <sam> -v <vcf> -s <sample_name> -g <haplotype (0 or 1)> -p <output prefix>
+levioSAM lift -t <nthreads> -a <sam> -v <vcf> -s <sample_name> -g <haplotype (0 or 1)> -p <output prefix>
 ```
 
 `<sample_name>` is the name of the individual in your VCF whose genotype you want to use for the lift-over.
@@ -48,13 +49,13 @@ will be output to `stdout`.
 You can speed up the lift-over by serializing the lift-over structure beforehand to avoid re-parsing the entire VCF. This
 is useful if you want to use the same VCF to run the command multiple times.
 ```
-$ ./levioSAM serialize -v <vcf> -s <sample_name> -p <output prefix>
+levioSAM serialize -v <vcf> -s <sample_name> -p <output prefix>
 ```
 The levioSAM file will saved to `<output prefix>.lft`.
 
 You can then pass the serialized structure into lift-over by using the `-l` option instead of the `-v` option:
 ```
-$ ./levioSAM lift -a <sam> -l <lft> -p <output prefix>
+levioSAM lift -a <sam> -l <lft> -p <output prefix>
 ```
 
 A list of common options:
@@ -64,19 +65,29 @@ A list of common options:
 - To lift `NM:i` and `MD:z` tags, add `-m` (this will be slow if your alignments are not sorted).
 - To write output as a BAM file, use `-O bam` (the lifted file will be `<output prefix>.bam`).
 
-## Example (Command line)
 
-The `testdata` directory contains some toy data that you can play around with. It also
-contains a `.lft` file that will let you lift alignments from the [major-allele reference](https://doi.org/10.1371/journal.pgen.1002280) to GRCh38.
-Though we recommend you build your own `.lft` file from a VCF for analyses.
+## Example (with pre-built indexes)
 
-Here's an example using a small set of Bowtie 2 paired-end alignments against the major-allele reference
+LevioSAM can be easily intergrated with aligners such as Bowtie 2 and bwa-mem.
+We provide the Bowtie 2 (which are compatible with Bowtie, too!) and levioSAM indexes for the major-allele references based on the 1000 Genomes Project. 
+Please navigate to the [bowtie-majref](https://github.com/BenLangmead/bowtie-majref) repo for more comprehensive description and more resources.
+The following example uses Bowtie 2 and GRCh38:
 
 ```
-leviosam -a testdata/bt2-paired_end-major.sam -l testdata/wg-maj.lft > out.sam
+mkdir grch38_1kgmaj
+cd grch38_1kgmaj
+wget https://genome-idx.s3.amazonaws.com/bt/grch38_1kgmaj_snvindels_bt2.zip
+READ1="../testdata/raw_reads/paired_end_1.fq"
+READ2="../testdata/raw_reads/paired_end_2.fq"
+THREADS=8
+bowtie2 -p ${THREADS} -x grch38_1kgmaj_snvindels -1 ${READ1} -2 ${READ2} | leviosam lift -l grch38_1kgmaj_snvindels.lft -t ${THREADS} | samtools sort -@ ${THREADS} -O bam -o test_pe_reads-grch38_1kgmaj.sorted.bam
+# Use this for an unsorted SAM
+# bowtie2 -p ${THREADS} -x grch38_1kgmaj_snvindels -1 ${READ1} -2 ${READ2} | leviosam lift -l grch38_1kgmaj_snvindels.lft -t ${THREADS} -p test_pe_reads-grch38_1kgmaj
 ```
 
-We provide instructions of how to use levioSAM in common variant-aware reference pipelines (major-allele reference and personalized reference) in the [levioSAM wiki](https://github.com/alshai/levioSAM/wiki/Alignment-with-variant-aware-reference-genomes).
+The resulting BAM file uses the GRCh38 coordiante system. It can be further processed with downstream software as a normal BAM file.
+
+We provide more detailed instructions of how to use levioSAM in common variant-aware reference pipelines (major-allele reference and personalized reference) in the [levioSAM wiki](https://github.com/alshai/levioSAM/wiki/Alignment-with-variant-aware-reference-genomes).
 
 ## Example (C++)
 
@@ -129,6 +140,6 @@ To load from a serialized file
     in.close();
 ```
 
-## Publications
+## Publication
 
-Mun T., Chen N., Langmead B. ["LevioSAM: Fast lift-over of alternate reference alignments"](https://doi.org/10.1101/2021.02.05.429867). [BioRxiv](https://www.biorxiv.org/). 2021
+Taher Mun, Nae-Chyun Chen, Ben Langmead, LevioSAM: Fast lift-over of variant-aware reference alignments, _Bioinformatics_, 2021;, btab396, https://doi.org/10.1093/bioinformatics/btab396
