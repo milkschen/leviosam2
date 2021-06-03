@@ -69,12 +69,14 @@ A list of common options:
 ## Example (with pre-built indexes)
 
 LevioSAM can be easily intergrated with aligners such as Bowtie 2 and bwa-mem.
-We released the Bowtie 2 (which are compatible with Bowtie, too!) and levioSAM indexes for the major-allele references based on the 1000 Genomes Project. 
+We provide the Bowtie 2 (which are compatible with Bowtie, too!) and levioSAM indexes for the major-allele references based on the 1000 Genomes Project. 
+Please navigate to the [bowtie-majref](https://github.com/BenLangmead/bowtie-majref) repo for more comprehensive description and more resources.
+The following example uses Bowtie 2 and GRCh38:
 
 ```
 mkdir grch38_1kgmaj
 cd grch38_1kgmaj
-wget <pre_built_indexes>
+wget https://genome-idx.s3.amazonaws.com/bt/grch38_1kgmaj_snvindels_bt2.zip
 READ1="../testdata/raw_reads/paired_end_1.fq"
 READ2="../testdata/raw_reads/paired_end_2.fq"
 THREADS=8
@@ -83,7 +85,7 @@ bowtie2 -p ${THREADS} -x grch38_1kgmaj_snvindels -1 ${READ1} -2 ${READ2} | levio
 # bowtie2 -p ${THREADS} -x grch38_1kgmaj_snvindels -1 ${READ1} -2 ${READ2} | leviosam lift -l grch38_1kgmaj_snvindels.lft -t ${THREADS} -p test_pe_reads-grch38_1kgmaj
 ```
 
-The resulting BAM file uses the GRCh38 coordiante system . It can be further processed with downstream software, e.g. a variant caller.
+The resulting BAM file uses the GRCh38 coordiante system. It can be further processed with downstream software as a normal BAM file.
 
 We provide more detailed instructions of how to use levioSAM in common variant-aware reference pipelines (major-allele reference and personalized reference) in the [levioSAM wiki](https://github.com/alshai/levioSAM/wiki/Alignment-with-variant-aware-reference-genomes).
 
