@@ -77,6 +77,7 @@ The following example uses Bowtie 2 and GRCh38:
 mkdir grch38_1kgmaj
 cd grch38_1kgmaj
 wget https://genome-idx.s3.amazonaws.com/bt/grch38_1kgmaj_snvindels_bt2.zip
+unzip grch38_1kgmaj_snvindels_bt2.zip
 READ1="../testdata/raw_reads/paired_end_1.fq"
 READ2="../testdata/raw_reads/paired_end_2.fq"
 THREADS=8
