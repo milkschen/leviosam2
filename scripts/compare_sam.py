@@ -26,6 +26,10 @@ def parse_args():
         '-p', '--allowed_pos_diff', default=1, type=int,
         help='Allowed bases of positional difference. [1]'
     )
+    parser.add_argument(
+        '-m', '--min_mapq', default=0, type=int,
+        help='Min MAPQ to consider. Alignments with lower MAPQ are considered as invalid. [0]'
+    )
     args = parser.parse_args()
     return args
 
@@ -41,7 +45,7 @@ class Summary():
         self.unmapped_records = [[], []]
         self.invalid_records = [[], []] # MAPQ = 255
 
-    def update(self, query, baseline):
+    def update(self, query, baseline, aln_filter):
         try:
             is_unmapped_or_invalid = False
             if query.is_unmapped:
@@ -53,10 +57,10 @@ class Summary():
             if is_unmapped_or_invalid:
                 return
             # Mapped but invalid
-            if query.mapping_quality == 255:
+            if query.mapping_quality == 255 or query.mapping_quality < aln_filter['MAPQ']:
                 self.invalid_records[0].append(query.query_name + ('_1' if query.is_read1 else '_2'))
                 is_unmapped_or_invalid = True
-            if baseline.mapping_quality == 255:
+            if baseline.mapping_quality == 255 or baseline.mapping_quality < aln_filter['MAPQ']:
                 self.invalid_records[1].append(baseline.query_name + ('_1' if baseline.is_read1 else '_2'))
                 is_unmapped_or_invalid = True
             if is_unmapped_or_invalid:
@@ -136,10 +140,13 @@ def compare_sam(args):
     summary = Summary(args.allowed_pos_diff)
     dict_query = read_sam_as_dict(args.input_query)
     dict_baseline = read_sam_as_dict(args.input_baseline)
+    aln_filter = {'MAPQ': args.min_mapq}
     for i_q, [name, [first_seg, second_seg]] in enumerate(dict_query.items()):
         if dict_baseline.get(name):
-            summary.update(first_seg, dict_baseline[name][0])
-            summary.update(second_seg, dict_baseline[name][1])
+            summary.update(
+                query=first_seg, baseline=dict_baseline[name][0], aln_filter=aln_filter)
+            summary.update(
+                query=second_seg, baseline=dict_baseline[name][1], aln_filter=aln_filter)
     summary.report(args.out, args.num_err_printed)
 
 
