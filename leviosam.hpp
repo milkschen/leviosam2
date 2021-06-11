@@ -9,7 +9,7 @@
 #include <sdsl/bit_vectors.hpp>
 #include <sdsl/util.hpp>
 
-// #include "chain.hpp"
+#include "chain.hpp"
 
 /*
  * liftover.hpp

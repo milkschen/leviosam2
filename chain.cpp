@@ -108,13 +108,14 @@ bool ChainFile::interval_map_sanity_check() {
  */
 int ChainFile::get_start_rank(std::string contig, int pos) {
     if (pos < 0) return -1;
-    std::unordered_map<std::string, sdsl::sd_vector<>>::const_iterator find_start = this->start_map.find(contig);
+    std::unordered_map<std::string, sdsl::sd_vector<>>::const_iterator find_start = 
+        this->start_map.find(contig);
     if (find_start == this->start_map.end()) {
         return -1;
     }
     if (pos >= start_rs1_map[contig].size())
         pos = start_rs1_map[contig].size() - 1;
-    return start_rs1_map[contig](pos);
+    return start_rs1_map[contig](pos) - 1;
 }
 
 /* Get the rank in the end bitvector at contig[pos]
@@ -131,7 +132,7 @@ int ChainFile::get_end_rank(std::string contig, int pos) {
     }
     if (pos >= end_rs1_map[contig].size())
         pos = end_rs1_map[contig].size() - 1;
-    return end_rs1_map[contig](pos);
+    return end_rs1_map[contig](pos) - 1;
 }
 
 /* Init rank support for all start/end bitvectors. */
@@ -194,7 +195,8 @@ void ChainFile::parse_chain_line(
         int t_int_start = target_offset;
         int t_int_end = target_offset + stoi(vec[0]);
         // Set bitvectors
-        this->start_bv_map[source][s_int_start] = 1;
+        if (s_int_start > 0)
+            this->start_bv_map[source][s_int_start-1] = 1;
         this->end_bv_map[source][s_int_end] = 1;
 
         if (this->verbose > 1)
@@ -228,6 +230,20 @@ void ChainFile::parse_chain_line(
     }
 }
 
+
+void ChainFile::show_interval_info(std::string contig, int pos) {
+    int rank = this->get_start_rank(contig, pos);
+    this->interval_map[contig][rank].debug_print_interval();
+}
+
+int ChainFile::get_lifted_pos(std::string contig, int pos) {
+    int rank = this->get_start_rank(contig, pos);
+    std::cerr << this->interval_map[contig][rank].target << "\n";
+    int lifted_pos = pos + this->interval_map[contig][rank].offset;
+    std::cerr << lifted_pos << "\n";
+    return lifted_pos;
+}
+
 ChainFile* chain::chain_open(std::string fname, int verbose) {
     ChainFile *file = new ChainFile(fname, verbose);
 
@@ -240,10 +256,24 @@ ChainFile* chain::chain_open(std::string fname, int verbose) {
     // TODO
     std::cerr << "TEST_RANK\n";
     std::cerr << file->get_start_rank("chrM", 15000) << "\n";
-    std::cerr << file->get_start_rank("chr1", 16000000) << "\n";
-    std::cerr << file->get_start_rank("chrY", 6436563) << "\n";
-    std::cerr << file->get_start_rank("chrY", 9741965) << "\n";
-    std::cerr << file->get_start_rank("chrZ", 6436563) << "\n";
+    // std::cerr << file->get_start_rank("chrY", 6436563) << "\n";
+    // std::cerr << file->get_start_rank("chrY", 9741965) << "\n";
+    // std::cerr << file->get_start_rank("chrZ", 6436563) << "\n";
+
+    std::cerr << "TEST1\n";
+    int test_pos1 = 16000000;
+    int test_rank1 = file->get_start_rank("chr1", test_pos1);
+    std::cerr << "rank(" << test_pos1 << ")=" << test_rank1 << "\n";
+    file->show_interval_info("chr1", test_pos1);
+    file->get_lifted_pos("chr1", test_pos1);
+
+    std::cerr << "TEST2\n";
+    int test_pos2 = 674047;
+    int test_rank2 = file->get_start_rank("chr1", test_pos2);
+    std::cerr << "rank(" << test_pos2 << ")=" << test_rank2 << "\n";
+    file->show_interval_info("chr1", test_pos2);
+    file->get_lifted_pos("chr1", test_pos2);
+
     std::cerr << "TEST_RANK_END\n";
 
     return file;

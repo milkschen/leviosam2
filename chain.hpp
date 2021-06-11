@@ -55,6 +55,8 @@ class ChainFile {
     bool interval_map_sanity_check();
     int get_start_rank(std::string contig, int pos);
     int get_end_rank(std::string contig, int pos);
+    void show_interval_info(std::string contig, int pos);
+    int get_lifted_pos(std::string contig, int pos);
 
     private:
     void init_rs();

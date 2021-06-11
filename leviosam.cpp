@@ -310,9 +310,11 @@ lift::LiftMap lift_from_chain(lift_opts args) {
         print_serialize_help_msg();
         exit(1);
     }
+    // chain::ChainFile cfp (args.chain_fname, args.verbose);
+    // return lift::LiftMap(&cfp);
     chain::ChainFile* cfp = chain::chain_open(args.chain_fname, args.verbose);
-    // chain::bcf_hdr_t* hdr = bcf_hdr_read(fp);
     return lift::LiftMap(cfp);
+    // chain::bcf_hdr_t* hdr = bcf_hdr_read(fp);
 }
 
 
@@ -478,9 +480,9 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
-    // std::cerr << "TEST_CHAIN\n";
-    // lift_from_chain(args);
-    // exit(1);
+    std::cerr << "TEST_CHAIN\n";
+    lift_from_chain(args);
+    exit(1);
 
     if (!strcmp(argv[optind], "lift")) {
         lift_run(args);

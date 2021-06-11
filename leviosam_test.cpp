@@ -2,6 +2,7 @@
 #include <unistd.h>
 #include <string>
 #include "leviosam.hpp"
+#include "chain.hpp"
 #include "gtest/gtest.h"
 
 //
@@ -272,4 +273,18 @@ TEST(LiftMap, SimpleSplicedBamCigarLift) {
     EXPECT_EQ(test_cigar[0], bam_cigar_gen( 8, BAM_CMATCH));
     EXPECT_EQ(test_cigar[1], bam_cigar_gen( 10, BAM_CREF_SKIP));
     EXPECT_EQ(test_cigar[2], bam_cigar_gen( 8, BAM_CMATCH));
+}
+
+
+/* Chain tests */
+TEST(ChainFile, SimpleRankAndLift) {
+    chain::ChainFile file ("small.chain", 0);
+    //chain::ChainFile *file = new chain::ChainFile("small.chain", 0);
+
+    int pos1 = 674047;
+    int rank1 = file.get_start_rank("chr1", pos1);
+    std::cerr << "rank(" << pos1 << ")=" << rank1 << "\n";
+    // file->show_interval_info("chr1", pos1);
+    EXPECT_EQ(rank1, 0);
+    EXPECT_EQ(file.get_lifted_pos("chr1", pos1), 100272);
 }
