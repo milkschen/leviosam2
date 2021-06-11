@@ -6,22 +6,34 @@ set(PROJECT_URL "https://github.com/alshai/leviosam")
 set(PROJECT_DESCRIPTION "leviosam: library for moving alignments between aligned genomes")
 set(CMAKE_CXX_STANDARD 11)
 
+set(HTS_LIB_DIR "" CACHE FILEPATH "path to htslib lib dir")
+set(HTS_INC_DIR "" CACHE FILEPATH "path to htslib include dir")
+set(SDSL_LIB_DIR "" CACHE FILEPATH "path to sdsl-lite lib dir")
+set(SDSL_INC_DIR "" CACHE FILEPATH "path to sdsl-lite include dir")
 
-# Note: when I installed htslib and sdsl-lite on my Mac using brew,
-# it created pkgconfig directories but no .cmake files or equivalent.
-# I'm not a CMake pro, but I think that means we have to do this in
-# two steps:
-# 1. Set CMAKE_PREFIX_PATH to include the pkgconfig subdirectories
-#    for htslib and sdsl-lite.  Mine is:
-#    CMAKE_PREFIX_PATH=/usr/local/Cellar/sdsl-lite/2.1.1_2/lib/pkgconfig
-# 2. Use the PkgConfig tool in CMake, as below
+if(EXISTS ${HTS_INC_DIR})
+    include_directories(${HTS_INC_DIR})
+endif()
+if(EXISTS ${SDSL_INC_DIR})
+    include_directories(${SDSL_INC_DIR})
+endif()
+if(EXISTS ${HTS_LIB_DIR})
+    link_directories(${HTS_LIB_DIR})
+endif()
+if(EXISTS ${SDSL_LIB_DIR})
+    link_directories(${SDSL_LIB_DIR})
+endif()
 
-# htslib
-find_package(PkgConfig REQUIRED)
-pkg_search_module(PKG_HTSLIB REQUIRED htslib)
 
-# sdsl
-pkg_search_module(PKG_LIBDIVSUFSORT REQUIRED libdivsufsort)
+find_library(HTS_LIB hts)
+if(NOT HTS_LIB)
+    message(FATAL_ERROR "htslib library not found. Please specify -D HTS_LIB_DIR and -D HTS_INC_DIR in the CMake command")
+endif()
+
+find_library(SDSL_LIB sdsl)
+if(NOT SDSL_LIB)
+    message(FATAL_ERROR "sdsl-lite library not found. Please specify -D SDSL_LIB_DIR and -D SDSL_INC_DIR in the CMake command")
+endif()
 
 
 # Download and unpack googletest at configure time
@@ -51,15 +63,16 @@ add_subdirectory(${CMAKE_CURRENT_BINARY_DIR}/googletest-src
                  ${CMAKE_CURRENT_BINARY_DIR}/googletest-build
                  EXCLUDE_FROM_ALL)
 
-add_executable(leviosam leviosam.cpp)
-target_link_libraries(leviosam ${PKG_HTSLIB_LDFLAGS})
-target_link_libraries(leviosam sdsl)
+add_executable(leviosam leviosam.cpp bam_md.c bam_aux.c)
+target_link_libraries(leviosam ${HTS_LIB})
+target_link_libraries(leviosam ${SDSL_LIB})
 target_link_libraries(leviosam pthread)
+target_link_libraries(leviosam z)
 
 
 add_executable(leviosam_test leviosam_test.cpp)
-target_link_libraries(leviosam_test ${PKG_HTSLIB_LDFLAGS})
-target_link_libraries(leviosam_test sdsl)
+target_link_libraries(leviosam_test ${HTS_LIB})
+target_link_libraries(leviosam_test ${SDSL_LIB})
 target_link_libraries(leviosam_test gtest gtest_main)
 
 add_test(NAME leviosam_test COMMAND leviosam_test
@@ -67,5 +80,5 @@ add_test(NAME leviosam_test COMMAND leviosam_test
 )
 
 INSTALL(TARGETS leviosam DESTINATION bin)
-
+INSTALL(FILES leviosam.hpp DESTINATION include)
 

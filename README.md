@@ -1,113 +1,128 @@
-# levioSAM lifts alignments to the reference genome
+# levioSAM lifts variant-aware alignments to the reference genome
 
 Use a VCF file containing alternative haplotype information to lift SAM/BAM alignments
-from that haplotype to the reference sequence
-
-## Building
-
-First, clone the repository:
-
-```
-git clone https://github.com/alshai/levioSAM
-```
-
-### Dependencies
-
-- [sdsl-lite](https://github.com/simongog/sdsl-lite)
-- [htslib](https://github.com/samtools/htslib)
-
-You can install these dependencies using conda:
-
-```
-conda install -c conda-forge sdsl-lite
-conda install -c bioconda htslib
-```
-
-Or homebrew (for Macs)
-```
-brew install htslib
-brew install sdsl-lite
-```
-
-[CMake](https://cmake.org) or `make` can be used to build `levioSAM`.
+to the reference sequence
 
 
-### Using CMake
+## Supported Features:
 
-Our `CMakeLists.txt` file expectes to use `PkgConfig` to load the libraries; you may need to add the `pkgconfig`
-subdirectories of the `sdsl-lite` and `libhts` libraries to the `CMAKE_PREFIX_PATH` environment variable yourself.
+- Serialization of VCF file for faster parsing
+
+- Converting SAM/BAM records from haplotype to reference, including:
+    - CIGAR string
+    - MD:Z and NM:i tag
+    - paired read information
+
+- Multithreading support
+
+## Building and installation
+
+The easiest way to install levioSAM is by using [Conda](https://docs.conda.io/en/latest/):
 
 ```
-mkdir build
-cd build
-cmake ..
-make
+conda install -c conda-forge -c bioconda leviosam
 ```
 
-### Using make
-
-Update `LD_LIBRARY_PATH` and `CPLUS_INCLUDE_PATH` paths after installing sdsl-lite and htslib and install with `make`:
-
-```
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:<path/to/lib>
-export CPLUS_INCLUDE_PATH=$CPLUS_INCLUDE_PATH:<path/to/include>
-make
-```
+We support a variety of other methods for getting levioSAM to work, including Docker, CMake and Make. See
+[INSTALL.md](INSTALL.md) for more details.
 
 
 ## Usage (command line)
 
-**DISCLAIMER**: normalize and left-align your VCF files before lifting alignments!
-
-- We suggest using `bcftools norm` to do this.
-
-To serialize lift-over information between a reference sequence and given alternative sequence described in a VCF file:
-
+We highly suggest you normalize and left-align your VCF file before using it to lift your alignments:
 ```
-$ ./levioSAM serialize -v <vcf> -s <sample_name> -p <output prefix>
+bcftools norm <VCF> > <output VCF>
 ```
 
-The levioSAM file saved to `<output prefix>.lft`.
-
-To lift over coordinates given from a SAM/BAM file using a serialized `.lft` file:
-
+Run this command to lift your alignments:
 ```
-$ ./levioSAM lift -a <sam> -l <lft> -p <output prefix>
+levioSAM lift -t <nthreads> -a <sam> -v <vcf> -s <sample_name> -g <haplotype (0 or 1)> -p <output prefix>
 ```
 
-The lifted coordinates will be saved to `<output prefix>.sam`.
+`<sample_name>` is the name of the individual in your VCF whose genotype you want to use for the lift-over.
+if `-s` is not specified, then it will be assumed that all the alternate alleles in all VCF are present in the variant-aware
+reference.
 
-To lift over coordinates without serializing (note: this will be slower):
+The lifted coordinates will be saved in SAM format to `<output prefix>.sam`. If `-p` is not specified then the SAM file
+will be output to `stdout`.
+
+You can speed up the lift-over by serializing the lift-over structure beforehand to avoid re-parsing the entire VCF. This
+is useful if you want to use the same VCF to run the command multiple times.
+```
+levioSAM serialize -v <vcf> -s <sample_name> -p <output prefix>
+```
+The levioSAM file will saved to `<output prefix>.lft`.
+
+You can then pass the serialized structure into lift-over by using the `-l` option instead of the `-v` option:
+```
+levioSAM lift -a <sam> -l <lft> -p <output prefix>
+```
+
+A list of common options:
+
+- To read from stdin, use `-a -` or exclude `-a`.
+- To use multiple threads, use `-t <threads>`.
+- To lift `NM:i` and `MD:z` tags, add `-m` (this will be slow if your alignments are not sorted).
+- To write output as a BAM file, use `-O bam` (the lifted file will be `<output prefix>.bam`).
+
+
+## Example (with pre-built indexes)
+
+LevioSAM can be easily intergrated with aligners such as Bowtie 2 and bwa-mem.
+We provide the Bowtie 2 (which are compatible with Bowtie, too!) and levioSAM indexes for the major-allele references based on the 1000 Genomes Project. 
+Please navigate to the [bowtie-majref](https://github.com/BenLangmead/bowtie-majref) repo for more comprehensive description and more resources.
+The following example uses Bowtie 2 and GRCh38:
 
 ```
-$ ./levioSAM lift -a <sam> -v <vcf> -s <sample_name> -p <output prefix>
+mkdir grch38_1kgmaj
+cd grch38_1kgmaj
+wget https://genome-idx.s3.amazonaws.com/bt/grch38_1kgmaj_snvindels_bt2.zip
+unzip grch38_1kgmaj_snvindels_bt2.zip
+READ1="../testdata/raw_reads/paired_end_1.fq"
+READ2="../testdata/raw_reads/paired_end_2.fq"
+THREADS=8
+bowtie2 -p ${THREADS} -x grch38_1kgmaj_snvindels -1 ${READ1} -2 ${READ2} | leviosam lift -l grch38_1kgmaj_snvindels.lft -t ${THREADS} | samtools sort -@ ${THREADS} -O bam -o test_pe_reads-grch38_1kgmaj.sorted.bam
+# Use this for an unsorted SAM
+# bowtie2 -p ${THREADS} -x grch38_1kgmaj_snvindels -1 ${READ1} -2 ${READ2} | leviosam lift -l grch38_1kgmaj_snvindels.lft -t ${THREADS} -p test_pe_reads-grch38_1kgmaj
 ```
 
-To read from stdin, use `-a -` or exclude `-a`.
+The resulting BAM file uses the GRCh38 coordiante system. It can be further processed with downstream software as a normal BAM file.
 
+We provide more detailed instructions of how to use levioSAM in common variant-aware reference pipelines (major-allele reference and personalized reference) in the [levioSAM wiki](https://github.com/alshai/levioSAM/wiki/Alignment-with-variant-aware-reference-genomes).
 
-## Usage (C++)
+## Example (C++)
 
 Use the `LiftMap` class to generate lift-over information between a reference genome and an alternative genotype.
-A `VCF` file containing the `FMT/GT` field for a specified sample must be provided.
 
 ```
 #include <cstdio>
+#include <tuple>
+#include <unordered_map>
 #include <htslib/vcf.h>
+#include <vector>
 #include "levioSAM.hpp"
 
 int main() {
     const char* fname = "data/dna.vcf";
     vcfFile* fp = bcf_open(fname, "r");
     bcf_hdr_t* hdr = bcf_hdr_read(fp);
-    lift::LiftMap l(fp, hdr, "<sample_name>");
+    std::string sample_name =  ""; // GT=1 will be assumed for all variants if left blank
+    std::string haplotype = "0"; // set this to "0" or "1" if sample_name is not blank
+    // populate name_map if the contig names in the VCF file do not match that of the genome
+    // (e.g.. chr1 vs 1).
+    std::vector<std::pair<std::string,std::string>> name_map;
+    // populate contig_lengths if the chromsome lengths are not specified in the VCF file.
+    std::unordered_map<std::string> contig_lengths;
+    lift::LiftMap l(fp, hdr, sample_name, haplotype, name_map, contig_length);
 }
 ```
 
 To query the equivalent reference position for a given haplotype position:
 
 ```
-    l.alt_to_ref("contig_name", 8)); // give the contig name and the position on the contig
+    std::vector<std::string> c; // for compatibility with multi-thread
+    std::mutex m; // for compatibility with multi-thread
+    l.s2_to_s1("contig_name", 8, &c, &m)); // give the contig name and the position on the contig
 ```
 
 To serialize lift-over information to a file:
@@ -126,15 +141,6 @@ To load from a serialized file
     in.close();
 ```
 
+## Publication
 
-## Features Currently Supporte:
-
-- Serialized lift-over information VCF file w/ FMT/GT field for a specified sample.
-- Convert SAM/BAM records from haplotype to reference.
-- Multithreading support.
-- Recalculate read-pair information.
-
-## TODO
-
-- Recalculate MAPQ
-- Support chain format
+Taher Mun, Nae-Chyun Chen, Ben Langmead, LevioSAM: Fast lift-over of variant-aware reference alignments, _Bioinformatics_, 2021;, btab396, https://doi.org/10.1093/bioinformatics/btab396

@@ -1,10 +1,23 @@
-#include "leviosam.hpp"
-#include "chain.hpp"
-#include <tuple>
-#include <unordered_map>
-#include <getopt.h>
 #include <cstdio>
+#include <map>
+#include <stdio.h>
+#include <thread>
+#include <tuple>
+#include <vector>
+#include <zlib.h>
+#include <getopt.h>
+#include <htslib/kseq.h>
 #include <htslib/kstring.h>
+#include <htslib/sam.h>
+#include <htslib/vcf.h>
+#include "leviosam.hpp"
+
+KSEQ_INIT(gzFile, gzread)
+;;
+
+extern "C" {
+    int bam_fillmd1(bam1_t *b, const char *ref, int flag, int quiet_mode);
+}
 
 struct lift_opts {
     std::string vcf_fname = "";
@@ -21,6 +34,8 @@ struct lift_opts {
     int verbose = 0;
     NameMap name_map;
     LengthMap length_map;
+    int md_flag = 0;
+    std::string ref_name = "";
 };
 
 NameMap parse_name_map(const char* fname) {
@@ -69,7 +84,6 @@ void serialize_run(lift_opts args) {
     fprintf(stderr, "levioSAM file saved to %s\n", (args.outpre + ".lft").data());
 }
 
-
 void read_and_lift(
     std::mutex* mutex_fread,
     std::mutex* mutex_fwrite,
@@ -79,8 +93,12 @@ void read_and_lift(
     bam_hdr_t* hdr,
     int chunk_size,
     lift::LiftMap* l,
-    std::vector<std::string>* chroms_not_found
+    std::vector<std::string>* chroms_not_found,
+    std::map<std::string, std::string>* ref_dict,
+    int md_flag
 ){
+    std::string ref_name;
+    std::string ref;
     std::vector<bam1_t*> aln_vec;
     for (int i = 0; i < chunk_size; i++){
         bam1_t* aln = bam_init1();
@@ -138,6 +156,23 @@ void read_and_lift(
                     aln->core.isize = isize;
                 }
             }
+            if (md_flag) {
+                // change ref if needed
+                if (s1_name != ref_name) {
+                    ref = (*ref_dict)[s1_name];
+                }
+                bam_fillmd1(aln, ref.data(), md_flag, 1);
+            }
+            else { // strip MD and NM tags if md_flag not set bc the liftover invalidates them
+                uint8_t* ptr = NULL;
+                if ((ptr = bam_aux_get(aln, "MD")) != NULL) {
+                    bam_aux_del(aln, ptr);
+                }
+                if ((ptr = bam_aux_get(aln, "NM")) != NULL) {
+                    bam_aux_del(aln, bam_aux_get(aln, "NM"));
+                }
+            }
+            ref_name = s1_name;
         }
         {
             // write to file, thread corruption protected by lock_guard
@@ -158,7 +193,23 @@ void read_and_lift(
     aln_vec.clear();
 }
 
+std::map<std::string, std::string> load_fasta(std::string ref_name) {
+    std::cerr << "Loading FASTA...";
+    std::map<std::string, std::string> fmap;
+    gzFile fp = gzopen(ref_name.data(), "r");
+    kseq_t *seq;
+    seq = kseq_init(fp);
+    while (kseq_read(seq) >= 0) {
+        fmap[std::string(seq->name.s)] = std::string(seq->seq.s);
+    }
+    kseq_destroy(seq);
+    gzclose(fp);
+    std::cerr << "done\n";
+    return fmap;
+}
+
 void lift_run(lift_opts args) {
+    std::cerr << "Loading levioSAM index...";
     // if "-l" not specified, then create a levioSAM
     lift::LiftMap l = [&]{
         if (args.lift_fname != "") {
@@ -167,13 +218,13 @@ void lift_run(lift_opts args) {
         } else if (args.vcf_fname != "") {
             return lift::LiftMap(lift_from_vcf(args.vcf_fname, args.sample, args.haplotype, args.name_map, args.length_map));
         } else {
-            fprintf(stderr, "not enough parameters specified to build/load lift-over\n");
+            fprintf(stderr, "Not enough parameters specified to build/load lift-over\n");
             print_lift_help_msg();
             exit(1);
         }
     } ();
 
-    fprintf(stderr, "loaded liftmap!\n");
+    std::cerr << "done\n";
 
     samFile* sam_fp = (args.sam_fname == "")?
         sam_open("-", "r") : sam_open(args.sam_fname.data(), "r");
@@ -207,7 +258,18 @@ void lift_run(lift_opts args) {
         }
     }
     auto write_hdr = sam_hdr_write(out_sam_fp, hdr);
-    
+
+
+    std::map<std::string, std::string> ref_dict;
+    if (args.md_flag) {
+        // load
+        if (args.ref_name == "") {
+            std::cerr << "error: -m/--md -f <fasta> to be provided as well\n";
+            exit(1);
+        }
+        ref_dict = load_fasta(args.ref_name);
+    }
+
     // Store chromosomes found in SAM but not in the VCF.
     // We use a vector to avoid printing out the same warning msg multiple times.
     std::vector<std::string> chroms_not_found;
@@ -227,7 +289,9 @@ void lift_run(lift_opts args) {
                 hdr,
                 chunk_size,
                 &l,
-                &chroms_not_found
+                &chroms_not_found,
+                &ref_dict,
+                args.md_flag
             )
         );
     }
@@ -303,13 +367,15 @@ void print_lift_help_msg(){
     fprintf(stderr, "         -T INT    Chunk size for each thread. [256] \n");
     fprintf(stderr, "                   Each thread queries <-T> reads, lifts, and writes.\n");
     fprintf(stderr, "                   Setting a higher <-T> uses slightly more memory but might benefit thread scaling.\n");
+    fprintf(stderr, "         -m        add MD and NM to output alignment records (requires -f option)\n");
+    fprintf(stderr, "         -f string Fasta reference that corresponds to input SAM/BAM (for use w/ -m option)\n");
     fprintf(stderr, "         The options for serialize can also be used here, if -v is set.\n");
-    print_serialize_help_msg();
+    fprintf(stderr, "\n");
 }
 
 void print_main_help_msg(){
     fprintf(stderr, "\n");
-    fprintf(stderr, "Program: leviosam (lift over SAM/BAM based on VCF)\n");
+    fprintf(stderr, "Program: leviosam (lift SAM/BAM alignments using VCF)\n");
     fprintf(stderr, "Version: %s\n", VERSION);
     fprintf(stderr, "Usage:   leviosam <command> [options]\n\n");
     fprintf(stderr, "Commands:serialize   Build a leviosam index.\n");
@@ -334,11 +400,13 @@ int main(int argc, char** argv) {
         {"haplotype", required_argument, 0, 'g'},
         {"threads", required_argument, 0, 't'},
         {"chunk_size", required_argument, 0, 'T'},
-        {"verbose", no_argument, 0, 'V'}
-        // {"verbose", no_argument, &args.verbose, 1},
+        {"md", required_argument, 0, 'm'},
+        // {"nm", required_argument, 0, 'x'},
+        {"reference", required_argument, 0, 'f'},
+        {"verbose", no_argument, &args.verbose, 1},
     };
     int long_index = 0;
-    while((c = getopt_long(argc, argv, "hv:c:s:p:l:a:O:g:n:k:t:T:V:", long_options, &long_index)) != -1) {
+    while((c = getopt_long(argc, argv, "hmv:c:s:p:l:a:O:g:n:k:t:T:f:", long_options, &long_index)) != -1) {
         switch (c) {
             case 'v':
                 args.vcf_fname = optarg;
@@ -378,10 +446,17 @@ int main(int argc, char** argv) {
                 break;
             case 'V':
                 args.verbose = atoi(optarg);
+            case 'm':
+                args.md_flag |= 8;
+                args.md_flag |= 16;
+                break;
+            case 'f':
+                args.ref_name = std::string(optarg);
                 break;
             case 'h':
+                print_serialize_help_msg();
                 print_lift_help_msg();
-                exit(1);
+                exit(0);
             default:
                 fprintf(stderr, "ignoring option %c\n", c);
                 exit(1);
@@ -403,9 +478,9 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
-    std::cerr << "TEST_CHAIN\n";
-    lift_from_chain(args);
-    exit(1);
+    // std::cerr << "TEST_CHAIN\n";
+    // lift_from_chain(args);
+    // exit(1);
 
     if (!strcmp(argv[optind], "lift")) {
         lift_run(args);
@@ -415,15 +490,3 @@ int main(int argc, char** argv) {
     return 0;
 }
 
-// chain::ChainFile* chain_open(std::string fname) {
-//     // ChainFile file(fname);
-//     chain::ChainFile *file = new chain::ChainFile(fname);
-    
-//     // TODO
-//     std::cerr << "TEST_RANK\n";
-//     std::cerr << file->get_start_rank("chrY", 6436563) << "\n";
-//     std::cerr << file->get_start_rank("chrY", 9741965) << "\n";
-//     std::cerr << "TEST_RANK_END\n";
-
-//     return file;
-// }
