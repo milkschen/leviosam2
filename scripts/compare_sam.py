@@ -1,17 +1,18 @@
-"""Compares two SAM files and report a summary.
+"""Compares two SAM/BAM files and report a summary.
 """
 import argparse
+import pysam
 import sys
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '-q', '--input_query',
-        help='Path to a query SAM file.'
+        help='Path to a query SAM/BAM file.'
     )
     parser.add_argument(
         '-b', '--input_baseline',
-        help='Path to a baseline SAM file.'
+        help='Path to a baseline SAM/BAM file.'
     )
     parser.add_argument(
         '-o', '--out', default='',
@@ -25,6 +26,10 @@ def parse_args():
         '-p', '--allowed_pos_diff', default=1, type=int,
         help='Allowed bases of positional difference. [1]'
     )
+    parser.add_argument(
+        '-m', '--min_mapq', default=0, type=int,
+        help='Min MAPQ to consider. Alignments with lower MAPQ are considered as invalid. [0]'
+    )
     args = parser.parse_args()
     return args
 
@@ -36,17 +41,41 @@ class Summary():
         self.cigar_diff = []
         self.records = []
         self.allowed_pos_diff = allowed_pos_diff
+        # Unaligned or invalid alignments
+        self.unmapped_records = [[], []]
+        self.invalid_records = [[], []] # MAPQ = 255
 
-    def update(self, query, baseline):
-        if len(query) == 0 or len(baseline) == 0:
-            return
-        if query[0] == baseline[0]: # contig
-            self.pos_diff.append(abs(query[1] - baseline[1]))
-        else:
-            self.pos_diff.append(-1)
-        self.records.append([query, baseline])
-        self.mapq_diff.append(query[2] - baseline[2])
-        self.cigar_diff.append(query[3] == baseline[3])
+    def update(self, query, baseline, aln_filter):
+        try:
+            is_unmapped_or_invalid = False
+            if query.is_unmapped:
+                self.unmapped_records[0].append(query.query_name + ('_1' if query.is_read1 else '_2'))
+                is_unmapped_or_invalid = True
+            if baseline.is_unmapped:
+                self.unmapped_records[1].append(baseline.query_name + ('_1' if baseline.is_read1 else '_2'))
+                is_unmapped_or_invalid = True
+            if is_unmapped_or_invalid:
+                return
+            # Mapped but invalid
+            if query.mapping_quality == 255 or query.mapping_quality < aln_filter['MAPQ']:
+                self.invalid_records[0].append(query.query_name + ('_1' if query.is_read1 else '_2'))
+                is_unmapped_or_invalid = True
+            if baseline.mapping_quality == 255 or baseline.mapping_quality < aln_filter['MAPQ']:
+                self.invalid_records[1].append(baseline.query_name + ('_1' if baseline.is_read1 else '_2'))
+                is_unmapped_or_invalid = True
+            if is_unmapped_or_invalid:
+                return
+
+            if query.reference_name == baseline.reference_name:
+                self.pos_diff.append(abs(query.reference_start - baseline.reference_start))
+            else:
+                self.pos_diff.append(-1)
+            self.records.append([query, baseline])
+            self.mapq_diff.append(query.mapping_quality - baseline.mapping_quality)
+            self.cigar_diff.append(query.cigarstring == baseline.cigarstring)
+        except:
+            print('query=', query.query_name, query.reference_name, query.reference_start)
+            print('baseline=', baseline.query_name, baseline.reference_name, baseline.reference_start)
 
     def report(self, fn_out, num_err_printed):
         if fn_out == '':
@@ -56,11 +85,22 @@ class Summary():
         print('## Position', file=f_out)
         num_pos_match = sum([i >= 0 and i < self.allowed_pos_diff for i in self.pos_diff])
         print(f'{num_pos_match / len(self.pos_diff)} ({num_pos_match}/{len(self.pos_diff)})', file=f_out)
-        #print(f'{self.pos_diff.count(0) / len(self.pos_diff)} ({self.pos_diff.count(0)}/{len(self.pos_diff)})', file=f_out)
         cnt = 0
         for i in range(len(self.records)):
-            if self.pos_diff[i] < 100 and self.pos_diff[i] > self.allowed_pos_diff:
-                print(self.pos_diff[i], self.records[i], file=f_out)
+            # if self.pos_diff[i] < 100 and self.pos_diff[i] > self.allowed_pos_diff:
+            if self.pos_diff[i] > self.allowed_pos_diff:
+                query = self.records[i][0]
+                baseline = self.records[i][1]
+                msg_query = (
+                    '    '
+                    f'{query.reference_name}\t{query.reference_start:10d}\t'
+                    f'{query.mapping_quality:3d}\t{query.cigarstring}')
+                msg_baseline = (
+                    '    '
+                    f'{baseline.reference_name}\t{baseline.reference_start:10d}\t'
+                    f'{baseline.mapping_quality:3d}\t{baseline.cigarstring}')
+                print(f'{self.pos_diff[i]:10d}\t{msg_query}', file=f_out)
+                print(f'{" ":10s}\t{msg_baseline}', file=f_out)
                 cnt += 1
             if cnt >= num_err_printed and num_err_printed >= 0:
                 break
@@ -71,47 +111,43 @@ class Summary():
         print('## CIGAR', file=f_out)
         print(f'{self.cigar_diff.count(True) / len(self.cigar_diff)} ({self.cigar_diff.count(True)}/{len(self.cigar_diff)})', file=f_out)
 
+        print('## Unaligned', file=f_out)
+        set_unaligned = set(self.unmapped_records[0] + self.unmapped_records[1])
+        print((f'{len(set_unaligned)} (query={len(self.unmapped_records[0])}, '
+               f'baseline={len(self.unmapped_records[1])})'), file=f_out)
 
-def process_sam_line(line, dict_sam):
-    line = line.split()
-    name = line[0]
-    flag = int(line[1])
-    contig = line[2]
-    pos = int(line[3])
-    mapq = int(line[4])
-    cigar = line[5]
-
-    # Ignore unmapped reads.
-    if flag & 4:
-        return
-
-    if (flag & 1 and flag & 64) or (not (flag & 1)):
-        if dict_sam.setdefault(name, [[], []]):
-            dict_sam[name][0] = [contig, pos, mapq, cigar]
-    elif (flag & 1 and flag & 128):
-        if dict_sam.setdefault(name, [[], []]):
-            dict_sam[name][1] = [contig, pos, mapq, cigar]
-    else:
-        print(line)
-
+        print('## Invalid (MAPQ=255)', file=f_out)
+        set_invalid = set(self.invalid_records[0] + self.invalid_records[1])
+        print((f'{len(set_invalid)} (query={len(self.invalid_records[0])}, '
+               f'baseline={len(self.invalid_records[1])})'), file=f_out)
 
 def read_sam_as_dict(fn):
-    dict_sam = {}
-    with open(fn, 'r') as f:
-        for line in f:
-            if line[0] != '@':
-                process_sam_line(line, dict_sam)
-    return dict_sam
+    dict_reads = {}
+    f = pysam.AlignmentFile(fn, 'r')
+    # for read in f.fetch():
+    for read in f:
+        if (not read.is_paired) or (read.is_paired and read.is_read1):
+            segment_idx = 0
+        elif read.is_paired and read.is_read2:
+            segment_idx = 1
+
+        if dict_reads.setdefault(read.query_name, [[], []]):
+            #dict_reads[read.query_name][segment_idx] = read_info
+            dict_reads[read.query_name][segment_idx] = read
+    return dict_reads
 
 
 def compare_sam(args):
     summary = Summary(args.allowed_pos_diff)
     dict_query = read_sam_as_dict(args.input_query)
     dict_baseline = read_sam_as_dict(args.input_baseline)
+    aln_filter = {'MAPQ': args.min_mapq}
     for i_q, [name, [first_seg, second_seg]] in enumerate(dict_query.items()):
         if dict_baseline.get(name):
-            summary.update(first_seg, dict_baseline[name][0])
-            summary.update(second_seg, dict_baseline[name][1])
+            summary.update(
+                query=first_seg, baseline=dict_baseline[name][0], aln_filter=aln_filter)
+            summary.update(
+                query=second_seg, baseline=dict_baseline[name][1], aln_filter=aln_filter)
     summary.report(args.out, args.num_err_printed)
 
 
