@@ -99,8 +99,8 @@ class Summary():
                     '    '
                     f'{baseline.reference_name}\t{baseline.reference_start:10d}\t'
                     f'{baseline.mapping_quality:3d}\t{baseline.cigarstring}')
-                print(f'{self.pos_diff[i]:10d}\t{msg_query}')
-                print(f'{" ":10s}\t{msg_baseline}')
+                print(f'{self.pos_diff[i]:10d}\t{msg_query}', file=f_out)
+                print(f'{" ":10s}\t{msg_baseline}', file=f_out)
                 cnt += 1
             if cnt >= num_err_printed and num_err_printed >= 0:
                 break
@@ -124,7 +124,8 @@ class Summary():
 def read_sam_as_dict(fn):
     dict_reads = {}
     f = pysam.AlignmentFile(fn, 'r')
-    for read in f.fetch():
+    # for read in f.fetch():
+    for read in f:
         if (not read.is_paired) or (read.is_paired and read.is_read1):
             segment_idx = 0
         elif read.is_paired and read.is_read2:
