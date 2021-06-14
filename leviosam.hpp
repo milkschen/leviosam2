@@ -1,3 +1,13 @@
+/*
+ * liftover.hpp
+ *
+ * classes and routines for translating (lifting over) coordinates between
+ * two aligned sequences
+ * Author: Taher Mun, Nae-Chyun Chen, Ben Langmead
+ * Johns Hopkins Dept. of Computer Science
+ *
+ * Created: July 2019
+ */
 #ifndef LIFTOVER_HPP
 #define LIFTOVER_HPP
 
@@ -8,19 +18,8 @@
 #include <htslib/sam.h>
 #include <sdsl/bit_vectors.hpp>
 #include <sdsl/util.hpp>
-
 #include "chain.hpp"
 
-/*
- * liftover.hpp
- *
- * classes and routines for translating (lifting over) coordinates between
- * two aligned sequences
- * Author: Taher Mun
- * Johns Hopkins Dept. of Computer Science
- *
- * Created: July 2019
- */
 
 const char* VERSION("0.4");
 
@@ -30,6 +29,10 @@ using LengthMap = std::unordered_map<std::string,size_t>;
 static inline void die(std::string msg) {
     fprintf(stderr, "%s\n", msg.data());
     exit(1);
+}
+
+extern "C" {
+    int bam_fillmd1(bam1_t *b, const char *ref, int flag, int quiet_mode);
 }
 
 namespace lift {
@@ -521,6 +524,72 @@ class LiftMap {
             fprintf(stderr, "Warning: chromosome %s not found in liftmap! \n", n.c_str());
             return i;
         }
+    }
+
+    // Lift over an alignment. Lifted information will be updated in the htslib aln object.
+    void lift_aln(
+        bam1_t* aln,
+        bam_hdr_t* hdr,
+        bool md_flag,
+        std::string &ref_name,
+        std::map<std::string, std::string>* ref_dict,
+        std::vector<std::string>* chroms_not_found,
+        std::mutex* mutex_vec
+    ) {
+        bam1_core_t c = aln->core;
+        std::string s1_name, s2_name;
+        size_t pos;
+        std::string ref;
+        // If a read is mapped, lift its position.
+        // If a read is unmapped, but its mate is mapped, lift its mates position.
+        // Otherwise leave it unchanged.
+        if (!(c.flag & BAM_FUNMAP)) {
+            s2_name = hdr->target_name[c.tid];
+            s1_name = this->get_other_name(s2_name);
+            // chroms_not_found needs to be protected because chroms_not_found is shared
+            pos = this->s2_to_s1(s2_name, c.pos, chroms_not_found, mutex_vec);
+            // CIGAR
+            this->cigar_s2_to_s1(s2_name, aln);
+            aln->core.pos = pos;
+        } else if ((c.flag & BAM_FPAIRED) && !(c.flag & BAM_FMUNMAP)) {
+            s2_name = hdr->target_name[c.mtid];
+            s1_name = this->get_other_name(s2_name);
+            // chroms_not_found needs to be protected because chroms_not_found is shared
+            pos = this->s2_to_s1(s2_name, c.mpos, chroms_not_found, mutex_vec);
+            aln->core.pos = pos;
+        }
+        // Lift mate position.
+        if (c.flag & BAM_FPAIRED) {
+            // If the mate is unmapped, use the lifted position of the read.
+            // If the mate is mapped, lift its position.
+            if (c.flag & BAM_FMUNMAP){
+                aln->core.mpos = aln->core.pos;
+            } else {
+                std::string ms2_name(hdr->target_name[c.mtid]);
+                std::string ms1_name(this->get_other_name(ms2_name));
+                size_t mpos = this->s2_to_s1(ms2_name, c.mpos, chroms_not_found, mutex_vec);
+                aln->core.mpos = mpos;
+                int isize = (c.isize == 0)? 0 : c.isize + (mpos - c.mpos) - (pos - c.pos);
+                aln->core.isize = isize;
+            }
+        }
+        if (md_flag) {
+            // change ref if needed
+            if (s1_name != ref_name) {
+                ref = (*ref_dict)[s1_name];
+            }
+            bam_fillmd1(aln, ref.data(), md_flag, 1);
+        }
+        else { // strip MD and NM tags if md_flag not set bc the liftover invalidates them
+            uint8_t* ptr = NULL;
+            if ((ptr = bam_aux_get(aln, "MD")) != NULL) {
+                bam_aux_del(aln, ptr);
+            }
+            if ((ptr = bam_aux_get(aln, "NM")) != NULL) {
+                bam_aux_del(aln, bam_aux_get(aln, "NM"));
+            }
+        }
+        ref_name = s1_name;
     }
 
     std::string get_other_name(std::string n) {

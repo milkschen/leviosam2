@@ -8,16 +8,12 @@
 #include <getopt.h>
 #include <htslib/kseq.h>
 #include <htslib/kstring.h>
-#include <htslib/sam.h>
-#include <htslib/vcf.h>
+// #include <htslib/sam.h>
+// #include <htslib/vcf.h>
 #include "leviosam.hpp"
 
 KSEQ_INIT(gzFile, gzread)
 ;;
-
-extern "C" {
-    int bam_fillmd1(bam1_t *b, const char *ref, int flag, int quiet_mode);
-}
 
 struct lift_opts {
     std::string vcf_fname = "";
@@ -98,7 +94,7 @@ void read_and_lift(
     int md_flag
 ){
     std::string ref_name;
-    std::string ref;
+    // std::string ref;
     std::vector<bam1_t*> aln_vec;
     for (int i = 0; i < chunk_size; i++){
         bam1_t* aln = bam_init1();
@@ -119,6 +115,14 @@ void read_and_lift(
             }
         }
         for (int i = 0; i < num_actual_reads; i++){
+            l->lift_aln(
+                aln_vec[i],
+                hdr,
+                md_flag, ref_name,
+                ref_dict,
+                chroms_not_found,
+                mutex_vec);
+            /*
             bam1_t* aln = aln_vec[i];
             bam1_core_t c = aln->core;
             std::string s1_name, s2_name;
@@ -173,6 +177,7 @@ void read_and_lift(
                 }
             }
             ref_name = s1_name;
+            */
         }
         {
             // write to file, thread corruption protected by lock_guard
@@ -480,9 +485,9 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
-    std::cerr << "TEST_CHAIN\n";
-    lift_from_chain(args);
-    exit(1);
+    // std::cerr << "TEST_CHAIN\n";
+    // lift_from_chain(args);
+    // exit(1);
 
     if (!strcmp(argv[optind], "lift")) {
         lift_run(args);
