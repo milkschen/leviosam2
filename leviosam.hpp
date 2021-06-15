@@ -35,6 +35,25 @@ extern "C" {
     int bam_fillmd1(bam1_t *b, const char *ref, int flag, int quiet_mode);
 }
 
+struct lift_opts {
+    std::string vcf_fname = "";
+    std::string chain_fname = "";
+    std::string sample = "";
+    std::string outpre = "";
+    std::string out_format = "sam";
+    std::string lift_fname = "";
+    std::string sam_fname = "";
+    std::string cmd = "";
+    std::string haplotype = "0";
+    int threads = 1;
+    int chunk_size = 256;
+    int verbose = 0;
+    NameMap name_map;
+    LengthMap length_map;
+    int md_flag = 0;
+    std::string ref_name = "";
+};
+
 namespace lift {
 // liftover data structure for a single sequence
 class Lift {
@@ -83,7 +102,7 @@ class Lift {
     }
 
     // translate coordinate in s2-space to s1-space
-    size_t s2_to_s1(size_t p) const {
+    size_t lift_pos(size_t p) const { // s2_to_s1
         return ins_rs0(del_sls0(p+1));
     }
 
@@ -102,7 +121,7 @@ class Lift {
      * Output:
      *   A vector, each element is an unit32_t corresponding to htslib CIGAR value
      */
-    std::vector<uint32_t> cigar_s2_to_s1_core(bam1_t* b){
+    std::vector<uint32_t> lift_cigar_core(bam1_t* b){
         auto x = del_sls0(b->core.pos + 1);
         int y = 0; // read2alt cigar pointer
         uint32_t* cigar = bam_get_cigar(b);
@@ -200,10 +219,10 @@ class Lift {
      *   bam1_t->core.n_cigar specifies numbers of operators in a CIGAR;
      *   bam_get_cigar(bam1_t) points to the occurrences.
      */
-    void cigar_s2_to_s1(bam1_t* b) {
+    void lift_cigar(bam1_t* b) {
         uint32_t* cigar = bam_get_cigar(b);
         // Get lifted CIGAR.
-        auto new_cigar_ops = cigar_s2_to_s1_core(b);
+        auto new_cigar_ops = lift_cigar_core(b);
         // Prepare to update CIGAR in the bam1_t struct.
         std::vector<int> cigar_op_len;
         std::vector<char> cigar_op;
@@ -330,6 +349,9 @@ class LiftMap {
     public:
 
     LiftMap() {}
+    ~LiftMap() {
+        std::cerr << "destructor - LiftMap\n";
+    }
 
     LiftMap(std::ifstream& in) {
         this->load(in);
@@ -359,16 +381,13 @@ class LiftMap {
         return *this;
     }
 
-    LiftMap(chain::ChainFile* fp) {
-        std::cout << "liftmap with a chain file\n";
-    }
-
     /* creates a liftover from specified sample in VCF file.
      * input: vcfFile, bcf_hdr_t* of input VCF (via htslib)
      *        sample name of desired individual within the VCF
      * assumes that the vcfFile is sorted!
      */
-    LiftMap(vcfFile* fp, bcf_hdr_t* hdr, std::string sample_name, std::string haplotype,
+    LiftMap(vcfFile* fp, bcf_hdr_t* hdr,
+            std::string sample_name, std::string haplotype,
             std::vector<std::pair<std::string,std::string>> nm = {},
             std::unordered_map<std::string,size_t> ls = {}) {
         bool get_names = 1;
@@ -507,95 +526,28 @@ class LiftMap {
     // input: sequence name, position within s2 sequence
     // output: position within s1 sequence
     // if liftover is not defined, then returns the original position
-    size_t s2_to_s1(
+    size_t lift_pos( // s2_to_s1
         std::string n,
         size_t i,
-        std::vector<std::string>* chroms_not_found,
+        std::vector<std::string>* unrecorded_contigs,
         std::mutex* mutex
     ) {
         auto it = s2_map.find(n);
         if (it != s2_map.end()) {
-            return lmap[it->second].s2_to_s1(i);
+            return lmap[it->second].lift_pos(i);
         } else {
             std::lock_guard<std::mutex> g(*mutex);
-            for (auto it : *chroms_not_found)
+            for (auto it : *unrecorded_contigs)
                 if (it == n) return i;
-            chroms_not_found->push_back(n);
+            unrecorded_contigs->push_back(n);
             fprintf(stderr, "Warning: chromosome %s not found in liftmap! \n", n.c_str());
             return i;
         }
     }
 
-    // Lift over an alignment. Lifted information will be updated in the htslib aln object.
-    void lift_aln(
-        bam1_t* aln,
-        bam_hdr_t* hdr,
-        bool md_flag,
-        std::string &ref_name,
-        std::map<std::string, std::string>* ref_dict,
-        std::vector<std::string>* chroms_not_found,
-        std::mutex* mutex_vec
-    ) {
-        bam1_core_t c = aln->core;
-        std::string s1_name, s2_name;
-        size_t pos;
-        std::string ref;
-        // If a read is mapped, lift its position.
-        // If a read is unmapped, but its mate is mapped, lift its mates position.
-        // Otherwise leave it unchanged.
-        if (!(c.flag & BAM_FUNMAP)) {
-            s2_name = hdr->target_name[c.tid];
-            s1_name = this->get_other_name(s2_name);
-            // chroms_not_found needs to be protected because chroms_not_found is shared
-            pos = this->s2_to_s1(s2_name, c.pos, chroms_not_found, mutex_vec);
-            // CIGAR
-            this->cigar_s2_to_s1(s2_name, aln);
-            aln->core.pos = pos;
-        } else if ((c.flag & BAM_FPAIRED) && !(c.flag & BAM_FMUNMAP)) {
-            s2_name = hdr->target_name[c.mtid];
-            s1_name = this->get_other_name(s2_name);
-            // chroms_not_found needs to be protected because chroms_not_found is shared
-            pos = this->s2_to_s1(s2_name, c.mpos, chroms_not_found, mutex_vec);
-            aln->core.pos = pos;
-        }
-        // Lift mate position.
-        if (c.flag & BAM_FPAIRED) {
-            // If the mate is unmapped, use the lifted position of the read.
-            // If the mate is mapped, lift its position.
-            if (c.flag & BAM_FMUNMAP){
-                aln->core.mpos = aln->core.pos;
-            } else {
-                std::string ms2_name(hdr->target_name[c.mtid]);
-                std::string ms1_name(this->get_other_name(ms2_name));
-                size_t mpos = this->s2_to_s1(ms2_name, c.mpos, chroms_not_found, mutex_vec);
-                aln->core.mpos = mpos;
-                int isize = (c.isize == 0)? 0 : c.isize + (mpos - c.mpos) - (pos - c.pos);
-                aln->core.isize = isize;
-            }
-        }
-        if (md_flag) {
-            // change ref if needed
-            if (s1_name != ref_name) {
-                ref = (*ref_dict)[s1_name];
-            }
-            bam_fillmd1(aln, ref.data(), md_flag, 1);
-        }
-        else { // strip MD and NM tags if md_flag not set bc the liftover invalidates them
-            uint8_t* ptr = NULL;
-            if ((ptr = bam_aux_get(aln, "MD")) != NULL) {
-                bam_aux_del(aln, ptr);
-            }
-            if ((ptr = bam_aux_get(aln, "NM")) != NULL) {
-                bam_aux_del(aln, bam_aux_get(aln, "NM"));
-            }
-        }
-        ref_name = s1_name;
-    }
-
-    std::string get_other_name(std::string n) {
-        if (name_map.find(n) != name_map.end()) {
+    std::string lift_contig(std::string n, size_t pos) {
+        if (name_map.find(n) != name_map.end())
             return name_map[n];
-        }
         // return original name if mapping is not available
         else
             return n;
@@ -611,10 +563,10 @@ class LiftMap {
      *
      * If liftover is not defined, do not update the bam1_t struct.
      */
-    void cigar_s2_to_s1(const std::string& n, bam1_t* b) {
+    void lift_cigar(const std::string& n, bam1_t* b) {
         auto it = s2_map.find(n);
         if (it != s2_map.end()) {
-            lmap[it->second].cigar_s2_to_s1(b);
+            lmap[it->second].lift_cigar(b);
         }
         // If not found, no update.
     }
@@ -660,7 +612,8 @@ class LiftMap {
     private:
 
     std::vector<Lift> lmap;
-    /* I have to write these so I can serialize stuff */
+
+    // Serialization
     class Name2IdxMap: public std::unordered_map<std::string,int> {
         public:
         size_t serialize(std::ofstream& out) {
@@ -759,5 +712,7 @@ lift::LiftMap lift_from_vcf(std::string fname,
 void print_main_help_msg();
 void print_lift_help_msg();
 void print_serialize_help_msg();
+
+// chain::ChainFile lift_from_chain(lift_opts args);
 
 #endif

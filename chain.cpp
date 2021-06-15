@@ -3,7 +3,7 @@
 
 using namespace chain;
 
-ChainFile::ChainFile(std::string fname, int verbose) {
+ChainMap::ChainMap(std::string fname, int verbose) {
     this->verbose = verbose;
     std::ifstream chain_f(fname);
     std::string line;
@@ -32,11 +32,14 @@ ChainFile::ChainFile(std::string fname, int verbose) {
     }
 }
 
+ChainMap::~ChainMap(){
+    std::cerr << "destructor - ChainMap\n";
+}
 
 /* Create start and end bitvectors when see a new `source`.
  * Do nothing if `source` has been seen.
  */
-void ChainFile::init_bitvectors(std::string source, int source_length) {
+void ChainMap::init_bitvectors(std::string source, int source_length) {
     std::unordered_map<std::string, sdsl::bit_vector>::const_iterator find_start = this->start_bv_map.find(source);
     if (find_start == this->start_bv_map.end()) {
         sdsl::bit_vector new_start_bv(source_length), new_end_bv(source_length);
@@ -46,15 +49,15 @@ void ChainFile::init_bitvectors(std::string source, int source_length) {
 }
 
 
-void ChainFile::sort_interval_map() {
+void ChainMap::sort_interval_map() {
     for (auto &itr: this->interval_map) {
         this->sort_intervals(itr.first);
     }
 }
 
 
-/* Sort the intervals in a ChainFile in ascending order. */
-void ChainFile::sort_intervals(std::string contig) {
+/* Sort the intervals in a ChainMap in ascending order. */
+void ChainMap::sort_intervals(std::string contig) {
     std::sort(
         this->interval_map[contig].begin(), this->interval_map[contig].end(),
         [](const Interval& lhs, const Interval& rhs) {
@@ -63,15 +66,15 @@ void ChainFile::sort_intervals(std::string contig) {
 }
 
 
-void ChainFile::debug_print_interval_map() {
+void ChainMap::debug_print_interval_map() {
     for (auto &intvl_map: this->interval_map) {
         this->debug_print_intervals(intvl_map.first);
     }
 }
 
 
-/* Print the intervals in a ChainFile. */
-void ChainFile::debug_print_intervals(std::string contig) {
+/* Print the intervals in a ChainMap. */
+void ChainMap::debug_print_intervals(std::string contig) {
     for (auto &intvl: this->interval_map[contig]) {
         intvl.debug_print_interval();
     }
@@ -86,7 +89,7 @@ void ChainFile::debug_print_intervals(std::string contig) {
  * Returns a bool:
  *   true if pass; false otherwise
  */
-bool ChainFile::interval_map_sanity_check() {
+bool ChainMap::interval_map_sanity_check() {
     for (auto& itr : this->interval_map){
             std::vector<chain::Interval> v = this->interval_map[itr.first];
             for (int i = 0; i < v.size()-1; i++) {
@@ -106,7 +109,7 @@ bool ChainFile::interval_map_sanity_check() {
  *   non-negative int: rank
  *   -1: if pos < 0 or contig does not exist
  */
-int ChainFile::get_start_rank(std::string contig, int pos) {
+int ChainMap::get_start_rank(std::string contig, int pos) {
     if (pos < 0) return -1;
     std::unordered_map<std::string, sdsl::sd_vector<>>::const_iterator find_start = 
         this->start_map.find(contig);
@@ -124,7 +127,7 @@ int ChainFile::get_start_rank(std::string contig, int pos) {
  *   non-negative int: rank
  *   -1: if pos < 0 or contig does not exist
  */
-int ChainFile::get_end_rank(std::string contig, int pos) {
+int ChainMap::get_end_rank(std::string contig, int pos) {
     if (pos < 0) return -1;
     std::unordered_map<std::string, sdsl::sd_vector<>>::const_iterator find_end = this->end_map.find(contig);
     if (find_end == this->end_map.end()) {
@@ -136,7 +139,7 @@ int ChainFile::get_end_rank(std::string contig, int pos) {
 }
 
 /* Init rank support for all start/end bitvectors. */
-void ChainFile::init_rs() {
+void ChainMap::init_rs() {
     for (auto& it: this->start_bv_map) {
         std::string contig = it.first;
         std::unordered_map<std::string, sdsl::sd_vector<>>::const_iterator find_start = this->start_map.find(contig);
@@ -159,7 +162,7 @@ void ChainFile::init_rs() {
 
 /* Parse a chain line and update the chain object.
  */
-void ChainFile::parse_chain_line(
+void ChainMap::parse_chain_line(
     std::string line, std::string &source, std::string &target,
     int &source_offset, int &target_offset, bool &same_strand
 ) {
@@ -231,12 +234,13 @@ void ChainFile::parse_chain_line(
 }
 
 
-void ChainFile::show_interval_info(std::string contig, int pos) {
+void ChainMap::show_interval_info(std::string contig, int pos) {
     int rank = this->get_start_rank(contig, pos);
     this->interval_map[contig][rank].debug_print_interval();
 }
 
-int ChainFile::get_lifted_pos(std::string contig, int pos) {
+// TODO: to remove
+int ChainMap::get_lifted_pos(std::string contig, int pos) {
     int rank = this->get_start_rank(contig, pos);
     std::cerr << this->interval_map[contig][rank].target << "\n";
     int lifted_pos = pos + this->interval_map[contig][rank].offset;
@@ -244,8 +248,32 @@ int ChainFile::get_lifted_pos(std::string contig, int pos) {
     return lifted_pos;
 }
 
-ChainFile* chain::chain_open(std::string fname, int verbose) {
-    ChainFile *file = new ChainFile(fname, verbose);
+std::string ChainMap::lift_contig(std::string contig, size_t pos) {
+    int intvl_idx = this->get_start_rank(contig, pos);
+    if (intvl_idx == -1)
+        return "*";
+    else
+        return this->interval_map[contig][intvl_idx].target;
+}
+
+void ChainMap::lift_cigar(const std::string& contig, bam1_t* aln) {
+    // TODO
+}
+
+size_t ChainMap::lift_pos(
+    std::string contig, size_t pos,
+    std::vector<std::string>* unrecorded_contigs,
+    std::mutex* mutex) {
+    int intvl_idx = this->get_start_rank(contig, pos);
+    if (intvl_idx == -1)
+        return pos;
+    else
+        return pos + this->interval_map[contig][intvl_idx].offset;
+}
+
+// TODO: to remove
+ChainMap* chain::chain_open(std::string fname, int verbose) {
+    ChainMap *file = new ChainMap(fname, verbose);
 
     if (verbose > 0) {
         std::cerr << "Check if there are overlapping intervals...";
@@ -278,3 +306,65 @@ ChainFile* chain::chain_open(std::string fname, int verbose) {
 
     return file;
 }
+
+/*
+void chain::read_and_lift(
+    std::mutex* mutex_fread,
+    std::mutex* mutex_fwrite,
+    std::mutex* mutex_vec,
+    samFile* sam_fp,
+    samFile* out_sam_fp,
+    bam_hdr_t* hdr,
+    int chunk_size,
+    std::vector<std::string>* chroms_not_found,
+    std::map<std::string, std::string>* ref_dict,
+    int md_flag
+){
+    std::string ref_name;
+    std::vector<bam1_t*> aln_vec;
+    for (int i = 0; i < chunk_size; i++){
+        bam1_t* aln = bam_init1();
+        aln_vec.push_back(aln);
+    }
+    int read = 1;
+    while (read >= 0){
+        int num_actual_reads = chunk_size;
+        {
+            // read from SAM, protected by mutex
+            std::lock_guard<std::mutex> g(*mutex_fread);
+            for (int i = 0; i < chunk_size; i++){
+                read = sam_read1(sam_fp, hdr, aln_vec[i]);
+                if (read < 0){
+                    num_actual_reads = i;
+                    break;
+                }
+            }
+        }
+        for (int i = 0; i < num_actual_reads; i++){
+            this->lift_aln(
+                aln_vec[i],
+                hdr,
+                md_flag, ref_name,
+                ref_dict,
+                chroms_not_found,
+                mutex_vec);
+        }
+        {
+            // write to file, thread corruption protected by lock_guard
+            std::lock_guard<std::mutex> g(*mutex_fwrite);
+            // std::thread::id this_id = std::this_thread::get_id();
+            for (int i = 0; i < num_actual_reads; i++){
+                auto flag_write = sam_write1(out_sam_fp, hdr, aln_vec[i]);
+                if (flag_write < 0){
+                    std::cerr << "[Error] Failed to write record " << bam_get_qname(aln_vec[i]) << "\n";
+                    exit(1);
+                }
+            }
+        }
+    }
+    for (int i = 0; i < chunk_size; i++){
+        bam_destroy1(aln_vec[i]);
+    }
+    aln_vec.clear();
+}
+*/

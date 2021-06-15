@@ -11,28 +11,11 @@
 // #include <htslib/sam.h>
 // #include <htslib/vcf.h>
 #include "leviosam.hpp"
+// #include "chain.hpp"
 
 KSEQ_INIT(gzFile, gzread)
 ;;
 
-struct lift_opts {
-    std::string vcf_fname = "";
-    std::string chain_fname = "";
-    std::string sample = "";
-    std::string outpre = "";
-    std::string out_format = "sam";
-    std::string lift_fname = "";
-    std::string sam_fname = "";
-    std::string cmd = "";
-    std::string haplotype = "0";
-    int threads = 1;
-    int chunk_size = 256;
-    int verbose = 0;
-    NameMap name_map;
-    LengthMap length_map;
-    int md_flag = 0;
-    std::string ref_name = "";
-};
 
 NameMap parse_name_map(const char* fname) {
     NameMap names;
@@ -80,7 +63,89 @@ void serialize_run(lift_opts args) {
     fprintf(stderr, "levioSAM file saved to %s\n", (args.outpre + ".lft").data());
 }
 
+
+// Lift over an alignment. Lifted information will be updated in the htslib aln object.
+template <class T>
+void lift_aln(
+    bam1_t* aln,
+    // lift::LiftMap* lift_map,
+    T* lift_map,
+    bam_hdr_t* hdr,
+    bool md_flag,
+    std::string &ref_name,
+    std::map<std::string, std::string>* ref_dict,
+    std::vector<std::string>* unrecorded_contigs,
+    std::mutex* mutex_vec
+) {
+    bam1_core_t c = aln->core;
+    std::string dest_contig, source_contig;
+    size_t pos;
+    std::string ref;
+    // If a read is mapped, lift its position.
+    if (!(c.flag & BAM_FUNMAP)) {
+        source_contig = hdr->target_name[c.tid];
+        dest_contig = lift_map->lift_contig(source_contig, c.pos);
+        // unrecorded_contigs needs to be protected because unrecorded_contigs is shared
+        pos = lift_map->lift_pos(
+            source_contig, c.pos, unrecorded_contigs, mutex_vec);
+        // std::cerr << dest_contig << " " << pos << "\n";
+        // CIGAR
+        lift_map->lift_cigar(source_contig, aln);
+        aln->core.pos = pos;
+    // If a read is unmapped, but its mate is mapped, lift its mates position.
+    // Otherwise leave it unchanged.
+    } else if ((c.flag & BAM_FPAIRED) && !(c.flag & BAM_FMUNMAP)) {
+        source_contig = hdr->target_name[c.mtid];
+        dest_contig = lift_map->lift_contig(source_contig, c.mpos);
+        // unrecorded_contigs needs to be protected because unrecorded_contigs is shared
+        pos = lift_map->lift_pos(
+            source_contig, c.mpos, unrecorded_contigs, mutex_vec);
+        aln->core.pos = pos;
+    }
+    // Lift mate position.
+    if (c.flag & BAM_FPAIRED) {
+        // If the mate is unmapped, use the lifted position of the read.
+        if (c.flag & BAM_FMUNMAP){
+            aln->core.mpos = aln->core.pos;
+        // If the mate is mapped, lift its position.
+        } else {
+            std::string msource_contig(hdr->target_name[c.mtid]);
+            // std::cerr << "msource_contig: " << msource_contig << " mpos: " << c.mpos << "\n";
+            std::string mdest_contig(lift_map->lift_contig(msource_contig, c.mpos));
+            c.mtid = sam_hdr_name2tid(hdr, mdest_contig.c_str());
+            // std::cerr << "mtid " << c.mtid << "\n";
+            size_t mpos = lift_map->lift_pos(msource_contig, c.mpos, unrecorded_contigs, mutex_vec);
+            // std::cerr << "mpos " << mpos << "\n";
+            aln->core.mpos = mpos;
+            // std::cerr << mdest_contig << " " << aln->core.mpos << "\n";
+            int isize = (c.isize == 0)? 0 : c.isize + (mpos - c.mpos) - (pos - c.pos);
+            aln->core.isize = isize;
+        }
+    }
+    if (md_flag) {
+        // change ref if needed
+        if (dest_contig != ref_name) {
+            ref = (*ref_dict)[dest_contig];
+        }
+        bam_fillmd1(aln, ref.data(), md_flag, 1);
+    }
+    else { // strip MD and NM tags if md_flag not set bc the liftover invalidates them
+        uint8_t* ptr = NULL;
+        if ((ptr = bam_aux_get(aln, "MD")) != NULL) {
+            bam_aux_del(aln, ptr);
+        }
+        if ((ptr = bam_aux_get(aln, "NM")) != NULL) {
+            bam_aux_del(aln, bam_aux_get(aln, "NM"));
+        }
+    }
+    ref_name = dest_contig;
+}
+
+
+template <class T>
 void read_and_lift(
+    T* lift_map,
+    // lift::LiftMap* lift_map,
     std::mutex* mutex_fread,
     std::mutex* mutex_fwrite,
     std::mutex* mutex_vec,
@@ -88,13 +153,11 @@ void read_and_lift(
     samFile* out_sam_fp,
     bam_hdr_t* hdr,
     int chunk_size,
-    lift::LiftMap* l,
-    std::vector<std::string>* chroms_not_found,
+    std::vector<std::string>* unrecorded_contigs,
     std::map<std::string, std::string>* ref_dict,
     int md_flag
 ){
     std::string ref_name;
-    // std::string ref;
     std::vector<bam1_t*> aln_vec;
     for (int i = 0; i < chunk_size; i++){
         bam1_t* aln = bam_init1();
@@ -115,69 +178,15 @@ void read_and_lift(
             }
         }
         for (int i = 0; i < num_actual_reads; i++){
-            l->lift_aln(
+            // lift_map->lift_aln(
+            lift_aln<T>(
                 aln_vec[i],
+                lift_map,
                 hdr,
                 md_flag, ref_name,
                 ref_dict,
-                chroms_not_found,
+                unrecorded_contigs,
                 mutex_vec);
-            /*
-            bam1_t* aln = aln_vec[i];
-            bam1_core_t c = aln->core;
-            std::string s1_name, s2_name;
-            size_t pos;
-            // If a read is mapped, lift its position.
-            // If a read is unmapped, but its mate is mapped, lift its mates position.
-            // Otherwise leave it unchanged.
-            if (!(c.flag & BAM_FUNMAP)) {
-                s2_name = hdr->target_name[c.tid];
-                s1_name = l->get_other_name(s2_name);
-                // chroms_not_found needs to be protected because chroms_not_found is shared
-                pos = l->s2_to_s1(s2_name, c.pos, chroms_not_found, mutex_vec);
-                // CIGAR
-                l->cigar_s2_to_s1(s2_name, aln);
-                aln->core.pos = pos;
-            } else if ((c.flag & BAM_FPAIRED) && !(c.flag & BAM_FMUNMAP)) {
-                s2_name = hdr->target_name[c.mtid];
-                s1_name = l->get_other_name(s2_name);
-                // chroms_not_found needs to be protected because chroms_not_found is shared
-                pos = l->s2_to_s1(s2_name, c.mpos, chroms_not_found, mutex_vec);
-                aln->core.pos = pos;
-            }
-            // Lift mate position.
-            if (c.flag & BAM_FPAIRED) {
-                // If the mate is unmapped, use the lifted position of the read.
-                // If the mate is mapped, lift its position.
-                if (c.flag & BAM_FMUNMAP){
-                    aln->core.mpos = aln->core.pos;
-                } else {
-                    std::string ms2_name(hdr->target_name[c.mtid]);
-                    std::string ms1_name(l->get_other_name(ms2_name));
-                    size_t mpos = l->s2_to_s1(ms2_name, c.mpos, chroms_not_found, mutex_vec);
-                    aln->core.mpos = mpos;
-                    int isize = (c.isize == 0)? 0 : c.isize + (mpos - c.mpos) - (pos - c.pos);
-                    aln->core.isize = isize;
-                }
-            }
-            if (md_flag) {
-                // change ref if needed
-                if (s1_name != ref_name) {
-                    ref = (*ref_dict)[s1_name];
-                }
-                bam_fillmd1(aln, ref.data(), md_flag, 1);
-            }
-            else { // strip MD and NM tags if md_flag not set bc the liftover invalidates them
-                uint8_t* ptr = NULL;
-                if ((ptr = bam_aux_get(aln, "MD")) != NULL) {
-                    bam_aux_del(aln, ptr);
-                }
-                if ((ptr = bam_aux_get(aln, "NM")) != NULL) {
-                    bam_aux_del(aln, bam_aux_get(aln, "NM"));
-                }
-            }
-            ref_name = s1_name;
-            */
         }
         {
             // write to file, thread corruption protected by lock_guard
@@ -215,14 +224,20 @@ std::map<std::string, std::string> load_fasta(std::string ref_name) {
 
 void lift_run(lift_opts args) {
     std::cerr << "Loading levioSAM index...";
-    // if "-l" not specified, then create a levioSAM
-    lift::LiftMap l = [&]{
+    chain::ChainMap chain_map = [&] {
+        if (args.chain_fname != ""){
+            return chain::ChainMap (args.chain_fname, args.verbose);
+        }
+    }();
+    lift::LiftMap lift_map = [&]{
         if (args.lift_fname != "") {
             std::ifstream in(args.lift_fname, std::ios::binary);
             return lift::LiftMap(in);
+        // if "-l" not specified, then create a levioSAM
         } else if (args.vcf_fname != "") {
             return lift::LiftMap(lift_from_vcf(args.vcf_fname, args.sample, args.haplotype, args.name_map, args.length_map));
-        } else {
+        } else if (args.chain_fname == "") {
+        // } else {
             fprintf(stderr, "Not enough parameters specified to build/load lift-over\n");
             print_lift_help_msg();
             exit(1);
@@ -238,7 +253,9 @@ void lift_run(lift_opts args) {
     // the "ref" lengths are all stored in the levio structure. How do we loop over it?
     std::vector<std::string> contig_names;
     std::vector<size_t> contig_reflens;
-    std::tie(contig_names, contig_reflens) = l.get_s1_lens();
+    if (args.chain_fname == "") {
+        std::tie(contig_names, contig_reflens) = lift_map.get_s1_lens();
+    }
 
     std::string out_mode = (args.out_format == "sam")? "w" : "wb";
     samFile* out_sam_fp = (args.outpre == "-" || args.outpre == "")?
@@ -277,28 +294,29 @@ void lift_run(lift_opts args) {
 
     // Store chromosomes found in SAM but not in the VCF.
     // We use a vector to avoid printing out the same warning msg multiple times.
-    std::vector<std::string> chroms_not_found;
+    std::vector<std::string> unrecorded_contigs;
     const int num_threads = args.threads;
     const int chunk_size = args.chunk_size;
     std::vector<std::thread> threads;
     std::mutex mutex_fread, mutex_fwrite, mutex_vec;
     for (int j = 0; j < num_threads; j++){
-        threads.push_back(
-            std::thread(
-                read_and_lift,
-                &mutex_fread,
-                &mutex_fwrite,
-                &mutex_vec,
-                sam_fp,
-                out_sam_fp,
-                hdr,
-                chunk_size,
-                &l,
-                &chroms_not_found,
-                &ref_dict,
-                args.md_flag
-            )
-        );
+        if (args.chain_fname == "") {
+            threads.push_back(
+                std::thread(
+                    read_and_lift<lift::LiftMap>,
+                    &lift_map,
+                    &mutex_fread, &mutex_fwrite, &mutex_vec,
+                    sam_fp, out_sam_fp, hdr, chunk_size,
+                    &unrecorded_contigs, &ref_dict, args.md_flag));
+        } else {
+            threads.push_back(
+                std::thread(
+                    read_and_lift<chain::ChainMap>,
+                    &chain_map,
+                    &mutex_fread, &mutex_fwrite, &mutex_vec,
+                    sam_fp, out_sam_fp, hdr, chunk_size,
+                    &unrecorded_contigs, &ref_dict, args.md_flag));
+        }
     }
     for (int j = 0; j < num_threads; j++){
         if(threads[j].joinable())
@@ -309,17 +327,14 @@ void lift_run(lift_opts args) {
 }
 
 
-lift::LiftMap lift_from_chain(lift_opts args) {
+chain::ChainMap lift_from_chain(lift_opts args) {
     if (args.chain_fname == "") {
         fprintf(stderr, "chain file name is required!! \n");
         print_serialize_help_msg();
         exit(1);
     }
-    // chain::ChainFile cfp (args.chain_fname, args.verbose);
-    // return lift::LiftMap(&cfp);
-    chain::ChainFile* cfp = chain::chain_open(args.chain_fname, args.verbose);
-    return lift::LiftMap(cfp);
-    // chain::bcf_hdr_t* hdr = bcf_hdr_read(fp);
+    chain::ChainMap cfp (args.chain_fname, args.verbose);
+    return cfp;
 }
 
 
@@ -479,15 +494,10 @@ int main(int argc, char** argv) {
         fprintf(stderr, "invalid haplotype %s\n", args.haplotype.c_str());
         exit(1);
     }
-
     if (args.out_format != "sam" && args.out_format != "bam") {
         fprintf(stderr, "Not supported extension format %s\n", args.out_format.c_str());
         exit(1);
     }
-
-    // std::cerr << "TEST_CHAIN\n";
-    // lift_from_chain(args);
-    // exit(1);
 
     if (!strcmp(argv[optind], "lift")) {
         lift_run(args);

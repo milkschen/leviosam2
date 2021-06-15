@@ -5,6 +5,7 @@
 #include <regex>
 #include <sdsl/bit_vectors.hpp>
 #include <sdsl/util.hpp>
+#include <htslib/sam.h>
 
 namespace chain {
 class Interval {
@@ -43,39 +44,49 @@ class Interval {
     bool same_strand; // true: "+"; false: "-"
 };
 
-class ChainFile {
+class ChainMap {
 
     public:
-    ChainFile(std::string fname, int verbose);
-    void init_bitvectors(std::string source, int source_length);
-    void sort_interval_map();
-    void sort_intervals(std::string contig);
-    void debug_print_interval_map();
-    void debug_print_intervals(std::string contig);
-    bool interval_map_sanity_check();
-    int get_start_rank(std::string contig, int pos);
-    int get_end_rank(std::string contig, int pos);
-    void show_interval_info(std::string contig, int pos);
-    int get_lifted_pos(std::string contig, int pos);
+        ChainMap() {}
+        ~ChainMap();
+        ChainMap(std::string fname, int verbose);
+        void init_bitvectors(std::string source, int source_length);
+        void sort_interval_map();
+        void sort_intervals(std::string contig);
+        void debug_print_interval_map();
+        void debug_print_intervals(std::string contig);
+        bool interval_map_sanity_check();
+        int get_start_rank(std::string contig, int pos);
+        int get_end_rank(std::string contig, int pos);
+        void show_interval_info(std::string contig, int pos);
+
+        std::string lift_contig(std::string contig, size_t pos);
+        void lift_cigar(const std::string& contig, bam1_t* aln);
+        size_t lift_pos(
+            std::string contig, size_t pos,
+            std::vector<std::string>* unrecorded_contigs,
+            std::mutex* mutex);
+
+        int get_lifted_pos(std::string contig, int pos);
 
     private:
-    void init_rs();
+        void init_rs();
 
-    void parse_chain_line(
-        std::string line, std::string &source, std::string &target,
-        int &source_offset, int &target_offset, bool &same_strand);
+        void parse_chain_line(
+            std::string line, std::string &source, std::string &target,
+            int &source_offset, int &target_offset, bool &same_strand);
 
-    int verbose;
-    std::unordered_map<std::string, std::vector<chain::Interval>> interval_map;
-    std::unordered_map<std::string, sdsl::bit_vector> start_bv_map;
-    std::unordered_map<std::string, sdsl::bit_vector> end_bv_map;
-    std::unordered_map<std::string, sdsl::sd_vector<>> start_map;
-    std::unordered_map<std::string, sdsl::sd_vector<>> end_map;
-    std::unordered_map<std::string, sdsl::sd_vector<>::rank_1_type> start_rs1_map;
-    std::unordered_map<std::string, sdsl::sd_vector<>::rank_1_type> end_rs1_map;
+        int verbose;
+        std::unordered_map<std::string, std::vector<chain::Interval>> interval_map;
+        std::unordered_map<std::string, sdsl::bit_vector> start_bv_map;
+        std::unordered_map<std::string, sdsl::bit_vector> end_bv_map;
+        std::unordered_map<std::string, sdsl::sd_vector<>> start_map;
+        std::unordered_map<std::string, sdsl::sd_vector<>> end_map;
+        std::unordered_map<std::string, sdsl::sd_vector<>::rank_1_type> start_rs1_map;
+        std::unordered_map<std::string, sdsl::sd_vector<>::rank_1_type> end_rs1_map;
 };
 
-ChainFile* chain_open(std::string fname, int verbose);
+ChainMap* chain_open(std::string fname, int verbose);
 
 using IntervalMap = std::unordered_map<std::string, chain::Interval>;
 };

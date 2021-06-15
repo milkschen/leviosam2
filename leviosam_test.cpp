@@ -129,7 +129,7 @@ TEST(Lift, EmptyLift) {
     dbv.resize(20);
     sbv.resize(20);
     lift::Lift lift(ibv, dbv, sbv);
-    EXPECT_EQ(lift.s2_to_s1(5), 5);
+    EXPECT_EQ(lift.lift_pos(5), 5);
 }
 
 TEST(Lift, SimpleInsLift) {
@@ -145,7 +145,7 @@ TEST(Lift, SimpleInsLift) {
     // D : 00000000000000000000
     //     01234567
     lift::Lift lift(ibv, dbv, sbv);
-    EXPECT_EQ(lift.s2_to_s1(7), 6);
+    EXPECT_EQ(lift.lift_pos(7), 6);
 }
 
 TEST(Lift, SimpleDelLift) {
@@ -161,7 +161,7 @@ TEST(Lift, SimpleDelLift) {
     // D : 00000100000000000000
     //     01234 56
     lift::Lift lift(ibv, dbv, sbv);
-    EXPECT_EQ(lift.s2_to_s1(6), 7);
+    EXPECT_EQ(lift.lift_pos(6), 7);
 }
 
 
@@ -177,11 +177,11 @@ TEST(LiftMap, SimpleBamLift) {
     int err;
     size_t x;
     err = sam_read1(sam_fp, sam_hdr, aln);
-    x = lmap.s2_to_s1(sam_hdr->target_name[aln->core.tid], aln->core.pos, &chroms_not_found, &mutex_vec);
+    x = lmap.lift_pos(sam_hdr->target_name[aln->core.tid], aln->core.pos, &chroms_not_found, &mutex_vec);
     EXPECT_EQ(x, 5313299);
     err = sam_read1(sam_fp, sam_hdr, aln);
     EXPECT_EQ(err, 0);
-    x = lmap.s2_to_s1(sam_hdr->target_name[aln->core.tid], aln->core.pos, &chroms_not_found, &mutex_vec);
+    x = lmap.lift_pos(sam_hdr->target_name[aln->core.tid], aln->core.pos, &chroms_not_found, &mutex_vec);
     EXPECT_EQ(x, 5315929);
 }
 
@@ -198,7 +198,7 @@ TEST(LiftMap, SimpleBamCigarLift) {
     size_t x;
     uint32_t* test_cigar;
     err = sam_read1(sam_fp, sam_hdr, aln);
-    lmap.cigar_s2_to_s1(sam_hdr->target_name[aln->core.tid], aln);
+    lmap.lift_cigar(sam_hdr->target_name[aln->core.tid], aln);
     test_cigar = bam_get_cigar(aln);
     EXPECT_EQ(aln->core.n_cigar, 3);
     EXPECT_EQ(test_cigar[0], bam_cigar_gen( 11, BAM_CMATCH));
@@ -207,7 +207,7 @@ TEST(LiftMap, SimpleBamCigarLift) {
 
     err = sam_read1(sam_fp, sam_hdr, aln);
     EXPECT_EQ(err, 0);
-    lmap.cigar_s2_to_s1(sam_hdr->target_name[aln->core.tid], aln);
+    lmap.lift_cigar(sam_hdr->target_name[aln->core.tid], aln);
     test_cigar = bam_get_cigar(aln);
     EXPECT_EQ(aln->core.n_cigar, 3);
     EXPECT_EQ(test_cigar[0], bam_cigar_gen( 15, BAM_CMATCH));
@@ -228,7 +228,7 @@ TEST(LiftMap, DelInIndelBamCigarLift) {
     size_t x;
     uint32_t* test_cigar;
     err = sam_read1(sam_fp, sam_hdr, aln);
-    lmap.cigar_s2_to_s1(sam_hdr->target_name[aln->core.tid], aln);
+    lmap.lift_cigar(sam_hdr->target_name[aln->core.tid], aln);
     test_cigar = bam_get_cigar(aln);
     EXPECT_EQ(aln->core.n_cigar, 3);
     EXPECT_EQ(test_cigar[0], bam_cigar_gen( 7, BAM_CMATCH));
@@ -237,7 +237,7 @@ TEST(LiftMap, DelInIndelBamCigarLift) {
 
     err = sam_read1(sam_fp, sam_hdr, aln);
     EXPECT_EQ(err, 0);
-    lmap.cigar_s2_to_s1(sam_hdr->target_name[aln->core.tid], aln);
+    lmap.lift_cigar(sam_hdr->target_name[aln->core.tid], aln);
     test_cigar = bam_get_cigar(aln);
     EXPECT_EQ(aln->core.n_cigar, 3);
     EXPECT_EQ(test_cigar[0], bam_cigar_gen( 8, BAM_CMATCH));
@@ -258,7 +258,7 @@ TEST(LiftMap, SimpleSplicedBamCigarLift) {
     size_t x;
     uint32_t* test_cigar;
     err = sam_read1(sam_fp, sam_hdr, aln);
-    lmap.cigar_s2_to_s1(sam_hdr->target_name[aln->core.tid], aln);
+    lmap.lift_cigar(sam_hdr->target_name[aln->core.tid], aln);
     test_cigar = bam_get_cigar(aln);
     EXPECT_EQ(aln->core.n_cigar, 3);
     EXPECT_EQ(test_cigar[0], bam_cigar_gen( 7, BAM_CMATCH));
@@ -267,7 +267,7 @@ TEST(LiftMap, SimpleSplicedBamCigarLift) {
 
     err = sam_read1(sam_fp, sam_hdr, aln);
     EXPECT_EQ(err, 0);
-    lmap.cigar_s2_to_s1(sam_hdr->target_name[aln->core.tid], aln);
+    lmap.lift_cigar(sam_hdr->target_name[aln->core.tid], aln);
     test_cigar = bam_get_cigar(aln);
     EXPECT_EQ(aln->core.n_cigar, 3);
     EXPECT_EQ(test_cigar[0], bam_cigar_gen( 8, BAM_CMATCH));
@@ -277,14 +277,26 @@ TEST(LiftMap, SimpleSplicedBamCigarLift) {
 
 
 /* Chain tests */
-TEST(ChainFile, SimpleRankAndLift) {
-    chain::ChainFile file ("small.chain", 0);
-    //chain::ChainFile *file = new chain::ChainFile("small.chain", 0);
+TEST(ChainMap, SimpleRankAndLift) {
+    chain::ChainMap cmap ("small.chain", 0);
 
-    int pos1 = 674047;
-    int rank1 = file.get_start_rank("chr1", pos1);
-    std::cerr << "rank(" << pos1 << ")=" << rank1 << "\n";
-    // file->show_interval_info("chr1", pos1);
-    EXPECT_EQ(rank1, 0);
-    EXPECT_EQ(file.get_lifted_pos("chr1", pos1), 100272);
+    std::vector<std::string> uc;
+    std::mutex mutex;
+
+    int pos = 674047;
+    std::string contig = "chr1";
+    int rank = cmap.get_start_rank(contig, pos);
+    // std::cerr << "rank(" << pos << ")=" << rank << "\n";
+    EXPECT_EQ(rank, 0);
+    EXPECT_EQ(cmap.lift_contig(contig, pos), contig);
+    EXPECT_EQ(cmap.lift_pos(contig, pos, &uc, &mutex), 100272);
+    
+
+    pos = 207130;
+    contig = "chr2";
+    rank = cmap.get_start_rank(contig, pos);
+    // std::cerr << "rank(" << pos << ")=" << rank << "\n";
+    EXPECT_EQ(rank, 1);
+    EXPECT_EQ(cmap.lift_contig(contig, pos), contig);
+    EXPECT_EQ(cmap.lift_pos(contig, pos, &uc, &mutex), 206846+121+8);
 }
