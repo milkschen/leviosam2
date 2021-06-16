@@ -25,4 +25,4 @@ gtest: leviosam_test.o chain.o
 	    # $(CXX) -o $@ $< $(LIB) $(CXX_FLAGS) -lgtest_main -lgtest
 
 clean:
-	    rm *.o $(MAIN)
+	    rm *.gch *.o $(MAIN)
