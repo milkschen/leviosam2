@@ -68,7 +68,6 @@ void serialize_run(lift_opts args) {
 template <class T>
 void lift_aln(
     bam1_t* aln,
-    // lift::LiftMap* lift_map,
     T* lift_map,
     bam_hdr_t* hdr,
     bool md_flag,
@@ -145,7 +144,6 @@ void lift_aln(
 template <class T>
 void read_and_lift(
     T* lift_map,
-    // lift::LiftMap* lift_map,
     std::mutex* mutex_fread,
     std::mutex* mutex_fwrite,
     std::mutex* mutex_vec,
@@ -227,6 +225,8 @@ void lift_run(lift_opts args) {
     chain::ChainMap chain_map = [&] {
         if (args.chain_fname != ""){
             return chain::ChainMap (args.chain_fname, args.verbose);
+        } else {
+            return chain::ChainMap();
         }
     }();
     lift::LiftMap lift_map = [&]{
@@ -236,7 +236,9 @@ void lift_run(lift_opts args) {
         // if "-l" not specified, then create a levioSAM
         } else if (args.vcf_fname != "") {
             return lift::LiftMap(lift_from_vcf(args.vcf_fname, args.sample, args.haplotype, args.name_map, args.length_map));
-        } else if (args.chain_fname == "") {
+        } else if (args.chain_fname != "") {
+            return lift::LiftMap();
+        } else {
         // } else {
             fprintf(stderr, "Not enough parameters specified to build/load lift-over\n");
             print_lift_help_msg();

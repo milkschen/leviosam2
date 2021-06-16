@@ -349,9 +349,8 @@ class LiftMap {
     public:
 
     LiftMap() {}
-    ~LiftMap() {
-        std::cerr << "destructor - LiftMap\n";
-    }
+
+    ~LiftMap() {}
 
     LiftMap(std::ifstream& in) {
         this->load(in);

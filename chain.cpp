@@ -32,10 +32,6 @@ ChainMap::ChainMap(std::string fname, int verbose) {
     }
 }
 
-ChainMap::~ChainMap(){
-    std::cerr << "destructor - ChainMap\n";
-}
-
 /* Create start and end bitvectors when see a new `source`.
  * Do nothing if `source` has been seen.
  */
@@ -271,100 +267,31 @@ size_t ChainMap::lift_pos(
         return pos + this->interval_map[contig][intvl_idx].offset;
 }
 
-// TODO: to remove
-ChainMap* chain::chain_open(std::string fname, int verbose) {
-    ChainMap *file = new ChainMap(fname, verbose);
+// // TODO from leviosam.hpp. Not yet modified
+// // saves to stream
+// size_t ChainMap::serialize(std::ofstream& out) {
+//     size_t size = 0;
+//     size_t nelems = lmap.size();
+//     out.write(reinterpret_cast<char*>(&nelems), sizeof(nelems));
+//     size += sizeof(nelems);
+//     for (auto i = 0; i < nelems; ++i) {
+//         size += lmap[i].serialize(out);
+//     }
+//     size += s1_map.serialize(out);
+//     size += s2_map.serialize(out);
+//     size += name_map.serialize(out);
+//     return size;
+// }
+// 
+// // loads from stream
+// void ChainMap::load(std::ifstream& in) {
+//     size_t nelems;
+//     in.read(reinterpret_cast<char*>(&nelems), sizeof(nelems));
+//     for (auto i = 0; i < nelems; ++i) {
+//         lmap.push_back(Lift(in));
+//     }
+//     s1_map.load(in);
+//     s2_map.load(in);
+//     name_map.load(in);
+// }
 
-    if (verbose > 0) {
-        std::cerr << "Check if there are overlapping intervals...";
-        std::string is_overlap = (file->interval_map_sanity_check())? " pass" : " failed";
-        std::cerr << is_overlap << "\n";
-    }
-
-    // TODO
-    std::cerr << "TEST_RANK\n";
-    std::cerr << file->get_start_rank("chrM", 15000) << "\n";
-    // std::cerr << file->get_start_rank("chrY", 6436563) << "\n";
-    // std::cerr << file->get_start_rank("chrY", 9741965) << "\n";
-    // std::cerr << file->get_start_rank("chrZ", 6436563) << "\n";
-
-    std::cerr << "TEST1\n";
-    int test_pos1 = 16000000;
-    int test_rank1 = file->get_start_rank("chr1", test_pos1);
-    std::cerr << "rank(" << test_pos1 << ")=" << test_rank1 << "\n";
-    file->show_interval_info("chr1", test_pos1);
-    file->get_lifted_pos("chr1", test_pos1);
-
-    std::cerr << "TEST2\n";
-    int test_pos2 = 674047;
-    int test_rank2 = file->get_start_rank("chr1", test_pos2);
-    std::cerr << "rank(" << test_pos2 << ")=" << test_rank2 << "\n";
-    file->show_interval_info("chr1", test_pos2);
-    file->get_lifted_pos("chr1", test_pos2);
-
-    std::cerr << "TEST_RANK_END\n";
-
-    return file;
-}
-
-/*
-void chain::read_and_lift(
-    std::mutex* mutex_fread,
-    std::mutex* mutex_fwrite,
-    std::mutex* mutex_vec,
-    samFile* sam_fp,
-    samFile* out_sam_fp,
-    bam_hdr_t* hdr,
-    int chunk_size,
-    std::vector<std::string>* chroms_not_found,
-    std::map<std::string, std::string>* ref_dict,
-    int md_flag
-){
-    std::string ref_name;
-    std::vector<bam1_t*> aln_vec;
-    for (int i = 0; i < chunk_size; i++){
-        bam1_t* aln = bam_init1();
-        aln_vec.push_back(aln);
-    }
-    int read = 1;
-    while (read >= 0){
-        int num_actual_reads = chunk_size;
-        {
-            // read from SAM, protected by mutex
-            std::lock_guard<std::mutex> g(*mutex_fread);
-            for (int i = 0; i < chunk_size; i++){
-                read = sam_read1(sam_fp, hdr, aln_vec[i]);
-                if (read < 0){
-                    num_actual_reads = i;
-                    break;
-                }
-            }
-        }
-        for (int i = 0; i < num_actual_reads; i++){
-            this->lift_aln(
-                aln_vec[i],
-                hdr,
-                md_flag, ref_name,
-                ref_dict,
-                chroms_not_found,
-                mutex_vec);
-        }
-        {
-            // write to file, thread corruption protected by lock_guard
-            std::lock_guard<std::mutex> g(*mutex_fwrite);
-            // std::thread::id this_id = std::this_thread::get_id();
-            for (int i = 0; i < num_actual_reads; i++){
-                auto flag_write = sam_write1(out_sam_fp, hdr, aln_vec[i]);
-                if (flag_write < 0){
-                    std::cerr << "[Error] Failed to write record " << bam_get_qname(aln_vec[i]) << "\n";
-                    exit(1);
-                }
-            }
-        }
-    }
-    for (int i = 0; i < chunk_size; i++){
-        bam_destroy1(aln_vec[i]);
-    }
-    aln_vec.clear();
-}
-*/

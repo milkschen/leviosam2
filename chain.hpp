@@ -48,7 +48,7 @@ class ChainMap {
 
     public:
         ChainMap() {}
-        ~ChainMap();
+        ~ChainMap() {}
         ChainMap(std::string fname, int verbose);
         void init_bitvectors(std::string source, int source_length);
         void sort_interval_map();
