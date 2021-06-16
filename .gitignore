@@ -1,3 +1,4 @@
 leviosam
 *.o
 .DS_Store
+*.swp
