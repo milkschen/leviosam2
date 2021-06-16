@@ -99,6 +99,7 @@ class Summary():
                     '    '
                     f'{baseline.reference_name}\t{baseline.reference_start:10d}\t'
                     f'{baseline.mapping_quality:3d}\t{baseline.cigarstring}')
+                print(f'{query.query_name}')
                 print(f'{self.pos_diff[i]:10d}\t{msg_query}', file=f_out)
                 print(f'{" ":10s}\t{msg_baseline}', file=f_out)
                 cnt += 1
