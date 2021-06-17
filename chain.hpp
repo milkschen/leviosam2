@@ -6,6 +6,7 @@
 #include <sdsl/bit_vectors.hpp>
 #include <sdsl/util.hpp>
 #include <htslib/sam.h>
+#include "leviosam.hpp"
 
 namespace chain {
 class Interval {
@@ -61,11 +62,32 @@ class ChainMap {
         void show_interval_info(std::string contig, int pos);
 
         std::string lift_contig(std::string contig, size_t pos);
+        std::string lift_contig(
+            std::string contig, int start_intvl_idx, int end_intvl_idx);
         void lift_cigar(const std::string& contig, bam1_t* aln);
+        void lift_cigar(
+            const std::string& contig, bam1_t* aln,
+            int start_intvl_idx, int end_intvl_idx);
+
+        size_t lift_pos(std::string contig, size_t pos);
         size_t lift_pos(
             std::string contig, size_t pos,
-            std::vector<std::string>* unrecorded_contigs,
-            std::mutex* mutex);
+            int start_intvl_idx, int end_intvl_idx);
+
+        bool lift_segment(
+            bam1_t* aln, bam_hdr_t* hdr,
+            bool is_first_seg, std::string &dest_contig,
+            int &start_intvl_idx, int &end_intvl_idx);
+        bool is_liftable(
+            std::string contig, size_t pos,
+            int &start_intvl_idx, int &end_intvl_idx);
+        void lift_aln(
+            bam1_t* aln,
+            bam_hdr_t* hdr,
+            std::string &dest_contig);
+            // bool md_flag,
+            // std::string &ref_name,
+            // std::map<std::string, std::string>* ref_dict);
 
         int get_lifted_pos(std::string contig, int pos);
 

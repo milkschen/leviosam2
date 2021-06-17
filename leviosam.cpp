@@ -66,7 +66,7 @@ void serialize_run(lift_opts args) {
 
 // Lift over an alignment. Lifted information will be updated in the htslib aln object.
 template <class T>
-void lift_aln(
+void _lift_aln(
     bam1_t* aln,
     T* lift_map,
     bam_hdr_t* hdr,
@@ -176,15 +176,36 @@ void read_and_lift(
             }
         }
         for (int i = 0; i < num_actual_reads; i++){
-            // lift_map->lift_aln(
-            lift_aln<T>(
-                aln_vec[i],
-                lift_map,
-                hdr,
-                md_flag, ref_name,
-                ref_dict,
-                unrecorded_contigs,
-                mutex_vec);
+            std::string dest_contig;
+            lift_map->lift_aln(aln_vec[i], hdr, dest_contig);
+                // md_flag, ref_name,
+                // ref_dict);
+            //lift_aln<T>(
+            //    aln_vec[i],
+            //    lift_map,
+            //    hdr,
+            //    md_flag, ref_name,
+            //    ref_dict,
+            //    unrecorded_contigs,
+            //    mutex_vec);
+            std::string ref;
+            if (md_flag) {
+                // change ref if needed
+                if (dest_contig != ref_name) {
+                    ref = (*ref_dict)[dest_contig];
+                }
+                bam_fillmd1(aln_vec[i], ref.data(), md_flag, 1);
+            }
+            else { // strip MD and NM tags if md_flag not set bc the liftover invalidates them
+                uint8_t* ptr = NULL;
+                if ((ptr = bam_aux_get(aln_vec[i], "MD")) != NULL) {
+                    bam_aux_del(aln_vec[i], ptr);
+                }
+                if ((ptr = bam_aux_get(aln_vec[i], "NM")) != NULL) {
+                    bam_aux_del(aln_vec[i], bam_aux_get(aln_vec[i], "NM"));
+                }
+            }
+            ref_name = dest_contig;
         }
         {
             // write to file, thread corruption protected by lock_guard

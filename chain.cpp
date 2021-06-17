@@ -252,19 +252,213 @@ std::string ChainMap::lift_contig(std::string contig, size_t pos) {
         return this->interval_map[contig][intvl_idx].target;
 }
 
+std::string ChainMap::lift_contig(
+    std::string contig, int start_intvl_idx, int end_intvl_idx) {
+    if (start_intvl_idx == -1)
+        return "*";
+    else
+        return this->interval_map[contig][start_intvl_idx].target;
+}
+
 void ChainMap::lift_cigar(const std::string& contig, bam1_t* aln) {
     // TODO
 }
 
 size_t ChainMap::lift_pos(
-    std::string contig, size_t pos,
-    std::vector<std::string>* unrecorded_contigs,
-    std::mutex* mutex) {
+    std::string contig, size_t pos) {
     int intvl_idx = this->get_start_rank(contig, pos);
     if (intvl_idx == -1)
         return pos;
     else
         return pos + this->interval_map[contig][intvl_idx].offset;
+}
+
+size_t ChainMap::lift_pos(
+    std::string contig, size_t pos,
+    int start_intvl_idx, int end_intvl_idx) {
+    if (start_intvl_idx == -1)
+        return pos;
+    else
+        return pos + this->interval_map[contig][start_intvl_idx].offset;
+}
+
+// Return liftability (bool) and update start/end-interval indexes.
+bool ChainMap::is_liftable(
+    std::string contig, size_t pos,
+    int &start_intvl_idx, int &end_intvl_idx
+) {
+    start_intvl_idx = this->get_start_rank(contig, pos);
+    end_intvl_idx = this->get_end_rank(contig, pos);
+    if (start_intvl_idx == -1 || end_intvl_idx == -1)
+        return false;
+    if (end_intvl_idx - start_intvl_idx == 1)
+        return true;
+    return false;
+}
+
+bool ChainMap::lift_segment(
+    bam1_t* aln, bam_hdr_t* hdr,
+    bool is_first_seg, std::string &dest_contig,
+    int &start_intvl_idx, int &end_intvl_idx
+) {
+    bam1_core_t* c = &(aln->core);
+
+    if (is_first_seg && (c->flag & BAM_FUNMAP))
+        return false;
+    else if (!is_first_seg && (c->flag & BAM_FMUNMAP))
+        return false;
+
+    std::string source_contig;
+    if (is_first_seg)
+        source_contig = hdr->target_name[c->tid];
+    else
+        source_contig = hdr->target_name[c->mtid];
+
+    bool is_liftable;
+    // Check liftability.
+    // If not liftable (un-liftable or unmapped), 
+    // update start/end_intvl_idx and return false 
+    if (is_first_seg) {
+        start_intvl_idx = this->get_start_rank(source_contig, c->pos);
+        end_intvl_idx = this->get_end_rank(source_contig, c->pos);
+    } else {
+        start_intvl_idx = this->get_start_rank(source_contig, c->mpos);
+        end_intvl_idx = this->get_end_rank(source_contig, c->mpos);
+    }
+    if ((start_intvl_idx == -1) || (end_intvl_idx == -1)) {
+        return false;
+    ////// #TODO } else if (start_intvl_idx - end_intvl_idx != 1) {
+    ////// #TODO     return false;
+    } else {
+        is_liftable = true;
+    }
+
+    // Lift contig
+    if (start_intvl_idx == -1)
+        dest_contig = "*";
+    else
+        dest_contig = this->interval_map[source_contig][start_intvl_idx].target;
+    if (is_first_seg)
+        c->tid = sam_hdr_name2tid(hdr, dest_contig.c_str());
+    else
+        c->mtid = sam_hdr_name2tid(hdr, dest_contig.c_str());
+
+    // Lift pos
+    size_t pos;
+    if (is_first_seg) {
+        if (start_intvl_idx != -1)
+            c->pos = c->pos +
+                this->interval_map[source_contig][start_intvl_idx].offset;
+    } else {
+        if (start_intvl_idx != -1)
+            c->mpos = c->mpos + 
+                this->interval_map[source_contig][start_intvl_idx].offset;
+    }
+
+    // Lift cigar #TODO
+    // this->lift_cigar(
+    //     source_contig, aln, start_intvl_idx, end_intvl_idx);
+
+    return is_liftable;
+}
+
+void ChainMap::lift_aln(
+    bam1_t* aln,
+    bam_hdr_t* hdr,
+    std::string &dest_contig
+) {
+    bam1_core_t* c = &(aln->core);
+    std::string source_contig;
+    size_t lift_status;
+
+    int start_intvl_idx, end_intvl_idx;
+    size_t pos = c->pos;
+    size_t mpos = c->mpos;
+    bool is_r1_liftable = this->lift_segment(
+        aln, hdr, true, dest_contig, start_intvl_idx, end_intvl_idx);
+
+    std::string lo;
+    // Paired
+    if (c->flag & BAM_FPAIRED) {
+        int mate_start_intvl_idx, mate_end_intvl_idx;
+        bool is_r2_liftable = this->lift_segment(
+            aln, hdr, false, dest_contig, start_intvl_idx, end_intvl_idx);
+
+        // R1 unmapped
+        if (c->flag & BAM_FUNMAP) {
+            if (c->flag & BAM_FMUNMAP) {
+                lift_status = LIFT_R1_UM_R2_UM;
+                // Neither lifted - do nothing
+                lo = "UM_UM";
+            } else if (is_r2_liftable) {
+                lift_status = LIFT_R1_UM_R2_L;
+                // TODO: copy R2 to R1
+                c->pos = c->mpos;
+                c->tid = c->mtid;
+                lo = "UM_L";
+            } else {
+                lift_status = LIFT_R1_UM_R2_UL;
+                // Neither lifted - do nothing
+                lo = "UM_UL";
+            }
+        // R1 mapped, liftable
+        } else if (is_r1_liftable) {
+            if (c->flag & BAM_FMUNMAP) {
+                lift_status = LIFT_R1_L_R2_UM;
+                // TODO: Copy r1 to r2
+                c->mpos = c->pos;
+                c->mtid = c->tid;
+                lo = "L_UM";
+            } else if (is_r2_liftable) {
+                lift_status = LIFT_R1_L_R2_L;
+                lo = "L_L";
+            } else {
+                lift_status = LIFT_R1_L_R2_UL;
+                // TODO: Copy r1 to r2
+                c->mpos = c->pos;
+                c->mtid = c->tid;
+                lo = "L_UL";
+            }
+        // R1 mapped, un-liftable
+        } else {
+            // c->qual = 255;
+            if (c->flag & BAM_FMUNMAP) {
+                lift_status = LIFT_R1_UL_R2_UM;
+                // Neither lifted - do nothing
+                lo = "UL_UM";
+            } else if (is_r2_liftable) {
+                lift_status = LIFT_R1_UL_R2_L;
+                // #TODO Copy R2 to R1 ??
+                c->pos = c->mpos;
+                c->tid = c->mtid;
+                lo = "UL_L";
+            } else {
+                lift_status = LIFT_R1_UL_R2_UL;
+                // Neither lifted - do nothing
+                lo = "UL_UL";
+            }
+        }
+        // TODO consider STRAND
+        c->isize = 
+            (c->isize == 0)? 0 : 
+            (c->tid != c->mtid)? 0 : 
+                c->isize + (mpos - c->mpos) - (pos - c->pos);
+    // Unpaired
+    } else {
+        if (c->flag & BAM_FUNMAP) {
+            lift_status = LIFT_R_UM;
+            lo = "UM";
+        } else if (is_r1_liftable) {
+            lift_status = LIFT_R_L;
+            lo = "L";
+        } else {
+            lift_status = LIFT_R_UL;
+            lo = "UL";
+        }
+    }
+    bam_aux_append(
+        aln, "LO", 'Z', lo.length() + 1,
+        reinterpret_cast<uint8_t*>(const_cast<char*>(lo.c_str())));
 }
 
 // // TODO from leviosam.hpp. Not yet modified

@@ -21,7 +21,8 @@
 #include "chain.hpp"
 
 
-const char* VERSION("0.4");
+#define VERSION "0.4"
+// const char* VERSION("0.4");
 
 using NameMap = std::vector<std::pair<std::string,std::string>>;
 using LengthMap = std::unordered_map<std::string,size_t>;
@@ -53,6 +54,19 @@ struct lift_opts {
     int md_flag = 0;
     std::string ref_name = "";
 };
+
+#define LIFT_R_L            0   // unpaired, liftable
+#define LIFT_R_UL           1   // unpaired, un-liftable
+#define LIFT_R_UM           2   // unpaired, unmapped
+#define LIFT_R1_L_R2_L      3   // paired, R1 liftable, R2 liftable
+#define LIFT_R1_L_R2_UL     4   // paired, R1 liftable, R2 un-liftable
+#define LIFT_R1_L_R2_UM     5   // paired, R1 liftable, R2 unmapped
+#define LIFT_R1_UL_R2_L     6   // paired, R1 un-liftable, R2 liftable
+#define LIFT_R1_UL_R2_UL    7   // paired, R1 un-liftable, R2 un-liftable
+#define LIFT_R1_UL_R2_UM    8   // paired, R1 un-liftable, R2 unmapped
+#define LIFT_R1_UM_R2_L     9   // paired, R1 unmapped, R2 liftable
+#define LIFT_R1_UM_R2_UL    10  // paired, R1 unmapped, R2 un-liftable
+#define LIFT_R1_UM_R2_UM    11  // paired, R1 unmapped, R2 unmapped
 
 namespace lift {
 // liftover data structure for a single sequence
@@ -521,30 +535,37 @@ class LiftMap {
         lmap.push_back(Lift(ibv,dbv,sbv));
     }
 
+    // // TODO - to remove
+    // size_t lift_pos( // s2_to_s1
+    //     std::string n,
+    //     size_t i,
+    //     std::vector<std::string>* unrecorded_contigs,
+    //     std::mutex* mutex
+    // ) {}
+
     // converts a position in the s2 sequence to corresponding position in s1 sequence
     // input: sequence name, position within s2 sequence
     // output: position within s1 sequence
     // if liftover is not defined, then returns the original position
     size_t lift_pos( // s2_to_s1
         std::string n,
-        size_t i,
-        std::vector<std::string>* unrecorded_contigs,
-        std::mutex* mutex
+        size_t i
     ) {
         auto it = s2_map.find(n);
         if (it != s2_map.end()) {
             return lmap[it->second].lift_pos(i);
-        } else {
-            std::lock_guard<std::mutex> g(*mutex);
-            for (auto it : *unrecorded_contigs)
-                if (it == n) return i;
-            unrecorded_contigs->push_back(n);
-            fprintf(stderr, "Warning: chromosome %s not found in liftmap! \n", n.c_str());
-            return i;
-        }
+        } else return i;
+        // } else {
+        //     std::lock_guard<std::mutex> g(*mutex);
+        //     for (auto it : *unrecorded_contigs)
+        //         if (it == n) return i;
+        //     unrecorded_contigs->push_back(n);
+        //     fprintf(stderr, "Warning: chromosome %s not found in liftmap! \n", n.c_str());
+        //     return i;
+        // }
     }
 
-    std::string lift_contig(std::string n, size_t pos) {
+    std::string lift_contig(std::string n, size_t pos) { // get_other_name()
         if (name_map.find(n) != name_map.end())
             return name_map[n];
         // return original name if mapping is not available
@@ -568,6 +589,70 @@ class LiftMap {
             lmap[it->second].lift_cigar(b);
         }
         // If not found, no update.
+    }
+
+    // Note that a mapped read is always liftable 
+    // under the VcfMap framework.
+    void lift_aln(
+        bam1_t* aln,
+        bam_hdr_t* hdr,
+        std::string &dest_contig
+        // bool md_flag,
+        // std::string &ref_name,
+        // std::map<std::string, std::string>* ref_dict
+    ) {
+        bam1_core_t c = aln->core;
+        size_t pos;
+        std::string source_contig;
+        size_t lift_status;
+
+        // Paired
+        if (c.flag & BAM_FPAIRED) {
+            // R1 unmapped
+            if (c.flag & BAM_FUNMAP) {
+                if (c.flag & BAM_FMUNMAP) {
+                    lift_status = LIFT_R1_UM_R2_UM;
+                } else {
+                    source_contig = hdr->target_name[c.mtid];
+                    dest_contig = this->lift_contig(source_contig, c.mpos);
+                    pos = this->lift_pos(source_contig, c.mpos);
+                    aln->core.pos = pos;
+                    lift_status = LIFT_R1_UM_R2_L;
+                }
+            // R1 mapped
+            } else {
+                source_contig = hdr->target_name[c.tid];
+                dest_contig = this->lift_contig(source_contig, c.pos);
+                pos = this->lift_pos(source_contig, c.pos);
+                this->lift_cigar(source_contig, aln);
+                aln->core.pos = pos;
+                if (c.flag & BAM_FMUNMAP) {
+                    aln->core.mpos = aln->core.pos;
+                    lift_status = LIFT_R1_L_R2_UM;
+                } else {
+                    std::string msource_contig(hdr->target_name[c.mtid]);
+                    std::string mdest_contig(this->lift_contig(msource_contig, c.mpos));
+                    c.mtid = sam_hdr_name2tid(hdr, mdest_contig.c_str());
+                    size_t mpos = this->lift_pos(msource_contig, c.mpos);
+                    aln->core.mpos = mpos;
+                    int isize = (c.isize == 0)? 0 : c.isize + (mpos - c.mpos) - (pos - c.pos);
+                    aln->core.isize = isize;
+                    lift_status = LIFT_R1_L_R2_L;
+                }
+            }
+        // Unpaired
+        } else {
+            if (c.flag & BAM_FUNMAP) {
+                lift_status = LIFT_R_UM;
+            } else {
+                source_contig = hdr->target_name[c.tid];
+                dest_contig = this->lift_contig(source_contig, c.pos);
+                pos = this->lift_pos(source_contig, c.pos);
+                this->lift_cigar(source_contig, aln);
+                aln->core.pos = pos;
+                lift_status = LIFT_R_L;
+            }
+        }
     }
 
     // saves to stream
