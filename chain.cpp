@@ -39,16 +39,17 @@ void Interval::load(std::istream& in) {
     this->source_start = source_start;
     this->source_end = source_end;
     this->same_strand = same_strand;
-    std::cerr << "target=" << target << "\noffset=" << offset <<
-        "\n(start, end, strand)=(" << source_start << "," << source_end << "," << same_strand << ")\n";
+    // std::cerr << "target=" << target << "\noffset=" << offset <<
+    //     "\n(start, end, strand)=(" << source_start << "," << source_end << "," << same_strand << ")\n";
 }
 
 ChainMap::ChainMap(std::string fname, int verbose) {
     this->verbose = verbose;
     std::ifstream chain_f(fname);
     std::string line;
-    if (chain_f.is_open())
-    {
+    std::unordered_map<std::string, sdsl::bit_vector> start_bv_map;
+    std::unordered_map<std::string, sdsl::bit_vector> end_bv_map;
+    if (chain_f.is_open()) {
         std::string source;
         std::string target;
         int source_offset = 0;
@@ -57,9 +58,23 @@ ChainMap::ChainMap(std::string fname, int verbose) {
         while (getline(chain_f, line)) {
             this->parse_chain_line(
                 line, source, target, source_offset, 
-                target_offset, current_ss);
+                target_offset, current_ss,
+                start_bv_map, end_bv_map);
         }
         chain_f.close();
+    }
+    // biv_vector to sd_vector
+    for (auto& it: start_bv_map) {
+        auto itr = this->start_map.find(it.first);
+        if (itr == this->start_map.end()) {
+            this->start_map[it.first] = sdsl::sd_vector<>(it.second);
+        }
+    }
+    for (auto& it: end_bv_map) {
+        auto itr = this->end_map.find(it.first);
+        if (itr == this->end_map.end()) {
+            this->end_map[it.first] = sdsl::sd_vector<>(it.second);
+        }
     }
     this->init_rs();
     if (this->verbose > 1) {
@@ -75,12 +90,16 @@ ChainMap::ChainMap(std::string fname, int verbose) {
 /* Create start and end bitvectors when see a new `source`.
  * Do nothing if `source` has been seen.
  */
-void ChainMap::init_bitvectors(std::string source, int source_length) {
-    std::unordered_map<std::string, sdsl::bit_vector>::const_iterator find_start = this->start_bv_map.find(source);
-    if (find_start == this->start_bv_map.end()) {
+void ChainMap::init_bitvectors(
+    std::string source, int source_length,
+    std::unordered_map<std::string, sdsl::bit_vector> &start_bv_map,
+    std::unordered_map<std::string, sdsl::bit_vector> &end_bv_map
+) {
+    auto itr = start_bv_map.find(source);
+    if (itr == start_bv_map.end()) {
         sdsl::bit_vector new_start_bv(source_length), new_end_bv(source_length);
-        this->start_bv_map[source] = new_start_bv;
-        this->end_bv_map[source] = new_end_bv;
+        start_bv_map[source] = new_start_bv;
+        end_bv_map[source] = new_end_bv;
     }
 }
 
@@ -176,20 +195,20 @@ int ChainMap::get_end_rank(std::string contig, int pos) {
 
 /* Init rank support for all start/end bitvectors. */
 void ChainMap::init_rs() {
-    for (auto& it: this->start_bv_map) {
+    for (auto& it: this->start_map) {
         std::string contig = it.first;
         std::unordered_map<std::string, sdsl::sd_vector<>>::const_iterator find_start = this->start_map.find(contig);
         if (find_start == this->start_map.end()) {
-            this->start_map[contig] = sdsl::sd_vector<>(it.second);
+            // this->start_map[contig] = sdsl::sd_vector<>(it.second);
             this->start_rs1_map[contig] = sdsl::sd_vector<>::rank_1_type();
         }
         sdsl::util::init_support(this->start_rs1_map[contig], &this->start_map[contig]);
     }
-    for (auto& it: this->end_bv_map) {
+    for (auto& it: this->end_map) {
         std::string contig = it.first;
         std::unordered_map<std::string, sdsl::sd_vector<>>::const_iterator find_start = this->end_map.find(contig);
         if (find_start == this->end_map.end()) {
-            this->end_map[contig] = sdsl::sd_vector<>(it.second);
+            // this->end_map[contig] = sdsl::sd_vector<>(it.second);
             this->end_rs1_map[contig] = sdsl::sd_vector<>::rank_1_type();
         }
         sdsl::util::init_support(this->end_rs1_map[contig], &this->end_map[contig]);
@@ -200,7 +219,9 @@ void ChainMap::init_rs() {
  */
 void ChainMap::parse_chain_line(
     std::string line, std::string &source, std::string &target,
-    int &source_offset, int &target_offset, bool &same_strand
+    int &source_offset, int &target_offset, bool &same_strand,
+    std::unordered_map<std::string, sdsl::bit_vector> &start_bv_map,
+    std::unordered_map<std::string, sdsl::bit_vector> &end_bv_map
 ) {
     // Split `line` using space as deliminater.
     std::regex s_re("\\s+"); // space
@@ -227,7 +248,7 @@ void ChainMap::parse_chain_line(
             std::cerr << "Error during parsing chain" << line << "\n";
             exit(1);
         }
-        this->init_bitvectors(source, source_length);
+        this->init_bitvectors(source, source_length, start_bv_map, end_bv_map);
     } else if (vec.size() == 3) {
         int s_int_start = source_offset;
         int s_int_end = source_offset + stoi(vec[0]);
@@ -235,8 +256,10 @@ void ChainMap::parse_chain_line(
         int t_int_end = target_offset + stoi(vec[0]);
         // Set bitvectors
         if (s_int_start > 0)
-            this->start_bv_map[source][s_int_start-1] = 1;
-        this->end_bv_map[source][s_int_end] = 1;
+            start_bv_map[source][s_int_start-1] = 1;
+            // this->start_bv_map[source][s_int_start-1] = 1;
+        end_bv_map[source][s_int_end] = 1;
+        // this->end_bv_map[source][s_int_end] = 1;
 
         if (this->verbose > 1)
             fprintf(stderr, "source (%d-%d), target (%d-%d)\n", s_int_start, s_int_end, t_int_start, t_int_end);
@@ -275,14 +298,6 @@ void ChainMap::show_interval_info(std::string contig, int pos) {
     this->interval_map[contig][rank].debug_print_interval();
 }
 
-// TODO: to remove
-// int ChainMap::get_lifted_pos(std::string contig, int pos) {
-//     int rank = this->get_start_rank(contig, pos);
-//     std::cerr << this->interval_map[contig][rank].target << "\n";
-//     int lifted_pos = pos + this->interval_map[contig][rank].offset;
-//     std::cerr << lifted_pos << "\n";
-//     return lifted_pos;
-// }
 
 std::string ChainMap::lift_contig(std::string contig, size_t pos) {
     int intvl_idx = this->get_start_rank(contig, pos);
@@ -521,26 +536,24 @@ size_t ChainMap::serialize(std::ofstream& out) {
             size += intvl.serialize(out);
         }
     }
-    // start_bv_map
-    std::cerr << "serializing start_bv_maps...\n";
-    nelems = this->start_bv_map.size();
+    // start_map
+    std::cerr << "serializing start_maps...\n";
+    nelems = this->start_map.size();
     out.write(reinterpret_cast<char*>(&nelems), sizeof(nelems));
     size += sizeof(nelems);
-    // for (auto& x: this->start_map) {
-    for (auto& x: this->start_bv_map) {
+    for (auto& x: this->start_map) {
         size_t str_size = x.first.size();
         out.write(reinterpret_cast<char*>(&str_size), sizeof(str_size));
         out.write(reinterpret_cast<const char*>(x.first.data()), str_size);
         size += sizeof(str_size) + str_size;
         size += x.second.serialize(out);
     }
-    // end_bv_map
-    std::cerr << "serializing end_bv_maps...\n";
-    nelems = this->end_bv_map.size();
+    // end_map
+    std::cerr << "serializing end_maps...\n";
+    nelems = this->end_map.size();
     out.write(reinterpret_cast<char*>(&nelems), sizeof(nelems));
     size += sizeof(nelems);
-    // for (auto& x: this->end_map) {
-    for (auto& x: this->end_bv_map) {
+    for (auto& x: this->end_map) {
         size_t str_size = x.first.size();
         out.write(reinterpret_cast<char*>(&str_size), sizeof(str_size));
         out.write(reinterpret_cast<const char*>(x.first.data()), str_size);
@@ -571,9 +584,6 @@ void ChainMap::load(std::ifstream& in) {
         for (auto j = 0; j < vec_size; ++j) {
             this->interval_map[key].push_back(Interval(in));
         }
-        // in.read(reinterpret_cast<char*>(&value), sizeof(value));
-        // fprintf(stderr, "%s\t%d\n", key.data(), value);
-        // (*this)[key] = value;
     }
     in.read(reinterpret_cast<char*>(&map_size), sizeof(map_size));
     for (auto i = 0; i < map_size; ++i) {
@@ -582,9 +592,9 @@ void ChainMap::load(std::ifstream& in) {
         std::vector<char> buf(str_size);
         in.read(reinterpret_cast<char*>(buf.data()), str_size);
         std::string key(buf.begin(), buf.end());
-        sdsl::bit_vector sdv;
+        sdsl::sd_vector<> sdv;
         sdv.load(in);
-        this->start_bv_map[key] = sdv;
+        this->start_map[key] = sdv;
     }
     in.read(reinterpret_cast<char*>(&map_size), sizeof(map_size));
     for (auto i = 0; i < map_size; ++i) {
@@ -593,23 +603,10 @@ void ChainMap::load(std::ifstream& in) {
         std::vector<char> buf(str_size);
         in.read(reinterpret_cast<char*>(buf.data()), str_size);
         std::string key(buf.begin(), buf.end());
-        sdsl::bit_vector sdv;
+        sdsl::sd_vector<> sdv;
         sdv.load(in);
-        this->end_bv_map[key] = sdv;
+        this->end_map[key] = sdv;
     }
     this->init_rs();
-    //     size_t map_size;
-    //     in.read(reinterpret_cast<char*>(&map_size), sizeof(map_size));
-    //     for (auto i = 0; i < map_size; ++i) {
-    //         size_t str_size;
-    //         in.read(reinterpret_cast<char*>(&str_size), sizeof(str_size));
-    //         std::vector<char> buf(str_size);
-    //         in.read(reinterpret_cast<char*>(buf.data()), str_size);
-    //         key_type key(buf.begin(), buf.end());
-    //         mapped_type value;
-    //         in.read(reinterpret_cast<char*>(&value), sizeof(value));
-    //         // fprintf(stderr, "%s\t%d\n", key.data(), value);
-    //         (*this)[key] = value;
-    //     }
 }
 

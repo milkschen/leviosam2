@@ -64,7 +64,10 @@ class ChainMap {
         ~ChainMap() {}
         ChainMap(std::string fname, int verbose);
         ChainMap(std::ifstream& in);
-        void init_bitvectors(std::string source, int source_length);
+        void init_bitvectors(
+            std::string source, int source_length,
+            std::unordered_map<std::string, sdsl::bit_vector> &start_bv_map,
+            std::unordered_map<std::string, sdsl::bit_vector> &end_bv_map);
         void sort_interval_map();
         void sort_intervals(std::string contig);
         void debug_print_interval_map();
@@ -113,12 +116,12 @@ class ChainMap {
 
         void parse_chain_line(
             std::string line, std::string &source, std::string &target,
-            int &source_offset, int &target_offset, bool &same_strand);
+            int &source_offset, int &target_offset, bool &same_strand,
+            std::unordered_map<std::string, sdsl::bit_vector> &start_bv_map,
+            std::unordered_map<std::string, sdsl::bit_vector> &end_bv_map);
 
         int verbose;
         std::unordered_map<std::string, std::vector<chain::Interval>> interval_map;
-        std::unordered_map<std::string, sdsl::bit_vector> start_bv_map;
-        std::unordered_map<std::string, sdsl::bit_vector> end_bv_map;
         std::unordered_map<std::string, sdsl::sd_vector<>> start_map;
         std::unordered_map<std::string, sdsl::sd_vector<>> end_map;
         std::unordered_map<std::string, sdsl::sd_vector<>::rank_1_type> start_rs1_map;
