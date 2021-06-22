@@ -39,6 +39,7 @@ extern "C" {
 struct lift_opts {
     std::string vcf_fname = "";
     std::string chain_fname = "";
+    std::string chainmap_fname = "";
     std::string sample = "";
     std::string outpre = "";
     std::string out_format = "sam";
@@ -69,6 +70,80 @@ struct lift_opts {
 #define LIFT_R1_UM_R2_UM    11  // paired, R1 unmapped, R2 unmapped
 
 namespace lift {
+// Serialization
+class Name2IdxMap: public std::unordered_map<std::string,int> {
+    public:
+    size_t serialize(std::ofstream& out) {
+        size_t size = 0;
+        size_t map_size = this->size();
+        out.write(reinterpret_cast<char*>(&map_size), sizeof(map_size));
+        for (auto s: *this) {
+            size_t str_size = s.first.size();
+            out.write(reinterpret_cast<char*>(&str_size), sizeof(str_size));
+            out.write(reinterpret_cast<const char*>(s.first.data()), str_size);
+            out.write(reinterpret_cast<char*>(&s.second), sizeof(s.second));
+            size += sizeof(str_size) + str_size + sizeof(s.second);
+        }
+        return size;
+    }
+
+    void load(std::ifstream& in) {
+        size_t map_size;
+        in.read(reinterpret_cast<char*>(&map_size), sizeof(map_size));
+        for (auto i = 0; i < map_size; ++i) {
+            size_t str_size;
+            in.read(reinterpret_cast<char*>(&str_size), sizeof(str_size));
+            std::vector<char> buf(str_size);
+            in.read(reinterpret_cast<char*>(buf.data()), str_size);
+            key_type key(buf.begin(), buf.end());
+            mapped_type value;
+            in.read(reinterpret_cast<char*>(&value), sizeof(value));
+            // fprintf(stderr, "%s\t%d\n", key.data(), value);
+            (*this)[key] = value;
+        }
+    }
+};
+
+
+class Name2NameMap : public std::unordered_map<std::string,std::string> {
+    public:
+    size_t serialize(std::ofstream& out) {
+        size_t size = 0;
+        size_t map_size = this->size();
+        out.write(reinterpret_cast<char*>(&map_size), sizeof(map_size));
+        for (auto s: *this) {
+            size_t str_size = s.first.size();
+            out.write(reinterpret_cast<char*>(&str_size), sizeof(str_size));
+            out.write(reinterpret_cast<const char*>(s.first.data()), str_size);
+            size += sizeof(str_size) + str_size;
+            str_size = s.second.size();
+            out.write(reinterpret_cast<char*>(&str_size), sizeof(str_size));
+            out.write(reinterpret_cast<const char*>(s.second.data()), str_size);
+            size += sizeof(str_size) + str_size;
+        }
+        return size;
+    }
+
+    void load(std::ifstream& in) {
+        size_t map_size;
+        in.read(reinterpret_cast<char*>(&map_size), sizeof(map_size));
+        for (auto i = 0; i < map_size; ++i) {
+            size_t str_size;
+            in.read(reinterpret_cast<char*>(&str_size), sizeof(str_size));
+            std::vector<char> buf(str_size);
+            in.read(reinterpret_cast<char*>(buf.data()), str_size);
+            key_type key(buf.begin(), buf.end());
+            in.read(reinterpret_cast<char*>(&str_size), sizeof(str_size));
+            buf.clear();
+            buf.resize(str_size);
+            in.read(reinterpret_cast<char*>(buf.data()), str_size);
+            mapped_type value(buf.begin(), buf.end());
+            (*this)[key] = value;
+        }
+    }
+};
+
+
 // liftover data structure for a single sequence
 class Lift {
 
@@ -316,7 +391,7 @@ class Lift {
     //     return del[del.size() - 1] ? del_rs0(del.size() - 1) : del_rs0(del.size() - 1) + 1;
     // }
 
-    // saves to stream
+    // Save to stream
     size_t serialize(std::ofstream& out) const {
         size_t size = 0;
         size += ins.serialize(out);
@@ -325,7 +400,7 @@ class Lift {
         return size;
     }
 
-    // load from stream
+    // Load from stream
     void load(std::istream& in) {
         ins.load(in);
         del.load(in);
@@ -697,76 +772,6 @@ class LiftMap {
 
     std::vector<Lift> lmap;
 
-    // Serialization
-    class Name2IdxMap: public std::unordered_map<std::string,int> {
-        public:
-        size_t serialize(std::ofstream& out) {
-            size_t size = 0;
-            size_t map_size = this->size();
-            out.write(reinterpret_cast<char*>(&map_size), sizeof(map_size));
-            for (auto s: *this) {
-                size_t str_size = s.first.size();
-                out.write(reinterpret_cast<char*>(&str_size), sizeof(str_size));
-                out.write(reinterpret_cast<const char*>(s.first.data()), str_size);
-                out.write(reinterpret_cast<char*>(&s.second), sizeof(s.second));
-                size += sizeof(str_size) + str_size + sizeof(s.second);
-            }
-            return size;
-        }
-
-        void load(std::ifstream& in) {
-            size_t map_size;
-            in.read(reinterpret_cast<char*>(&map_size), sizeof(map_size));
-            for (auto i = 0; i < map_size; ++i) {
-                size_t str_size;
-                in.read(reinterpret_cast<char*>(&str_size), sizeof(str_size));
-                std::vector<char> buf(str_size);
-                in.read(reinterpret_cast<char*>(buf.data()), str_size);
-                key_type key(buf.begin(), buf.end());
-                mapped_type value;
-                in.read(reinterpret_cast<char*>(&value), sizeof(value));
-                // fprintf(stderr, "%s\t%d\n", key.data(), value);
-                (*this)[key] = value;
-            }
-        }
-    };
-    class Name2NameMap : public std::unordered_map<std::string,std::string> {
-        public:
-        size_t serialize(std::ofstream& out) {
-            size_t size = 0;
-            size_t map_size = this->size();
-            out.write(reinterpret_cast<char*>(&map_size), sizeof(map_size));
-            for (auto s: *this) {
-                size_t str_size = s.first.size();
-                out.write(reinterpret_cast<char*>(&str_size), sizeof(str_size));
-                out.write(reinterpret_cast<const char*>(s.first.data()), str_size);
-                size += sizeof(str_size) + str_size;
-                str_size = s.second.size();
-                out.write(reinterpret_cast<char*>(&str_size), sizeof(str_size));
-                out.write(reinterpret_cast<const char*>(s.second.data()), str_size);
-                size += sizeof(str_size) + str_size;
-            }
-            return size;
-        }
-
-        void load(std::ifstream& in) {
-            size_t map_size;
-            in.read(reinterpret_cast<char*>(&map_size), sizeof(map_size));
-            for (auto i = 0; i < map_size; ++i) {
-                size_t str_size;
-                in.read(reinterpret_cast<char*>(&str_size), sizeof(str_size));
-                std::vector<char> buf(str_size);
-                in.read(reinterpret_cast<char*>(buf.data()), str_size);
-                key_type key(buf.begin(), buf.end());
-                in.read(reinterpret_cast<char*>(&str_size), sizeof(str_size));
-                buf.clear();
-                buf.resize(str_size);
-                in.read(reinterpret_cast<char*>(buf.data()), str_size);
-                mapped_type value(buf.begin(), buf.end());
-                (*this)[key] = value;
-            }
-        }
-    };
 
     Name2NameMap name_map;
     Name2IdxMap s1_map;

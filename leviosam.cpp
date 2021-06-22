@@ -8,10 +8,7 @@
 #include <getopt.h>
 #include <htslib/kseq.h>
 #include <htslib/kstring.h>
-// #include <htslib/sam.h>
-// #include <htslib/vcf.h>
 #include "leviosam.hpp"
-// #include "chain.hpp"
 
 KSEQ_INIT(gzFile, gzread)
 ;;
@@ -52,15 +49,27 @@ LengthMap parse_length_map(const char* fname) {
 }
 
 void serialize_run(lift_opts args) {
-    lift::LiftMap l(lift_from_vcf(args.vcf_fname, args.sample, args.haplotype, args.name_map, args.length_map));
     if (args.outpre == "") {
         fprintf(stderr, "no output prefix specified! Use -p \n");
         print_serialize_help_msg();
         exit(1);
     }
-    std::ofstream o(args.outpre + ".lft", std::ios::binary);
-    l.serialize(o);
-    fprintf(stderr, "levioSAM file saved to %s\n", (args.outpre + ".lft").data());
+    if (args.vcf_fname != "") {
+        lift::LiftMap l(lift_from_vcf(
+            args.vcf_fname, args.sample, args.haplotype,
+            args.name_map, args.length_map));
+        std::ofstream o(args.outpre + ".lft", std::ios::binary);
+        l.serialize(o);
+        fprintf(stderr, "levioSAM VcfMap saved to %s\n", (args.outpre + ".lft").data());
+    } else if (args.chain_fname != "") {
+        chain::ChainMap cfp(args.chain_fname, args.verbose);
+        std::ofstream o(args.outpre + ".clft", std::ios::binary);
+        cfp.serialize(o);
+        fprintf(stderr, "levioSAM ChainMap saved to %s\n", (args.outpre + ".clft").data());
+    } else {
+        fprintf(stderr, "Cannot build a levioSAM index. Neither -v or -c is properly set.\n");
+        exit(1);
+    }
 }
 
 
@@ -244,8 +253,11 @@ std::map<std::string, std::string> load_fasta(std::string ref_name) {
 void lift_run(lift_opts args) {
     std::cerr << "Loading levioSAM index...";
     chain::ChainMap chain_map = [&] {
-        if (args.chain_fname != ""){
-            return chain::ChainMap (args.chain_fname, args.verbose);
+        if (args.chainmap_fname != "") {
+            std::ifstream in(args.chainmap_fname, std::ios::binary);
+            return chain::ChainMap(in);
+        } else if (args.chain_fname != ""){
+            return chain::ChainMap(args.chain_fname, args.verbose);
         } else {
             return chain::ChainMap();
         }
@@ -257,7 +269,7 @@ void lift_run(lift_opts args) {
         // if "-l" not specified, then create a levioSAM
         } else if (args.vcf_fname != "") {
             return lift::LiftMap(lift_from_vcf(args.vcf_fname, args.sample, args.haplotype, args.name_map, args.length_map));
-        } else if (args.chain_fname != "") {
+        } else if ((args.chain_fname != "") || (args.chainmap_fname != "")) {
             return lift::LiftMap();
         } else {
         // } else {
@@ -323,7 +335,7 @@ void lift_run(lift_opts args) {
     std::vector<std::thread> threads;
     std::mutex mutex_fread, mutex_fwrite, mutex_vec;
     for (int j = 0; j < num_threads; j++){
-        if (args.chain_fname == "") {
+        if (args.chain_fname == "" && args.chainmap_fname == "") {
             threads.push_back(
                 std::thread(
                     read_and_lift<lift::LiftMap>,
@@ -350,15 +362,15 @@ void lift_run(lift_opts args) {
 }
 
 
-chain::ChainMap lift_from_chain(lift_opts args) {
-    if (args.chain_fname == "") {
-        fprintf(stderr, "chain file name is required!! \n");
-        print_serialize_help_msg();
-        exit(1);
-    }
-    chain::ChainMap cfp (args.chain_fname, args.verbose);
-    return cfp;
-}
+// chain::ChainMap lift_from_chain(lift_opts args) {
+//     if (args.chain_fname == "") {
+//         fprintf(stderr, "chain file name is required!! \n");
+//         print_serialize_help_msg();
+//         exit(1);
+//     }
+//     chain::ChainMap cfp (args.chain_fname, args.verbose);
+//     return cfp;
+// }
 
 
 lift::LiftMap lift_from_vcf(std::string fname, 
@@ -437,6 +449,7 @@ int main(int argc, char** argv) {
     static struct option long_options[] {
         {"vcf", required_argument, 0, 'v'},
         {"chain", required_argument, 0, 'c'},
+        {"chainmap", required_argument, 0, 'C'},
         {"sample", required_argument, 0, 's'},
         {"prefix", required_argument, 0, 'p'},
         {"leviosam", required_argument, 0, 'l'},
@@ -451,13 +464,16 @@ int main(int argc, char** argv) {
         {"verbose", no_argument, &args.verbose, 1},
     };
     int long_index = 0;
-    while((c = getopt_long(argc, argv, "hmv:c:s:p:l:a:O:g:n:k:t:T:f:", long_options, &long_index)) != -1) {
+    while((c = getopt_long(argc, argv, "hmv:c:C:s:p:l:a:O:g:n:k:t:T:f:", long_options, &long_index)) != -1) {
         switch (c) {
             case 'v':
                 args.vcf_fname = optarg;
                 break;
             case 'c':
                 args.chain_fname = optarg;
+                break;
+            case 'C':
+                args.chainmap_fname = optarg;
                 break;
             case 's':
                 args.sample = optarg;

@@ -3,6 +3,46 @@
 
 using namespace chain;
 
+size_t Interval::serialize(std::ofstream& out) const {
+    size_t size = 0;
+    size_t str_size = target.size();
+    out.write(reinterpret_cast<char*>(&str_size), sizeof(str_size));
+    out.write(reinterpret_cast<const char*>(target.data()), str_size);
+    size += sizeof(str_size) + str_size;
+
+    out.write(reinterpret_cast<const char*>(&offset), sizeof(offset));
+    out.write(reinterpret_cast<const char*>(&source_start), sizeof(source_start));
+    out.write(reinterpret_cast<const char*>(&source_end), sizeof(source_end));
+    out.write(reinterpret_cast<const char*>(&same_strand), sizeof(same_strand));
+    size += sizeof(offset) + sizeof(source_start) + sizeof(source_end) + sizeof(same_strand);
+    return size;
+}
+
+// Load from stream
+void Interval::load(std::istream& in) {
+    // target
+    size_t str_size;
+    in.read(reinterpret_cast<char*>(&str_size), sizeof(str_size));
+    std::vector<char> buf(str_size);
+    in.read(reinterpret_cast<char*>(buf.data()), str_size);
+    std::string target(buf.begin(), buf.end());
+    int offset;
+    in.read(reinterpret_cast<char*>(&offset), sizeof(offset));
+    int source_start;
+    in.read(reinterpret_cast<char*>(&source_start), sizeof(source_start));
+    int source_end;
+    in.read(reinterpret_cast<char*>(&source_end), sizeof(source_end));
+    bool same_strand;
+    in.read(reinterpret_cast<char*>(&same_strand), sizeof(same_strand));
+    this->target = target;
+    this->offset = offset;
+    this->source_start = source_start;
+    this->source_end = source_end;
+    this->same_strand = same_strand;
+    std::cerr << "target=" << target << "\noffset=" << offset <<
+        "\n(start, end, strand)=(" << source_start << "," << source_end << "," << same_strand << ")\n";
+}
+
 ChainMap::ChainMap(std::string fname, int verbose) {
     this->verbose = verbose;
     std::ifstream chain_f(fname);
@@ -236,13 +276,13 @@ void ChainMap::show_interval_info(std::string contig, int pos) {
 }
 
 // TODO: to remove
-int ChainMap::get_lifted_pos(std::string contig, int pos) {
-    int rank = this->get_start_rank(contig, pos);
-    std::cerr << this->interval_map[contig][rank].target << "\n";
-    int lifted_pos = pos + this->interval_map[contig][rank].offset;
-    std::cerr << lifted_pos << "\n";
-    return lifted_pos;
-}
+// int ChainMap::get_lifted_pos(std::string contig, int pos) {
+//     int rank = this->get_start_rank(contig, pos);
+//     std::cerr << this->interval_map[contig][rank].target << "\n";
+//     int lifted_pos = pos + this->interval_map[contig][rank].offset;
+//     std::cerr << lifted_pos << "\n";
+//     return lifted_pos;
+// }
 
 std::string ChainMap::lift_contig(std::string contig, size_t pos) {
     int intvl_idx = this->get_start_rank(contig, pos);
@@ -461,31 +501,115 @@ void ChainMap::lift_aln(
         reinterpret_cast<uint8_t*>(const_cast<char*>(lo.c_str())));
 }
 
-// // TODO from leviosam.hpp. Not yet modified
-// // saves to stream
-// size_t ChainMap::serialize(std::ofstream& out) {
-//     size_t size = 0;
-//     size_t nelems = lmap.size();
-//     out.write(reinterpret_cast<char*>(&nelems), sizeof(nelems));
-//     size += sizeof(nelems);
-//     for (auto i = 0; i < nelems; ++i) {
-//         size += lmap[i].serialize(out);
-//     }
-//     size += s1_map.serialize(out);
-//     size += s2_map.serialize(out);
-//     size += name_map.serialize(out);
-//     return size;
-// }
-// 
-// // loads from stream
-// void ChainMap::load(std::ifstream& in) {
-//     size_t nelems;
-//     in.read(reinterpret_cast<char*>(&nelems), sizeof(nelems));
-//     for (auto i = 0; i < nelems; ++i) {
-//         lmap.push_back(Lift(in));
-//     }
-//     s1_map.load(in);
-//     s2_map.load(in);
-//     name_map.load(in);
-// }
+// Save to stream
+size_t ChainMap::serialize(std::ofstream& out) {
+    size_t size = 0;
+    // interval_map
+    size_t nelems = interval_map.size();
+    std::cerr << "serializing interval maps...\n";
+    size += sizeof(nelems);
+    out.write(reinterpret_cast<char*>(&nelems), sizeof(nelems));
+    for (auto& x: this->interval_map) {
+        size_t str_size = x.first.size();
+        out.write(reinterpret_cast<char*>(&str_size), sizeof(str_size));
+        out.write(reinterpret_cast<const char*>(x.first.data()), str_size);
+        size += sizeof(str_size) + str_size;
+        size_t vec_size = x.second.size();
+        out.write(reinterpret_cast<char*>(&vec_size), sizeof(vec_size));
+        size += sizeof(vec_size);
+        for (auto &intvl: x.second) {
+            size += intvl.serialize(out);
+        }
+    }
+    // start_bv_map
+    std::cerr << "serializing start_bv_maps...\n";
+    nelems = this->start_bv_map.size();
+    out.write(reinterpret_cast<char*>(&nelems), sizeof(nelems));
+    size += sizeof(nelems);
+    // for (auto& x: this->start_map) {
+    for (auto& x: this->start_bv_map) {
+        size_t str_size = x.first.size();
+        out.write(reinterpret_cast<char*>(&str_size), sizeof(str_size));
+        out.write(reinterpret_cast<const char*>(x.first.data()), str_size);
+        size += sizeof(str_size) + str_size;
+        size += x.second.serialize(out);
+    }
+    // end_bv_map
+    std::cerr << "serializing end_bv_maps...\n";
+    nelems = this->end_bv_map.size();
+    out.write(reinterpret_cast<char*>(&nelems), sizeof(nelems));
+    size += sizeof(nelems);
+    // for (auto& x: this->end_map) {
+    for (auto& x: this->end_bv_map) {
+        size_t str_size = x.first.size();
+        out.write(reinterpret_cast<char*>(&str_size), sizeof(str_size));
+        out.write(reinterpret_cast<const char*>(x.first.data()), str_size);
+        size += sizeof(str_size) + str_size;
+        size += x.second.serialize(out);
+    }
+    return size;
+}
+
+ChainMap::ChainMap(std::ifstream& in) {
+    this->load(in);
+    // debug messages
+    // this->debug_print_interval_map();
+}
+
+// loads from stream
+void ChainMap::load(std::ifstream& in) {
+    size_t map_size;
+    in.read(reinterpret_cast<char*>(&map_size), sizeof(map_size));
+    for (auto i = 0; i < map_size; ++i) {
+        size_t str_size;
+        in.read(reinterpret_cast<char*>(&str_size), sizeof(str_size));
+        std::vector<char> buf(str_size);
+        in.read(reinterpret_cast<char*>(buf.data()), str_size);
+        std::string key(buf.begin(), buf.end());
+        size_t vec_size;
+        in.read(reinterpret_cast<char*>(&vec_size), sizeof(vec_size));
+        for (auto j = 0; j < vec_size; ++j) {
+            this->interval_map[key].push_back(Interval(in));
+        }
+        // in.read(reinterpret_cast<char*>(&value), sizeof(value));
+        // fprintf(stderr, "%s\t%d\n", key.data(), value);
+        // (*this)[key] = value;
+    }
+    in.read(reinterpret_cast<char*>(&map_size), sizeof(map_size));
+    for (auto i = 0; i < map_size; ++i) {
+        size_t str_size;
+        in.read(reinterpret_cast<char*>(&str_size), sizeof(str_size));
+        std::vector<char> buf(str_size);
+        in.read(reinterpret_cast<char*>(buf.data()), str_size);
+        std::string key(buf.begin(), buf.end());
+        sdsl::bit_vector sdv;
+        sdv.load(in);
+        this->start_bv_map[key] = sdv;
+    }
+    in.read(reinterpret_cast<char*>(&map_size), sizeof(map_size));
+    for (auto i = 0; i < map_size; ++i) {
+        size_t str_size;
+        in.read(reinterpret_cast<char*>(&str_size), sizeof(str_size));
+        std::vector<char> buf(str_size);
+        in.read(reinterpret_cast<char*>(buf.data()), str_size);
+        std::string key(buf.begin(), buf.end());
+        sdsl::bit_vector sdv;
+        sdv.load(in);
+        this->end_bv_map[key] = sdv;
+    }
+    this->init_rs();
+    //     size_t map_size;
+    //     in.read(reinterpret_cast<char*>(&map_size), sizeof(map_size));
+    //     for (auto i = 0; i < map_size; ++i) {
+    //         size_t str_size;
+    //         in.read(reinterpret_cast<char*>(&str_size), sizeof(str_size));
+    //         std::vector<char> buf(str_size);
+    //         in.read(reinterpret_cast<char*>(buf.data()), str_size);
+    //         key_type key(buf.begin(), buf.end());
+    //         mapped_type value;
+    //         in.read(reinterpret_cast<char*>(&value), sizeof(value));
+    //         // fprintf(stderr, "%s\t%d\n", key.data(), value);
+    //         (*this)[key] = value;
+    //     }
+}
 

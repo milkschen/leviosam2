@@ -31,6 +31,10 @@ class Interval {
         source_end = se;
         same_strand = ss;
     }
+    
+    Interval(std::ifstream& in) {
+        this->load(in);
+    }
 
     void debug_print_interval() {
         std::string ss = (same_strand)? "+" : "-";
@@ -43,6 +47,14 @@ class Interval {
     int offset;
     int source_start, source_end;
     bool same_strand; // true: "+"; false: "-"
+
+
+    // Save to stream
+    size_t serialize(std::ofstream& out) const;
+    // Load from stream
+    void load(std::istream& in);
+
+    void debug_print();
 };
 
 class ChainMap {
@@ -51,6 +63,7 @@ class ChainMap {
         ChainMap() {}
         ~ChainMap() {}
         ChainMap(std::string fname, int verbose);
+        ChainMap(std::ifstream& in);
         void init_bitvectors(std::string source, int source_length);
         void sort_interval_map();
         void sort_intervals(std::string contig);
@@ -59,6 +72,7 @@ class ChainMap {
         bool interval_map_sanity_check();
         int get_start_rank(std::string contig, int pos);
         int get_end_rank(std::string contig, int pos);
+
         void show_interval_info(std::string contig, int pos);
 
         std::string lift_contig(std::string contig, size_t pos);
@@ -89,7 +103,10 @@ class ChainMap {
             // std::string &ref_name,
             // std::map<std::string, std::string>* ref_dict);
 
-        int get_lifted_pos(std::string contig, int pos);
+        // int get_lifted_pos(std::string contig, int pos);
+
+        size_t serialize(std::ofstream& out);
+        void load(std::ifstream& in);
 
     private:
         void init_rs();

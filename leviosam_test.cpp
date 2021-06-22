@@ -177,11 +177,11 @@ TEST(LiftMap, SimpleBamLift) {
     int err;
     size_t x;
     err = sam_read1(sam_fp, sam_hdr, aln);
-    x = lmap.lift_pos(sam_hdr->target_name[aln->core.tid], aln->core.pos, &chroms_not_found, &mutex_vec);
+    x = lmap.lift_pos(sam_hdr->target_name[aln->core.tid], aln->core.pos);
     EXPECT_EQ(x, 5313299);
     err = sam_read1(sam_fp, sam_hdr, aln);
     EXPECT_EQ(err, 0);
-    x = lmap.lift_pos(sam_hdr->target_name[aln->core.tid], aln->core.pos, &chroms_not_found, &mutex_vec);
+    x = lmap.lift_pos(sam_hdr->target_name[aln->core.tid], aln->core.pos);
     EXPECT_EQ(x, 5315929);
 }
 
@@ -289,7 +289,7 @@ TEST(ChainMap, SimpleRankAndLift) {
     // std::cerr << "rank(" << pos << ")=" << rank << "\n";
     EXPECT_EQ(rank, 0);
     EXPECT_EQ(cmap.lift_contig(contig, pos), contig);
-    EXPECT_EQ(cmap.lift_pos(contig, pos, &uc, &mutex), 100272);
+    EXPECT_EQ(cmap.lift_pos(contig, pos), 100272);
     
 
     pos = 207130;
@@ -298,5 +298,5 @@ TEST(ChainMap, SimpleRankAndLift) {
     // std::cerr << "rank(" << pos << ")=" << rank << "\n";
     EXPECT_EQ(rank, 1);
     EXPECT_EQ(cmap.lift_contig(contig, pos), contig);
-    EXPECT_EQ(cmap.lift_pos(contig, pos, &uc, &mutex), 206846+121+8);
+    EXPECT_EQ(cmap.lift_pos(contig, pos), 206846+121+8);
 }
