@@ -46,7 +46,7 @@ class Summary():
         self.invalid_records = [[], []] # MAPQ = 255
 
     def update(self, query, baseline, aln_filter):
-        try:
+        if query and baseline:
             is_unmapped_or_invalid = False
             if query.is_unmapped:
                 self.unmapped_records[0].append(query.query_name + ('_1' if query.is_read1 else '_2'))
@@ -73,9 +73,12 @@ class Summary():
             self.records.append([query, baseline])
             self.mapq_diff.append(query.mapping_quality - baseline.mapping_quality)
             self.cigar_diff.append(query.cigarstring == baseline.cigarstring)
-        except:
-            print('query=', query.query_name, query.reference_name, query.reference_start)
-            print('baseline=', baseline.query_name, baseline.reference_name, baseline.reference_start)
+        # except:
+        #     if query:
+        #         print('query=', query.query_name, query.reference_name, query.reference_start)
+        #     if baseline:
+        #         print('baseline=', baseline.query_name, baseline.reference_name, baseline.reference_start)
+
 
     def report(self, fn_out, num_err_printed):
         if fn_out == '':
@@ -86,11 +89,10 @@ class Summary():
         num_pos_match = sum([i >= 0 and i < self.allowed_pos_diff for i in self.pos_diff])
         print(f'{num_pos_match / len(self.pos_diff)} ({num_pos_match}/{len(self.pos_diff)})', file=f_out)
         cnt = 0
-        for i in range(len(self.records)):
-            # if self.pos_diff[i] < 100 and self.pos_diff[i] > self.allowed_pos_diff:
+        for i, rec in enumerate(self.records):
             if self.pos_diff[i] > self.allowed_pos_diff:
-                query = self.records[i][0]
-                baseline = self.records[i][1]
+                query = rec[0]
+                baseline = rec[1]
                 msg_query = (
                     '    '
                     f'{query.reference_name}\t{query.reference_start:10d}\t'
@@ -125,7 +127,6 @@ class Summary():
 def read_sam_as_dict(fn):
     dict_reads = {}
     f = pysam.AlignmentFile(fn, 'r')
-    # for read in f.fetch():
     for read in f:
         if (not read.is_paired) or (read.is_paired and read.is_read1):
             segment_idx = 0
