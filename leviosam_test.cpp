@@ -289,6 +289,7 @@ TEST(ChainMap, SimpleRankAndLift) {
     EXPECT_EQ(cmap.lift_pos(contig, pos), 206846+121+8);
 }
 
+
 TEST(ChainMap, ParseChainLineCornerZero) {
     std::string hdr = "chain 5 corner_zero 28 + 0 28 corner_zero_dest 300 + 100 130 0";
     std::string line1 = "20\t0\t2\n";
@@ -321,5 +322,25 @@ TEST(ChainMap, ParseChainLineCornerZero) {
             EXPECT_EQ(end_bv_map["corner_zero"][i], 1);
         else
             EXPECT_EQ(end_bv_map["corner_zero"][i], 0);
+    }
+}
+
+
+TEST(ChainMap, LiftInReversedRegion) {
+    chain::ChainMap cmap ("chr1_reversed_region.chain", 0);
+
+    std::string contig = "chr1";
+    int pos_array [4] = {146735453, 146735605, 146735135, 146735235};
+    int gold_pos_array [4] = {148073114, 148072962, 148073432, 148073332};
+    // int gold_pos_array [4] = {148072962, 148073114, 148073332, 148073432};
+    int gold_rank = 154;
+    int rank;
+    int pos;
+    for (int i = 0; i < 4; i++) {
+        pos = pos_array[i];
+        rank = cmap.get_start_rank(contig, pos);
+        EXPECT_EQ(rank, gold_rank);
+        EXPECT_EQ(cmap.lift_contig(contig, pos), contig);
+        EXPECT_EQ(cmap.lift_pos(contig, pos), gold_pos_array[i]);
     }
 }

@@ -67,7 +67,6 @@ ChainMap::ChainMap(std::string fname, int verbose) {
     }
     // biv_vector to sd_vector
     for (auto& it: start_bv_map) {
-        // std::cerr << it.first << "\n";
         auto itr = this->start_map.find(it.first);
         if (itr == this->start_map.end()) {
             this->start_map[it.first] = sdsl::sd_vector<>(it.second);
@@ -245,6 +244,7 @@ void ChainMap::parse_chain_line(
             if (strand) {
                 target_offset = stoi(vec[10]);
             } else {
+                // target_offset = target_len - stoi(vec[11]);
                 target_offset = target_len - stoi(vec[10]);
             }
         }
@@ -254,7 +254,6 @@ void ChainMap::parse_chain_line(
         }
         this->init_bitvectors(source, source_len, start_bv_map, end_bv_map);
     } else if (vec[0] != "") {
-    // } else if (vec.size() == 1 || vec.size() == 3) {
         int s_int_start = source_offset;
         int t_int_start = target_offset;
         int s_int_end = source_offset + stoi(vec[0]);
@@ -279,8 +278,16 @@ void ChainMap::parse_chain_line(
         if (this->verbose > 1)
             fprintf(stderr, "source (%d-%d), target (%d-%d)\n",
                     s_int_start, s_int_end, t_int_start, t_int_end);
+        int offset;
+        if (strand) {
+            offset = t_int_start - s_int_start;
+            // Interval intvl(target, s_int_start, s_int_end,
+            //                t_int_start-s_int_start, strand);
+        } else {
+            offset = t_int_end - s_int_start;
+        }
         Interval intvl(target, s_int_start, s_int_end,
-                       t_int_start-s_int_start, strand);
+                       offset, strand);
         if (this->verbose > 1)
             intvl.debug_print_interval();
 
@@ -440,8 +447,14 @@ size_t ChainMap::lift_pos(
     int intvl_idx = rank - 1;
     if (intvl_idx == -1)
         return pos;
-    else
-        return pos + this->interval_map[contig][intvl_idx].offset;
+    else {
+        auto intvl = this->interval_map[contig][intvl_idx];
+        if (intvl.strand) {
+            return pos + intvl.offset;
+        } else {
+            return -pos + intvl.offset + intvl.source_start + intvl.source_end;
+        }
+    }
 }
 
 size_t ChainMap::lift_pos(
@@ -449,8 +462,14 @@ size_t ChainMap::lift_pos(
     int start_intvl_idx, int end_intvl_idx) {
     if (start_intvl_idx == -1)
         return pos;
-    else
-        return pos + this->interval_map[contig][start_intvl_idx].offset;
+    else {
+        auto intvl = this->interval_map[contig][start_intvl_idx];
+        if (intvl.strand) {
+            return pos + intvl.offset;
+        } else {
+            return -pos + intvl.offset + intvl.source_start + intvl.source_end;
+        }
+    }
 }
 
 // Return liftability (bool) and update start/end-interval indexes.
@@ -493,7 +512,7 @@ bool ChainMap::lift_segment(
     // If not liftable (un-liftable or unmapped), 
     // update start/end_intvl_idx and return false 
     if (is_first_seg) {
-        // intvl_idx = rank - 1
+        // Note that intvl_idx = rank - 1
         start_intvl_idx = this->get_start_rank(source_contig, c->pos) - 1;
         end_intvl_idx = this->get_end_rank(source_contig, c->pos) - 1;
     } else {
@@ -549,10 +568,11 @@ bool ChainMap::lift_segment(
     // }
 
     // Lift pos
-    auto offset = this->interval_map[source_contig][start_intvl_idx].offset;
-    auto strand = this->interval_map[source_contig][start_intvl_idx].strand;
+    auto current_intvl = this->interval_map[source_contig][start_intvl_idx];
+    auto offset = current_intvl.offset;
+    auto strand = current_intvl.strand;
     auto pos_end = c->pos + bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln));
-    // intvl_idx = rank - 1
+    // Note that intvl_idx = rank - 1
     auto pend_start_intvl_idx =
         this->get_start_rank(source_contig, pos_end) - 1;
     // Estimate ending pos of the mate
@@ -563,14 +583,12 @@ bool ChainMap::lift_segment(
         if (strand)
             c->pos = c->pos + offset;
         else
-            c->pos = pos_end + this->interval_map[source_contig][start_intvl_idx].offset;
-            // c->pos = pos_end + this->interval_map[source_contig][pend_start_intvl_idx].offset;
+            c->pos = -pos_end + offset + current_intvl.source_start + current_intvl.source_end;
     } else {
         if (strand)
             c->mpos = c->mpos + offset;
         else
-            c->mpos = mpos_end + this->interval_map[source_contig][start_intvl_idx].offset;
-            // c->mpos = mpos_end + this->interval_map[source_contig][pend_start_intvl_idx].offset;
+            c->mpos = -mpos_end + offset + current_intvl.source_start + current_intvl.source_end;
     }
     // hts_pos_t bam_cigar2qlen(int n_cigar, const uint32_t *cigar);
     // DEBUG
