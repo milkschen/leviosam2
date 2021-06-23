@@ -8,6 +8,7 @@
 #include <htslib/sam.h>
 #include "leviosam.hpp"
 
+
 namespace chain {
 class Interval {
     public:
@@ -17,7 +18,7 @@ class Interval {
         offset = 0;
         source_start = 0;
         source_end = 0;
-        same_strand = true;
+        strand = true;
     }
 
     Interval(
@@ -29,7 +30,7 @@ class Interval {
         offset = o;
         source_start = so;
         source_end = se;
-        same_strand = ss;
+        strand = ss;
     }
     
     Interval(std::ifstream& in) {
@@ -37,7 +38,7 @@ class Interval {
     }
 
     void debug_print_interval() {
-        std::string ss = (same_strand)? "+" : "-";
+        std::string ss = (strand)? "+" : "-";
         std::cerr << "[" << source_start << ":" << source_end << ")->" << target << " (" << ss << "); offset = " << offset << "\n";
         // std::cerr << source << "[" << source_start << ":" << source_end << ")->" << target << " (" << ss << "); offset = " << offset << "\n";
     }
@@ -46,7 +47,7 @@ class Interval {
     std::string target;
     int offset;
     int source_start, source_end;
-    bool same_strand; // true: "+"; false: "-"
+    bool strand; // true: "+"; false: "-"
 
 
     // Save to stream
@@ -56,6 +57,11 @@ class Interval {
 
     void debug_print();
 };
+
+using BitVectorMap = std::unordered_map<std::string, sdsl::bit_vector>;
+using SdVectorMap = std::unordered_map<std::string, sdsl::sd_vector<>>;
+using IntervalMap = std::unordered_map<std::string, std::vector<Interval>>;
+
 
 class ChainMap {
 
@@ -106,7 +112,11 @@ class ChainMap {
             // std::string &ref_name,
             // std::map<std::string, std::string>* ref_dict);
 
-        // int get_lifted_pos(std::string contig, int pos);
+
+        void parse_chain_line(
+            std::string line, std::string &source, std::string &target,
+            int &source_len, int &source_offset, int &target_offset, bool &strand,
+            BitVectorMap &start_bv_map, BitVectorMap &end_bv_map);
 
         size_t serialize(std::ofstream& out);
         void load(std::ifstream& in);
@@ -114,23 +124,14 @@ class ChainMap {
     private:
         void init_rs();
 
-        void parse_chain_line(
-            std::string line, std::string &source, std::string &target,
-            int &source_offset, int &target_offset, bool &same_strand,
-            std::unordered_map<std::string, sdsl::bit_vector> &start_bv_map,
-            std::unordered_map<std::string, sdsl::bit_vector> &end_bv_map);
-
         int verbose;
-        std::unordered_map<std::string, std::vector<chain::Interval>> interval_map;
-        std::unordered_map<std::string, sdsl::sd_vector<>> start_map;
-        std::unordered_map<std::string, sdsl::sd_vector<>> end_map;
+        IntervalMap interval_map;
+        SdVectorMap start_map;
+        SdVectorMap end_map;
         std::unordered_map<std::string, sdsl::sd_vector<>::rank_1_type> start_rs1_map;
         std::unordered_map<std::string, sdsl::sd_vector<>::rank_1_type> end_rs1_map;
 };
 
-ChainMap* chain_open(std::string fname, int verbose);
-
-using IntervalMap = std::unordered_map<std::string, chain::Interval>;
 };
 
 #endif

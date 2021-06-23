@@ -166,8 +166,6 @@ TEST(Lift, SimpleDelLift) {
 
 
 TEST(LiftMap, SimpleBamLift) {
-    std::vector<std::string> chroms_not_found;
-    std::mutex mutex_vec;
     vcfFile* vcf_fp = bcf_open("simple_example.vcf", "r");
     bcf_hdr_t* vcf_hdr = bcf_hdr_read(vcf_fp);
     lift::LiftMap lmap(vcf_fp, vcf_hdr, "", "0");
@@ -186,8 +184,6 @@ TEST(LiftMap, SimpleBamLift) {
 }
 
 TEST(LiftMap, SimpleBamCigarLift) {
-    std::vector<std::string> chroms_not_found;
-    std::mutex mutex_vec;
     vcfFile* vcf_fp = bcf_open("simple_example.vcf", "r");
     bcf_hdr_t* vcf_hdr = bcf_hdr_read(vcf_fp);
     lift::LiftMap lmap(vcf_fp, vcf_hdr, "", "0");
@@ -216,8 +212,6 @@ TEST(LiftMap, SimpleBamCigarLift) {
 }
 
 TEST(LiftMap, DelInIndelBamCigarLift) {
-    std::vector<std::string> chroms_not_found;
-    std::mutex mutex_vec;
     vcfFile* vcf_fp = bcf_open("del_in_indel_example.vcf", "r");
     bcf_hdr_t* vcf_hdr = bcf_hdr_read(vcf_fp);
     lift::LiftMap lmap(vcf_fp, vcf_hdr, "", "0");
@@ -246,8 +240,6 @@ TEST(LiftMap, DelInIndelBamCigarLift) {
 }
 
 TEST(LiftMap, SimpleSplicedBamCigarLift) {
-    std::vector<std::string> chroms_not_found;
-    std::mutex mutex_vec;
     vcfFile* vcf_fp = bcf_open("spliced_example.vcf", "r");
     bcf_hdr_t* vcf_hdr = bcf_hdr_read(vcf_fp);
     lift::LiftMap lmap(vcf_fp, vcf_hdr, "", "0");
@@ -280,23 +272,54 @@ TEST(LiftMap, SimpleSplicedBamCigarLift) {
 TEST(ChainMap, SimpleRankAndLift) {
     chain::ChainMap cmap ("small.chain", 0);
 
-    std::vector<std::string> uc;
-    std::mutex mutex;
-
     int pos = 674047;
     std::string contig = "chr1";
     int rank = cmap.get_start_rank(contig, pos);
     // std::cerr << "rank(" << pos << ")=" << rank << "\n";
-    EXPECT_EQ(rank, 0);
+    EXPECT_EQ(rank, 1);
     EXPECT_EQ(cmap.lift_contig(contig, pos), contig);
     EXPECT_EQ(cmap.lift_pos(contig, pos), 100272);
-    
 
     pos = 207130;
     contig = "chr2";
     rank = cmap.get_start_rank(contig, pos);
     // std::cerr << "rank(" << pos << ")=" << rank << "\n";
-    EXPECT_EQ(rank, 1);
+    EXPECT_EQ(rank, 2);
     EXPECT_EQ(cmap.lift_contig(contig, pos), contig);
     EXPECT_EQ(cmap.lift_pos(contig, pos), 206846+121+8);
+}
+
+TEST(ChainMap, ParseChainLineCornerZero) {
+    std::string hdr = "chain 5 corner_zero 28 + 0 28 corner_zero_dest 300 + 100 130 0";
+    std::string line1 = "20\t0\t2\n";
+    std::string line2 = "8\n";
+    chain::BitVectorMap start_bv_map, end_bv_map;
+    std::string source, target;
+    int source_offset = 0, target_offset = 0, source_len = 0;
+    bool current_ss = true;
+    chain::ChainMap cmap;
+    cmap.parse_chain_line(
+        hdr, source, target, source_len, source_offset, 
+        target_offset, current_ss, start_bv_map, end_bv_map);
+    cmap.parse_chain_line(
+        line1, source, target, source_len, source_offset, 
+        target_offset, current_ss, start_bv_map, end_bv_map);
+    cmap.parse_chain_line(
+        line2, source, target, source_len, source_offset, 
+        target_offset, current_ss, start_bv_map, end_bv_map);
+
+    for (auto& i: start_bv_map) {
+        EXPECT_EQ(i.first, "corner_zero");
+    }
+    for (int i = 0; i < 28; i++) {
+        // std::cerr << start_bv_map["corner_zero"][i];
+        if (i == 0 || i == 19)
+            EXPECT_EQ(start_bv_map["corner_zero"][i], 1);
+        else
+            EXPECT_EQ(start_bv_map["corner_zero"][i], 0);
+        if (i == 20 || i == 27)
+            EXPECT_EQ(end_bv_map["corner_zero"][i], 1);
+        else
+            EXPECT_EQ(end_bv_map["corner_zero"][i], 0);
+    }
 }

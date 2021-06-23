@@ -13,8 +13,8 @@ size_t Interval::serialize(std::ofstream& out) const {
     out.write(reinterpret_cast<const char*>(&offset), sizeof(offset));
     out.write(reinterpret_cast<const char*>(&source_start), sizeof(source_start));
     out.write(reinterpret_cast<const char*>(&source_end), sizeof(source_end));
-    out.write(reinterpret_cast<const char*>(&same_strand), sizeof(same_strand));
-    size += sizeof(offset) + sizeof(source_start) + sizeof(source_end) + sizeof(same_strand);
+    out.write(reinterpret_cast<const char*>(&strand), sizeof(strand));
+    size += sizeof(offset) + sizeof(source_start) + sizeof(source_end) + sizeof(strand);
     return size;
 }
 
@@ -32,32 +32,34 @@ void Interval::load(std::istream& in) {
     in.read(reinterpret_cast<char*>(&source_start), sizeof(source_start));
     int source_end;
     in.read(reinterpret_cast<char*>(&source_end), sizeof(source_end));
-    bool same_strand;
-    in.read(reinterpret_cast<char*>(&same_strand), sizeof(same_strand));
+    bool strand;
+    in.read(reinterpret_cast<char*>(&strand), sizeof(strand));
     this->target = target;
     this->offset = offset;
     this->source_start = source_start;
     this->source_end = source_end;
-    this->same_strand = same_strand;
+    this->strand = strand;
     // std::cerr << "target=" << target << "\noffset=" << offset <<
-    //     "\n(start, end, strand)=(" << source_start << "," << source_end << "," << same_strand << ")\n";
+    //     "\n(start, end, strand)=(" << source_start << "," << source_end << "," << strand << ")\n";
 }
+
 
 ChainMap::ChainMap(std::string fname, int verbose) {
     this->verbose = verbose;
     std::ifstream chain_f(fname);
     std::string line;
-    std::unordered_map<std::string, sdsl::bit_vector> start_bv_map;
-    std::unordered_map<std::string, sdsl::bit_vector> end_bv_map;
+    BitVectorMap start_bv_map;
+    BitVectorMap end_bv_map;
     if (chain_f.is_open()) {
         std::string source;
         std::string target;
         int source_offset = 0;
         int target_offset = 0;
+        int source_len = 0;
         bool current_ss = true;
         while (getline(chain_f, line)) {
             this->parse_chain_line(
-                line, source, target, source_offset, 
+                line, source, target, source_len, source_offset, 
                 target_offset, current_ss,
                 start_bv_map, end_bv_map);
         }
@@ -65,6 +67,7 @@ ChainMap::ChainMap(std::string fname, int verbose) {
     }
     // biv_vector to sd_vector
     for (auto& it: start_bv_map) {
+        // std::cerr << it.first << "\n";
         auto itr = this->start_map.find(it.first);
         if (itr == this->start_map.end()) {
             this->start_map[it.first] = sdsl::sd_vector<>(it.second);
@@ -77,12 +80,12 @@ ChainMap::ChainMap(std::string fname, int verbose) {
         }
     }
     this->init_rs();
-    if (this->verbose > 1) {
+    if (this->verbose > 2) {
         this->debug_print_interval_map();
         std::cerr << "\n\nsort intervals\n\n";
     }
     this->sort_interval_map();
-    if (this->verbose > 1) {
+    if (this->verbose > 2) {
         this->debug_print_interval_map();
     }
 }
@@ -91,13 +94,12 @@ ChainMap::ChainMap(std::string fname, int verbose) {
  * Do nothing if `source` has been seen.
  */
 void ChainMap::init_bitvectors(
-    std::string source, int source_length,
-    std::unordered_map<std::string, sdsl::bit_vector> &start_bv_map,
-    std::unordered_map<std::string, sdsl::bit_vector> &end_bv_map
+    std::string source, int source_len,
+    BitVectorMap &start_bv_map, BitVectorMap &end_bv_map
 ) {
     auto itr = start_bv_map.find(source);
     if (itr == start_bv_map.end()) {
-        sdsl::bit_vector new_start_bv(source_length), new_end_bv(source_length);
+        sdsl::bit_vector new_start_bv(source_len), new_end_bv(source_len);
         start_bv_map[source] = new_start_bv;
         end_bv_map[source] = new_end_bv;
     }
@@ -166,14 +168,12 @@ bool ChainMap::interval_map_sanity_check() {
  */
 int ChainMap::get_start_rank(std::string contig, int pos) {
     if (pos < 0) return -1;
-    std::unordered_map<std::string, sdsl::sd_vector<>>::const_iterator find_start = 
-        this->start_map.find(contig);
-    if (find_start == this->start_map.end()) {
+    SdVectorMap::const_iterator find_start = this->start_map.find(contig);
+    if (find_start == this->start_map.end())
         return -1;
-    }
     if (pos >= start_rs1_map[contig].size())
         pos = start_rs1_map[contig].size() - 1;
-    return start_rs1_map[contig](pos) - 1;
+    return start_rs1_map[contig](pos);
 }
 
 /* Get the rank in the end bitvector at contig[pos]
@@ -183,32 +183,30 @@ int ChainMap::get_start_rank(std::string contig, int pos) {
  *   -1: if pos < 0 or contig does not exist
  */
 int ChainMap::get_end_rank(std::string contig, int pos) {
-    if (pos < 0) return -1;
-    std::unordered_map<std::string, sdsl::sd_vector<>>::const_iterator find_end = this->end_map.find(contig);
-    if (find_end == this->end_map.end()) {
+    if (pos < 0)
         return -1;
-    }
+    SdVectorMap::const_iterator find_end = this->end_map.find(contig);
+    if (find_end == this->end_map.end())
+        return -1;
     if (pos >= end_rs1_map[contig].size())
         pos = end_rs1_map[contig].size() - 1;
-    return end_rs1_map[contig](pos) - 1;
+    return end_rs1_map[contig](pos);
 }
 
 /* Init rank support for all start/end bitvectors. */
 void ChainMap::init_rs() {
     for (auto& it: this->start_map) {
         std::string contig = it.first;
-        std::unordered_map<std::string, sdsl::sd_vector<>>::const_iterator find_start = this->start_map.find(contig);
-        if (find_start == this->start_map.end()) {
-            // this->start_map[contig] = sdsl::sd_vector<>(it.second);
+        auto itr = this->start_map.find(contig);
+        if (itr == this->start_map.end()) {
             this->start_rs1_map[contig] = sdsl::sd_vector<>::rank_1_type();
         }
         sdsl::util::init_support(this->start_rs1_map[contig], &this->start_map[contig]);
     }
     for (auto& it: this->end_map) {
         std::string contig = it.first;
-        std::unordered_map<std::string, sdsl::sd_vector<>>::const_iterator find_start = this->end_map.find(contig);
-        if (find_start == this->end_map.end()) {
-            // this->end_map[contig] = sdsl::sd_vector<>(it.second);
+        auto itr = this->end_map.find(contig);
+        if (itr == this->end_map.end()) {
             this->end_rs1_map[contig] = sdsl::sd_vector<>::rank_1_type();
         }
         sdsl::util::init_support(this->end_rs1_map[contig], &this->end_map[contig]);
@@ -219,9 +217,8 @@ void ChainMap::init_rs() {
  */
 void ChainMap::parse_chain_line(
     std::string line, std::string &source, std::string &target,
-    int &source_offset, int &target_offset, bool &same_strand,
-    std::unordered_map<std::string, sdsl::bit_vector> &start_bv_map,
-    std::unordered_map<std::string, sdsl::bit_vector> &end_bv_map
+    int &source_len, int &source_offset, int &target_offset, bool &strand,
+    BitVectorMap &start_bv_map, BitVectorMap &end_bv_map
 ) {
     // Split `line` using space as deliminater.
     std::regex s_re("\\s+"); // space
@@ -230,6 +227,7 @@ void ChainMap::parse_chain_line(
             line.begin(), line.end(), s_re, -1),
         std::sregex_token_iterator());
     
+    int target_len;
     if (vec[0] == "chain"){
         if (vec.size() != 13){
             std::cerr << "Error during parsing chain" << line << "\n";
@@ -238,51 +236,77 @@ void ChainMap::parse_chain_line(
         }
         source = vec[2];
         target = vec[7];
-        int source_length = stoi(vec[3]);
-        same_strand = (vec[4] == vec[9]);
+        source_len = stoi(vec[3]);
+        target_len = stoi(vec[8]);
+        strand = (vec[4] == vec[9]);
+        // std::cerr << source << "->" << target << " " << target_len << " " << strand << "\n";
         try {
             source_offset = stoi(vec[5]);
-            target_offset = stoi(vec[10]);
+            if (strand) {
+                target_offset = stoi(vec[10]);
+            } else {
+                target_offset = target_len - stoi(vec[10]);
+            }
         }
         catch(...) {
-            std::cerr << "Error during parsing chain" << line << "\n";
+            std::cerr << "Error during parsing chain:\n" << line << "\n";
             exit(1);
         }
-        this->init_bitvectors(source, source_length, start_bv_map, end_bv_map);
-    } else if (vec.size() == 3) {
+        this->init_bitvectors(source, source_len, start_bv_map, end_bv_map);
+    } else if (vec[0] != "") {
+    // } else if (vec.size() == 1 || vec.size() == 3) {
         int s_int_start = source_offset;
-        int s_int_end = source_offset + stoi(vec[0]);
         int t_int_start = target_offset;
-        int t_int_end = target_offset + stoi(vec[0]);
+        int s_int_end = source_offset + stoi(vec[0]);
+        int t_int_end;
+        if (strand) {
+            t_int_end = target_offset + stoi(vec[0]);
+        } else {
+            t_int_end = target_offset - stoi(vec[0]);
+        }
         // Set bitvectors
         if (s_int_start > 0)
             start_bv_map[source][s_int_start-1] = 1;
-            // this->start_bv_map[source][s_int_start-1] = 1;
-        end_bv_map[source][s_int_end] = 1;
-        // this->end_bv_map[source][s_int_end] = 1;
+        else if (s_int_start == 0)
+            start_bv_map[source][0] = 1;
+        // if (s_int_start > 0)
+        //     start_bv_map[source][s_int_start-1] = 1;
+        if (s_int_end >= source_len)
+            end_bv_map[source][source_len-1] = 1;
+        else
+            end_bv_map[source][s_int_end] = 1;
 
         if (this->verbose > 1)
-            fprintf(stderr, "source (%d-%d), target (%d-%d)\n", s_int_start, s_int_end, t_int_start, t_int_end);
-        Interval intvl(target, s_int_start, s_int_end, t_int_start-s_int_start, same_strand);
+            fprintf(stderr, "source (%d-%d), target (%d-%d)\n",
+                    s_int_start, s_int_end, t_int_start, t_int_end);
+        Interval intvl(target, s_int_start, s_int_end,
+                       t_int_start-s_int_start, strand);
         if (this->verbose > 1)
             intvl.debug_print_interval();
 
-        std::unordered_map<std::string, std::vector<chain::Interval>>::const_iterator find_start = this->interval_map.find(source);
+        IntervalMap::const_iterator find_start =
+            this->interval_map.find(source);
         if (find_start == this->interval_map.end()) {
             std::vector<chain::Interval> new_intervals;
             this->interval_map[source] = new_intervals;
         }
         this->interval_map[source].push_back(intvl);
 
-        // Update offsets contributed by the variant
-        source_offset = s_int_end + stoi(vec[1]);
-        target_offset = t_int_end + stoi(vec[2]);
+        if (vec.size() == 3) {
+            // Update offsets contributed by the variant
+            source_offset = s_int_end + stoi(vec[1]);
+            if (strand) {
+                target_offset = t_int_end + stoi(vec[2]);
+            } else {
+                target_offset = t_int_end - stoi(vec[2]);
+            }
+        }
     } else {
         source = "";
         target = "";
         source_offset = 0;
         target_offset = 0;
-        same_strand = true;
+        strand = true;
     }
 
     if (this->verbose > 1) {
@@ -295,12 +319,14 @@ void ChainMap::parse_chain_line(
 
 void ChainMap::show_interval_info(std::string contig, int pos) {
     int rank = this->get_start_rank(contig, pos);
-    this->interval_map[contig][rank].debug_print_interval();
+    int intvl_idx = rank - 1;
+    this->interval_map[contig][intvl_idx].debug_print_interval();
 }
 
 
 std::string ChainMap::lift_contig(std::string contig, size_t pos) {
-    int intvl_idx = this->get_start_rank(contig, pos);
+    int rank = this->get_start_rank(contig, pos);
+    int intvl_idx = rank - 1;
     if (intvl_idx == -1)
         return "*";
     else
@@ -318,10 +344,100 @@ std::string ChainMap::lift_contig(
 void ChainMap::lift_cigar(const std::string& contig, bam1_t* aln) {
     // TODO
 }
+/*
+    std::vector<uint32_t> lift_cigar_core(bam1_t* b){
+        auto x = del_sls0(b->core.pos + 1);
+        int y = 0; // read2alt cigar pointer
+        uint32_t* cigar = bam_get_cigar(b);
+        std::vector<uint32_t> cigar_ops;
+        std::vector<uint32_t> new_cigar_ops;
+        for (int i = 0; i < b->core.n_cigar; ++i) {
+            for (int j = 0; j < bam_cigar_oplen(cigar[i]); ++j) {
+                cigar_ops.push_back(bam_cigar_op(cigar[i]));
+            }
+        }
+        int iters = cigar_ops.size();
+        while (y < iters) {
+            int cop = cigar_ops[y];
+            if (del[x]) { // skip ahead in alt2ref cigar
+                if (new_cigar_ops.empty()){
+                    new_cigar_ops.push_back(BAM_CDEL); // TODO: maybe change this to a padded skip?
+                } else {
+                    if (new_cigar_ops.back() == BAM_CINS){
+                        new_cigar_ops[new_cigar_ops.size() - 1] = BAM_CMATCH;
+                    } else if (new_cigar_ops.back() == BAM_CREF_SKIP) {
+                        new_cigar_ops.push_back(BAM_CREF_SKIP);
+                    } else {
+                        new_cigar_ops.push_back(BAM_CDEL);
+                    }
+                }
+                ++x;
+            } else if (cop == BAM_CINS) { // skip ahead in read2alt cigar
+                if (!new_cigar_ops.empty()){
+                    if (new_cigar_ops.back() == BAM_CDEL){
+                        new_cigar_ops[new_cigar_ops.size() - 1] = BAM_CMATCH;
+                    } else{
+                        new_cigar_ops.push_back(BAM_CINS);
+                    }
+                } else {
+                    new_cigar_ops.push_back(BAM_CINS);
+                }
+                ++y;
+            } else if (cop == BAM_CSOFT_CLIP || cop == BAM_CHARD_CLIP || cop == BAM_CPAD){
+                // TODO: check the case where S is followed by D
+                new_cigar_ops.push_back(cop);
+                ++y;
+            } else if (cop == BAM_CBACK) {
+                // skip. We don't support B Ops.
+                fprintf(stderr, "Warning: B operators are not supported\n");
+                ++y;
+            } else if (cop == BAM_CMATCH || cop == BAM_CDIFF || cop == BAM_CEQUAL) { // M
+                if (ins[x]){
+                    if (new_cigar_ops.empty()){
+                        new_cigar_ops.push_back(BAM_CINS);
+                    } else if (new_cigar_ops.back() == BAM_CDEL){
+                        new_cigar_ops[new_cigar_ops.size() - 1] = BAM_CMATCH;
+                    } else {
+                        new_cigar_ops.push_back(BAM_CINS);
+                    }
+                } else {
+                    new_cigar_ops.push_back(BAM_CMATCH);
+                }
+                ++x; ++y;
+            } else if (cop == BAM_CREF_SKIP) { // N 
+                // we separate this from the D branch in case we have to do something special
+                // ie. spliced alignments
+                if (!ins[x]) {
+                    if (new_cigar_ops.empty()){
+                        new_cigar_ops.push_back(BAM_CREF_SKIP);
+                    } else if (new_cigar_ops.back() == BAM_CINS){
+                        new_cigar_ops[new_cigar_ops.size() - 1] = BAM_CMATCH;
+                    } else {
+                        new_cigar_ops.push_back(BAM_CREF_SKIP);
+                    }
+                }
+                ++x; ++y;
+            } else if (cop == BAM_CDEL) { // D
+                if (!ins[x]) {
+                    if (new_cigar_ops.empty()){
+                        new_cigar_ops.push_back(BAM_CDEL);
+                    } else if (new_cigar_ops.back() == BAM_CINS){
+                        new_cigar_ops[new_cigar_ops.size() - 1] = BAM_CMATCH;
+                    } else {
+                        new_cigar_ops.push_back(BAM_CDEL);
+                    }
+                }
+                ++x; ++y;
+            }
+        }
+        return new_cigar_ops;
+    }
+*/
 
 size_t ChainMap::lift_pos(
     std::string contig, size_t pos) {
-    int intvl_idx = this->get_start_rank(contig, pos);
+    int rank = this->get_start_rank(contig, pos);
+    int intvl_idx = rank - 1;
     if (intvl_idx == -1)
         return pos;
     else
@@ -342,8 +458,10 @@ bool ChainMap::is_liftable(
     std::string contig, size_t pos,
     int &start_intvl_idx, int &end_intvl_idx
 ) {
-    start_intvl_idx = this->get_start_rank(contig, pos);
-    end_intvl_idx = this->get_end_rank(contig, pos);
+    int srank = this->get_start_rank(contig, pos);
+    start_intvl_idx = srank - 1;
+    int erank = this->get_end_rank(contig, pos);
+    end_intvl_idx = erank - 1;
     if (start_intvl_idx == -1 || end_intvl_idx == -1)
         return false;
     if (end_intvl_idx - start_intvl_idx == 1)
@@ -356,6 +474,7 @@ bool ChainMap::lift_segment(
     bool is_first_seg, std::string &dest_contig,
     int &start_intvl_idx, int &end_intvl_idx
 ) {
+    const int allowed_num_indel = 20;
     bam1_core_t* c = &(aln->core);
 
     if (is_first_seg && (c->flag & BAM_FUNMAP))
@@ -374,41 +493,92 @@ bool ChainMap::lift_segment(
     // If not liftable (un-liftable or unmapped), 
     // update start/end_intvl_idx and return false 
     if (is_first_seg) {
-        start_intvl_idx = this->get_start_rank(source_contig, c->pos);
-        end_intvl_idx = this->get_end_rank(source_contig, c->pos);
+        // intvl_idx = rank - 1
+        start_intvl_idx = this->get_start_rank(source_contig, c->pos) - 1;
+        end_intvl_idx = this->get_end_rank(source_contig, c->pos) - 1;
     } else {
-        start_intvl_idx = this->get_start_rank(source_contig, c->mpos);
-        end_intvl_idx = this->get_end_rank(source_contig, c->mpos);
+        start_intvl_idx = this->get_start_rank(source_contig, c->mpos) - 1;
+        end_intvl_idx = this->get_end_rank(source_contig, c->mpos) - 1;
     }
+
     if ((start_intvl_idx == -1) || (end_intvl_idx == -1)) {
+        // dest_contig = "*";
+        // std::cerr << bam_get_qname(aln) << "\n";
+        // std::cerr << "pos:\t\t" << c->pos << "\n";
+        if (is_first_seg)
+            c->tid = sam_hdr_name2tid(hdr, dest_contig.c_str());
+        else
+            c->mtid = sam_hdr_name2tid(hdr, dest_contig.c_str());
         return false;
-    ////// #TODO } else if (start_intvl_idx - end_intvl_idx != 1) {
-    ////// #TODO     return false;
+    } else if (start_intvl_idx - end_intvl_idx != 1) {
+        return false;
     } else {
         is_liftable = true;
     }
 
     // Lift contig
-    if (start_intvl_idx == -1)
-        dest_contig = "*";
-    else
-        dest_contig = this->interval_map[source_contig][start_intvl_idx].target;
+    dest_contig = this->interval_map[source_contig][start_intvl_idx].target;
     if (is_first_seg)
         c->tid = sam_hdr_name2tid(hdr, dest_contig.c_str());
     else
         c->mtid = sam_hdr_name2tid(hdr, dest_contig.c_str());
 
+    // DEBUG
+    // if (c->qual > 10) {
+    // std::cerr << bam_get_qname(aln) << "\n";
+    // std::cerr << "pos:\t\t" << c->pos ;
+    // std::cerr << "\t" << 
+    //     this->interval_map[source_contig][start_intvl_idx].source_start << "-" <<
+    //     this->interval_map[source_contig][start_intvl_idx].source_end << "\n";
+    // std::cerr << "pos_end:\t" << pos_end;
+    // std::cerr << "\t" << 
+    //     this->interval_map[source_contig][pend_start_intvl_idx].source_start << "-" <<
+    //     this->interval_map[source_contig][pend_start_intvl_idx].source_end << "\n";
+    // }
+    // END_DEBUG
+
+    // if (is_first_seg && (start_intvl_idx != pend_start_intvl_idx)) {
+    //     std::cout << bam_get_qname(aln) << "\n";
+    //     std::cerr << bam_get_qname(aln) << " ";
+    //     std::cerr << source_contig << "\t" << c->pos << " " << pos_end << " ";
+    //     std::cerr << start_intvl_idx << " " << pend_start_intvl_idx << "\n";
+    //     return true;
+    // } else {
+    //     c->qual = 0;
+    //     return false;
+    // }
+
     // Lift pos
-    size_t pos;
+    auto offset = this->interval_map[source_contig][start_intvl_idx].offset;
+    auto strand = this->interval_map[source_contig][start_intvl_idx].strand;
+    auto pos_end = c->pos + bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln));
+    // intvl_idx = rank - 1
+    auto pend_start_intvl_idx =
+        this->get_start_rank(source_contig, pos_end) - 1;
+    // Estimate ending pos of the mate
+    auto mpos_end = c->mpos + c->l_qseq;
+    auto mpend_start_intvl_idx =
+        this->get_start_rank(source_contig, mpos_end) - 1;
     if (is_first_seg) {
-        if (start_intvl_idx != -1)
-            c->pos = c->pos +
-                this->interval_map[source_contig][start_intvl_idx].offset;
+        if (strand)
+            c->pos = c->pos + offset;
+        else
+            c->pos = pos_end + this->interval_map[source_contig][start_intvl_idx].offset;
+            // c->pos = pos_end + this->interval_map[source_contig][pend_start_intvl_idx].offset;
     } else {
-        if (start_intvl_idx != -1)
-            c->mpos = c->mpos + 
-                this->interval_map[source_contig][start_intvl_idx].offset;
+        if (strand)
+            c->mpos = c->mpos + offset;
+        else
+            c->mpos = mpos_end + this->interval_map[source_contig][start_intvl_idx].offset;
+            // c->mpos = mpos_end + this->interval_map[source_contig][pend_start_intvl_idx].offset;
     }
+    // hts_pos_t bam_cigar2qlen(int n_cigar, const uint32_t *cigar);
+    // DEBUG
+    // if (c->qual > 10) {
+    // std::cerr << dest_contig << " " << c->flag << " " << c->pos+1 << " " << int(c->qual) << "\n\n";
+    // }
+    // END_DEBUG
+
 
     // Lift cigar #TODO
     // this->lift_cigar(
@@ -432,12 +602,21 @@ void ChainMap::lift_aln(
     bool is_r1_liftable = this->lift_segment(
         aln, hdr, true, dest_contig, start_intvl_idx, end_intvl_idx);
 
+    // /* TEMP */
+    // int mate_start_intvl_idx, mate_end_intvl_idx;
+    // bool is_r2_liftable = this->lift_segment(
+    //     aln, hdr, false, dest_contig, mate_start_intvl_idx, mate_end_intvl_idx);
+
+    // return;
+    // /* TEMP */
+
+
     std::string lo;
     // Paired
     if (c->flag & BAM_FPAIRED) {
         int mate_start_intvl_idx, mate_end_intvl_idx;
         bool is_r2_liftable = this->lift_segment(
-            aln, hdr, false, dest_contig, start_intvl_idx, end_intvl_idx);
+            aln, hdr, false, dest_contig, mate_start_intvl_idx, mate_end_intvl_idx);
 
         // R1 unmapped
         if (c->flag & BAM_FUNMAP) {
@@ -454,6 +633,7 @@ void ChainMap::lift_aln(
             } else {
                 lift_status = LIFT_R1_UM_R2_UL;
                 // Neither lifted - do nothing
+                c->qual = 255;
                 lo = "UM_UL";
             }
         // R1 mapped, liftable
@@ -490,6 +670,7 @@ void ChainMap::lift_aln(
             } else {
                 lift_status = LIFT_R1_UL_R2_UL;
                 // Neither lifted - do nothing
+                c->qual = 255;
                 lo = "UL_UL";
             }
         }
