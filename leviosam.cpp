@@ -54,6 +54,7 @@ void serialize_run(lift_opts args) {
         print_serialize_help_msg();
         exit(1);
     }
+    if (args.verbose) std::cerr << "verbose\n";
     if (args.vcf_fname != "") {
         lift::LiftMap l(lift_from_vcf(
             args.vcf_fname, args.sample, args.haplotype,
@@ -461,10 +462,11 @@ int main(int argc, char** argv) {
         {"md", required_argument, 0, 'm'},
         // {"nm", required_argument, 0, 'x'},
         {"reference", required_argument, 0, 'f'},
-        {"verbose", no_argument, &args.verbose, 1},
+        {"verbose", required_argument, 0, 'V'},
+        // {"verbose", no_argument, &args.verbose, 1},
     };
     int long_index = 0;
-    while((c = getopt_long(argc, argv, "hmv:c:C:s:p:l:a:O:g:n:k:t:T:f:", long_options, &long_index)) != -1) {
+    while((c = getopt_long(argc, argv, "hmv:c:C:s:p:l:a:O:g:n:k:t:T:f:V:", long_options, &long_index)) != -1) {
         switch (c) {
             case 'v':
                 args.vcf_fname = optarg;
