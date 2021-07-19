@@ -332,7 +332,6 @@ TEST(ChainMap, LiftInReversedRegion) {
     std::string contig = "chr1";
     int pos_array [4] = {146735453, 146735605, 146735135, 146735235};
     int gold_pos_array [4] = {148073114, 148072962, 148073432, 148073332};
-    // int gold_pos_array [4] = {148072962, 148073114, 148073332, 148073432};
     int gold_rank = 154;
     int rank;
     int pos;
