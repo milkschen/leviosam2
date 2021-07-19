@@ -87,6 +87,8 @@ ChainMap::ChainMap(std::string fname, int verbose) {
     if (this->verbose > 2) {
         this->debug_print_interval_map();
     }
+    // TEMP
+    this->interval_map_sanity_check();
 }
 
 /* Create start and end bitvectors when see a new `source`.
@@ -156,6 +158,7 @@ bool ChainMap::interval_map_sanity_check() {
                 }
             }
     }
+    std::cerr << "Interval_map sanity check: passed (no overlaps)\n";
     return true;
 }
 
