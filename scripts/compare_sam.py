@@ -95,24 +95,28 @@ class Summary():
                 baseline = rec[1]
                 msg_query = (
                     '    '
-                    f'{query.reference_name}\t{query.reference_start:10d}\t'
+                    f'{query.flag:5d}\t{query.reference_name:6s}\t'
+                    f'{query.reference_start+1:10d}\t'
                     f'{query.mapping_quality:3d}\t{query.cigarstring}')
                 msg_baseline = (
                     '    '
-                    f'{baseline.reference_name}\t{baseline.reference_start:10d}\t'
+                    f'{baseline.flag:5d}\t{baseline.reference_name:6s}\t'
+                    f'{baseline.reference_start+1:10d}\t'
                     f'{baseline.mapping_quality:3d}\t{baseline.cigarstring}')
-                print(f'{query.query_name}')
-                print(f'{self.pos_diff[i]:10d}\t{msg_query}', file=f_out)
-                print(f'{" ":10s}\t{msg_baseline}', file=f_out)
+                print(f'{query.query_name}', file=f_out)
+                print(f'p_diff={self.pos_diff[i]:10d}\t{msg_query}', file=f_out)
+                print(f'{" ":17s}\t{msg_baseline}', file=f_out)
                 cnt += 1
             if cnt >= num_err_printed and num_err_printed >= 0:
                 break
 
         print('## MAPQ', file=f_out)
-        print(f'{self.mapq_diff.count(0) / len(self.mapq_diff)} ({self.mapq_diff.count(0)}/{len(self.mapq_diff)})', file=f_out)
+        print((f'{self.mapq_diff.count(0) / len(self.mapq_diff)} '
+               f'({self.mapq_diff.count(0)}/{len(self.mapq_diff)})'), file=f_out)
 
         print('## CIGAR', file=f_out)
-        print(f'{self.cigar_diff.count(True) / len(self.cigar_diff)} ({self.cigar_diff.count(True)}/{len(self.cigar_diff)})', file=f_out)
+        print((f'{self.cigar_diff.count(True) / len(self.cigar_diff)} '
+               f'({self.cigar_diff.count(True)}/{len(self.cigar_diff)})'), file=f_out)
 
         print('## Unaligned', file=f_out)
         set_unaligned = set(self.unmapped_records[0] + self.unmapped_records[1])
