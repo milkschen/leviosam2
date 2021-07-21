@@ -40,7 +40,6 @@ class Interval {
     void debug_print_interval() {
         std::string ss = (strand)? "+" : "-";
         std::cerr << "[" << source_start << ":" << source_end << ")->" << target << " (" << ss << "); offset = " << offset << "\n";
-        // std::cerr << source << "[" << source_start << ":" << source_end << ")->" << target << " (" << ss << "); offset = " << offset << "\n";
     }
 
     // std::string source;
