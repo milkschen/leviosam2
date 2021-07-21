@@ -509,6 +509,7 @@ int main(int argc, char** argv) {
                 break;
             case 'V':
                 args.verbose = atoi(optarg);
+                break;
             case 'm':
                 args.md_flag |= 8;
                 args.md_flag |= 16;
