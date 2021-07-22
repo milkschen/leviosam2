@@ -542,6 +542,19 @@ bool ChainMap::lift_segment(
             c->mtid = sam_hdr_name2tid(hdr, dest_contig.c_str());
         return false;
     } else if (start_intvl_idx == end_intvl_idx) {
+        // Update flags
+        // The segment is set to unmapped (BAM_FUNMAP or BAM_FMUNMAP)
+        // Clear forward/reverse status.
+        // If paired, changed to improper paired. 
+        if (is_first_seg) {
+            c->flag |= BAM_FUNMAP;
+            c->flag &= ~BAM_FPROPER_PAIR;
+            c->flag &= ~BAM_FREVERSE;
+        } else {
+            c->flag |= BAM_FMUNMAP;
+            c->flag &= ~BAM_FPROPER_PAIR;
+            c->flag &= ~BAM_FMREVERSE;
+        }
         return false;
         // I'm considering allowing lifting around an interval (tho not strictly inside)
     } else {
@@ -636,6 +649,11 @@ void ChainMap::lift_aln(
                 lift_status = LIFT_R1_UM_R2_UM;
                 // Neither lifted - do nothing
                 lo = "UM_UM";
+                c->pos = -1;
+                c->tid = -1;
+                c->qual = 0;
+                c->mpos = -1;
+                c->mtid = -1;
             } else if (is_r2_liftable) {
                 lift_status = LIFT_R1_UM_R2_L;
                 // TODO: copy R2 to R1
