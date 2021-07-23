@@ -68,7 +68,7 @@ class ChainMap {
         ChainMap() {}
         ~ChainMap() {}
         ChainMap(std::string fname, int verbose);
-        ChainMap(std::ifstream& in);
+        ChainMap(std::ifstream& in, int verbose);
         void init_bitvectors(
             std::string source, int source_length,
             std::unordered_map<std::string, sdsl::bit_vector> &start_bv_map,

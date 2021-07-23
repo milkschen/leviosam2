@@ -256,7 +256,7 @@ void lift_run(lift_opts args) {
     chain::ChainMap chain_map = [&] {
         if (args.chainmap_fname != "") {
             std::ifstream in(args.chainmap_fname, std::ios::binary);
-            return chain::ChainMap(in);
+            return chain::ChainMap(in, args.verbose);
         } else if (args.chain_fname != ""){
             return chain::ChainMap(args.chain_fname, args.verbose);
         } else {
