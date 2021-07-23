@@ -536,16 +536,11 @@ bool ChainMap::lift_segment(
     
 
     if ((start_intvl_idx <= -1) || (end_intvl_idx <= -1)) {
-        if (is_first_seg)
-            c->tid = sam_hdr_name2tid(hdr, dest_contig.c_str());
-        else
-            c->mtid = sam_hdr_name2tid(hdr, dest_contig.c_str());
-        return false;
-    } else if (start_intvl_idx == end_intvl_idx) {
-        // Update flags
-        // The segment is set to unmapped (BAM_FUNMAP or BAM_FMUNMAP)
-        // Clear forward/reverse status.
-        // If paired, changed to improper paired. 
+        // The commented logic is old and I don't understand it. Plan to remove if tests passed.
+        // if (is_first_seg)
+        //     c->tid = sam_hdr_name2tid(hdr, dest_contig.c_str());
+        // else
+        //     c->mtid = sam_hdr_name2tid(hdr, dest_contig.c_str());
         if (is_first_seg) {
             c->flag |= BAM_FUNMAP;
             c->flag &= ~BAM_FPROPER_PAIR;
@@ -556,25 +551,46 @@ bool ChainMap::lift_segment(
             c->flag &= ~BAM_FMREVERSE;
         }
         return false;
-        // I'm considering allowing lifting around an interval (tho not strictly inside)
+    } else if (start_intvl_idx == end_intvl_idx) {
+        // The starting position is not within any intervals in the ChainMap.
+        // The segment is then set to unmapped (BAM_FUNMAP or BAM_FMUNMAP).
+        //
+        // Update flags:
+        //   - Clear forward/reverse status.
+        //   - If paired, changed to improper paired. 
+        if (is_first_seg) {
+            c->flag |= BAM_FUNMAP;
+            c->flag &= ~BAM_FPROPER_PAIR;
+            c->flag &= ~BAM_FREVERSE;
+        } else {
+            c->flag |= BAM_FMUNMAP;
+            c->flag &= ~BAM_FPROPER_PAIR;
+            c->flag &= ~BAM_FMREVERSE;
+        }
+        return false;
+        // TODO: I'm considering allowing lifting around an interval (tho not strictly inside)
     } else {
         is_liftable = true;
     }
     
-    // DEBUG
-    // std::cerr << "CHECK LIFTABILITY\n";
-    // std::cerr << source_contig << "=>" << start_intvl_idx << ";" << end_intvl_idx << "\n";
-    // this->interval_map[source_contig][start_intvl_idx].debug_print_interval();
-    // this->interval_map[source_contig][end_intvl_idx].debug_print_interval();
-    // std::cerr << "END CHECK LIFTABILITY\n";
-    // END_DEBUG
+    // Debug messages
+    if (this->verbose > 1) {
+        if (is_first_seg) {
+            std::cerr << "First segment\n";
+            std::cerr << "  Source: " << source_contig << ":" << c->pos << "\n";
+        } else {
+            std::cerr << "Second segment\n";
+            std::cerr << "  Source: " << source_contig << ":" << c->mpos << "\n";
+        }
+        std::cerr << "  Queried interval indexes:\n";
+        std::cerr << "    start: " << start_intvl_idx << "\n    ";
+        this->interval_map[source_contig][start_intvl_idx].debug_print_interval();
+        std::cerr << "    end  : " << end_intvl_idx << "\n";
+    }
 
 
     // Lift contig
     dest_contig = this->interval_map[source_contig][start_intvl_idx].target;
-    // DEBUG
-    // std::cerr << "source_contig=" << source_contig << "; dest_contig=" << dest_contig << "\n";
-    // END_DEBUG
     if (is_first_seg)
         c->tid = sam_hdr_name2tid(hdr, dest_contig.c_str());
     else
@@ -585,23 +601,48 @@ bool ChainMap::lift_segment(
     auto offset = current_intvl.offset;
     auto strand = current_intvl.strand;
     auto pos_end = c->pos + bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln));
-    // Note that intvl_idx = rank - 1
-    // auto pend_start_intvl_idx =
-    //     this->get_start_rank(source_contig, pos_end) - 1;
     // Estimate ending pos of the mate
     auto mpos_end = c->mpos + c->l_qseq;
+    // Note that intvl_idx = rank - 1
+    auto pend_start_intvl_idx = (is_first_seg)? 
+        this->get_start_rank(source_contig, pos_end) - 1 :
+        this->get_start_rank(source_contig, mpos_end) - 1;
+
     // auto mpend_start_intvl_idx =
     //     this->get_start_rank(source_contig, mpos_end) - 1;
+
+    // TODO: I don't like this strategy very much
+    // If overlapped with multiple intervals, mark as unliftable
+    if (start_intvl_idx != pend_start_intvl_idx)
+        is_liftable = false;
+
+    // Debug messages
+    if (this->verbose > 1) {
+        std::cerr << "* Estimated ending position:\n";
+        if (is_first_seg) {
+            std::cerr << "  Source: " << source_contig << ":" << pos_end << "\n";
+        } else {
+            std::cerr << "  Source: " << source_contig << ":" << mpos_end << "\n";
+        }
+        std::cerr << "  Queried interval indexes:\n";
+        std::cerr << "    start: " << pend_start_intvl_idx << "\n    ";
+        this->interval_map[source_contig][pend_start_intvl_idx].debug_print_interval();
+    }
+
     if (is_first_seg) {
         if (strand)
             c->pos = c->pos + offset;
-        else
+        else {
             c->pos = -pos_end + offset + current_intvl.source_start + current_intvl.source_end;
+            c->flag ^= BAM_FREVERSE;
+        }
     } else {
         if (strand)
             c->mpos = c->mpos + offset;
-        else
+        else {
             c->mpos = -mpos_end + offset + current_intvl.source_start + current_intvl.source_end;
+            c->flag ^= BAM_FMREVERSE;
+        }
     }
     // hts_pos_t bam_cigar2qlen(int n_cigar, const uint32_t *cigar);
     // DEBUG
@@ -647,7 +688,7 @@ void ChainMap::lift_aln(
         if (c->flag & BAM_FUNMAP) {
             if (c->flag & BAM_FMUNMAP) {
                 lift_status = LIFT_R1_UM_R2_UM;
-                // Neither lifted - do nothing
+                // Neither lifted/mapped - set to unmapped
                 lo = "UM_UM";
                 c->pos = -1;
                 c->tid = -1;
@@ -663,7 +704,7 @@ void ChainMap::lift_aln(
             } else {
                 lift_status = LIFT_R1_UM_R2_UL;
                 // Neither lifted - do nothing
-                c->qual = 255;
+                // c->qual = 255;
                 lo = "UM_UL";
             }
         // R1 mapped, liftable
@@ -686,7 +727,7 @@ void ChainMap::lift_aln(
             }
         // R1 mapped, un-liftable
         } else {
-            // c->qual = 255;
+            c->qual = 255;
             if (c->flag & BAM_FMUNMAP) {
                 lift_status = LIFT_R1_UL_R2_UM;
                 // Neither lifted - do nothing
@@ -696,16 +737,18 @@ void ChainMap::lift_aln(
                 // #TODO Copy R2 to R1 ??
                 c->pos = c->mpos;
                 c->tid = c->mtid;
+                // c->qual = 255;
                 lo = "UL_L";
             } else {
                 lift_status = LIFT_R1_UL_R2_UL;
                 // Neither lifted - do nothing
-                c->qual = 255;
+                // c->qual = 255;
                 lo = "UL_UL";
             }
         }
         // TODO consider STRAND
         c->isize = 
+            (lift_status != LIFT_R1_L_R2_L)? 0 : // If any is unliftable/unmapped, set isize to 0
             (c->isize == 0)? 0 : 
             (c->tid != c->mtid)? 0 : 
                 c->isize + (mpos - c->mpos) - (pos - c->pos);
@@ -774,7 +817,8 @@ size_t ChainMap::serialize(std::ofstream& out) {
     return size;
 }
 
-ChainMap::ChainMap(std::ifstream& in) {
+ChainMap::ChainMap(std::ifstream& in, int verbose) {
+    this->verbose = verbose;
     this->load(in);
     // debug messages
     // this->debug_print_interval_map();
