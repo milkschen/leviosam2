@@ -100,9 +100,9 @@ class ChainMap {
             bam1_t* aln, bam_hdr_t* hdr,
             bool is_first_seg, std::string &dest_contig,
             int &start_intvl_idx, int &end_intvl_idx);
-        bool is_liftable(
-            std::string contig, size_t pos,
-            int &start_intvl_idx, int &end_intvl_idx);
+        // bool is_liftable(
+        //     std::string contig, size_t pos,
+        //     int &start_intvl_idx, int &end_intvl_idx);
         void lift_aln(
             bam1_t* aln,
             bam_hdr_t* hdr,
