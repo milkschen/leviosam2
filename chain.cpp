@@ -1,3 +1,4 @@
+#include <cmath>
 #include <iostream>
 #include "chain.hpp"
 
@@ -341,22 +342,22 @@ void ChainMap::show_interval_info(std::string contig, int pos) {
 }
 
 
-std::string ChainMap::lift_contig(std::string contig, size_t pos) {
-    int rank = this->get_start_rank(contig, pos);
-    int intvl_idx = rank - 1;
-    if (intvl_idx == -1)
-        return "*";
-    else
-        return this->interval_map[contig][intvl_idx].target;
-}
-
-std::string ChainMap::lift_contig(
-    std::string contig, int start_intvl_idx, int end_intvl_idx) {
-    if (start_intvl_idx == -1)
-        return "*";
-    else
-        return this->interval_map[contig][start_intvl_idx].target;
-}
+// std::string ChainMap::lift_contig(std::string contig, size_t pos) {
+//     int rank = this->get_start_rank(contig, pos);
+//     int intvl_idx = rank - 1;
+//     if (intvl_idx == -1)
+//         return "*";
+//     else
+//         return this->interval_map[contig][intvl_idx].target;
+// }
+// 
+// std::string ChainMap::lift_contig(
+//     std::string contig, int start_intvl_idx, int end_intvl_idx) {
+//     if (start_intvl_idx == -1)
+//         return "*";
+//     else
+//         return this->interval_map[contig][start_intvl_idx].target;
+// }
 
 void ChainMap::lift_cigar(const std::string& contig, bam1_t* aln) {
     // TODO
@@ -483,20 +484,36 @@ size_t ChainMap::lift_pos(
 }
 
 // Return liftability (bool) and update start/end-interval indexes.
-bool ChainMap::is_liftable(
-    std::string contig, size_t pos,
-    int &start_intvl_idx, int &end_intvl_idx
-) {
-    int srank = this->get_start_rank(contig, pos);
-    start_intvl_idx = srank - 1;
-    int erank = this->get_end_rank(contig, pos);
-    end_intvl_idx = erank - 1;
+// bool ChainMap::is_liftable(
+//     std::string contig, size_t pos,
+//     int &start_intvl_idx, int &end_intvl_idx
+// ) {
+//     int srank = this->get_start_rank(contig, pos);
+//     start_intvl_idx = srank - 1;
+//     int erank = this->get_end_rank(contig, pos);
+//     end_intvl_idx = erank - 1;
+// 
+//     if (start_intvl_idx == -1 || end_intvl_idx == -1)
+//         return false;
+//     if (end_intvl_idx - start_intvl_idx == 1)
+//         return true;
+//     return false;
+// }
 
-    if (start_intvl_idx == -1 || end_intvl_idx == -1)
-        return false;
-    if (end_intvl_idx - start_intvl_idx == 1)
-        return true;
-    return false;
+/* Update SAM flag to set a record as an unmapped alignment
+ *   - Clear forward/reverse status.
+ *   - If paired, changed to improper paired. 
+ */
+void update_flag_unmap(bam1_core_t* c, const bool is_first_seg) {
+    if (is_first_seg) {
+        c->flag |= BAM_FUNMAP;
+        c->flag &= ~BAM_FPROPER_PAIR;
+        c->flag &= ~BAM_FREVERSE;
+    } else {
+        c->flag |= BAM_FMUNMAP;
+        c->flag &= ~BAM_FPROPER_PAIR;
+        c->flag &= ~BAM_FMREVERSE;
+    }
 }
 
 // Return false if unliftable
@@ -505,7 +522,7 @@ bool ChainMap::lift_segment(
     bool is_first_seg, std::string &dest_contig,
     int &start_intvl_idx, int &end_intvl_idx
 ) {
-    // const int allowed_num_indel = 20;
+    const int allowed_num_indel = 10;
     bam1_core_t* c = &(aln->core);
 
     // If unmapped, the alignment is not liftable
@@ -521,10 +538,6 @@ bool ChainMap::lift_segment(
     else
         source_contig = hdr->target_name[c->mtid];
 
-    bool is_liftable;
-    // Check liftability
-    // Query pos or mpos (depends on first/second segment) to obtain intvl indexes
-    // If pos is in an interval, "start_intvl_idx == end_intvl_idx + 1" is true
     if (is_first_seg) {
         // Note that intvl_idx = rank - 1
         start_intvl_idx = this->get_start_rank(source_contig, c->pos) - 1;
@@ -533,42 +546,37 @@ bool ChainMap::lift_segment(
         start_intvl_idx = this->get_start_rank(source_contig, c->mpos) - 1;
         end_intvl_idx = this->get_end_rank(source_contig, c->mpos) - 1;
     }
-    
 
+    // Check liftability // TODO: update document
+    // Query pos or mpos (depends on first/second segment) to obtain intvl indexes
+    // If pos is in an interval, "start_intvl_idx == end_intvl_idx + 1" is true
+    bool is_liftable;
     if ((start_intvl_idx <= -1) || (end_intvl_idx <= -1)) {
         // The commented logic is old and I don't understand it. Plan to remove if tests passed.
         // if (is_first_seg)
         //     c->tid = sam_hdr_name2tid(hdr, dest_contig.c_str());
         // else
         //     c->mtid = sam_hdr_name2tid(hdr, dest_contig.c_str());
-        if (is_first_seg) {
-            c->flag |= BAM_FUNMAP;
-            c->flag &= ~BAM_FPROPER_PAIR;
-            c->flag &= ~BAM_FREVERSE;
-        } else {
-            c->flag |= BAM_FMUNMAP;
-            c->flag &= ~BAM_FPROPER_PAIR;
-            c->flag &= ~BAM_FMREVERSE;
-        }
+        update_flag_unmap(c, is_first_seg);
         return false;
     } else if (start_intvl_idx == end_intvl_idx) {
-        // The starting position is not within any intervals in the ChainMap.
-        // The segment is then set to unmapped (BAM_FUNMAP or BAM_FMUNMAP).
-        //
-        // Update flags:
-        //   - Clear forward/reverse status.
-        //   - If paired, changed to improper paired. 
-        if (is_first_seg) {
-            c->flag |= BAM_FUNMAP;
-            c->flag &= ~BAM_FPROPER_PAIR;
-            c->flag &= ~BAM_FREVERSE;
+        /* If the starting position is not within any intervals in the ChainMap,
+         * this segment is set to unmapped (BAM_FUNMAP or BAM_FMUNMAP).
+         *
+         * If the alignment is close enough with the next interval (`<allowed_num_indel`),
+         * we still consier this alignment as liftable
+         */
+        if (start_intvl_idx < this->interval_map[source_contig].size() - 1) {
+            auto next_intvl = this->interval_map[source_contig][start_intvl_idx+1];
+            if (std::abs(c->pos - next_intvl.source_start) >= allowed_num_indel) {
+                update_flag_unmap(c, is_first_seg);
+                return false;
+            }
+            is_liftable = true;
         } else {
-            c->flag |= BAM_FMUNMAP;
-            c->flag &= ~BAM_FPROPER_PAIR;
-            c->flag &= ~BAM_FMREVERSE;
+            update_flag_unmap(c, is_first_seg);
+            return false;
         }
-        return false;
-        // TODO: I'm considering allowing lifting around an interval (tho not strictly inside)
     } else {
         is_liftable = true;
     }
@@ -589,15 +597,16 @@ bool ChainMap::lift_segment(
     }
 
 
+    auto current_intvl = this->interval_map[source_contig][start_intvl_idx];
     // Lift contig
-    dest_contig = this->interval_map[source_contig][start_intvl_idx].target;
+    // dest_contig = this->interval_map[source_contig][start_intvl_idx].target;
+    dest_contig = current_intvl.target;
     if (is_first_seg)
         c->tid = sam_hdr_name2tid(hdr, dest_contig.c_str());
     else
         c->mtid = sam_hdr_name2tid(hdr, dest_contig.c_str());
 
     // Lift pos
-    auto current_intvl = this->interval_map[source_contig][start_intvl_idx];
     auto offset = current_intvl.offset;
     auto strand = current_intvl.strand;
     auto pos_end = c->pos + bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln));
@@ -611,10 +620,15 @@ bool ChainMap::lift_segment(
     // auto mpend_start_intvl_idx =
     //     this->get_start_rank(source_contig, mpos_end) - 1;
 
-    // TODO: I don't like this strategy very much
-    // If overlapped with multiple intervals, mark as unliftable
-    if (start_intvl_idx != pend_start_intvl_idx)
-        is_liftable = false;
+    /* If an alignment is overlapped with multiple intervals, check the gap size between the 
+     * intervals. If the gap size is greater than `allowed_num_indel`, mark the alignment as
+     * unliftable (return false).
+     */
+    if (start_intvl_idx != pend_start_intvl_idx) {
+        auto next_intvl = this->interval_map[source_contig][pend_start_intvl_idx];
+        if (std::abs(next_intvl.offset - current_intvl.offset) > allowed_num_indel)
+            is_liftable = false;
+    }
 
     // Debug messages
     if (this->verbose > 1) {
@@ -627,6 +641,7 @@ bool ChainMap::lift_segment(
         std::cerr << "  Queried interval indexes:\n";
         std::cerr << "    start: " << pend_start_intvl_idx << "\n    ";
         this->interval_map[source_contig][pend_start_intvl_idx].debug_print_interval();
+        std::cerr << "\n";
     }
 
     if (is_first_seg) {
@@ -645,12 +660,6 @@ bool ChainMap::lift_segment(
         }
     }
     // hts_pos_t bam_cigar2qlen(int n_cigar, const uint32_t *cigar);
-    // DEBUG
-    // if (c->qual > 10) {
-    // std::cerr << dest_contig << " " << c->flag << " " << c->pos+1 << " " << int(c->qual) << "\n\n";
-    // }
-    // END_DEBUG
-
 
     // Lift cigar #TODO
     // this->lift_cigar(
