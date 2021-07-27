@@ -83,13 +83,16 @@ class ChainMap {
 
         void show_interval_info(std::string contig, int pos);
 
-        std::string lift_contig(std::string contig, size_t pos);
-        std::string lift_contig(
-            std::string contig, int start_intvl_idx, int end_intvl_idx);
-        void lift_cigar(const std::string& contig, bam1_t* aln);
+        // std::string lift_contig(std::string contig, size_t pos);
+        // std::string lift_contig(
+        //     std::string contig, int start_intvl_idx, int end_intvl_idx);
+        // void lift_cigar(const std::string& contig, bam1_t* aln);
         void lift_cigar(
             const std::string& contig, bam1_t* aln,
-            int start_intvl_idx, int end_intvl_idx);
+            int start_intvl_idx, int pend_start_intvl_idx, int num_sclip_start);
+        void lift_cigar_core(
+            const std::string& contig, bam1_t* aln,
+            int start_intvl_idx, int pend_start_intvl_idx);
 
         size_t lift_pos(std::string contig, size_t pos);
         size_t lift_pos(
@@ -122,6 +125,7 @@ class ChainMap {
 
     private:
         void init_rs();
+        void update_flag_unmap(bam1_core_t* c, const bool is_first_seg);
 
         int verbose;
         IntervalMap interval_map;
