@@ -2,6 +2,7 @@
 """
 import argparse
 import pysam
+import re
 import sys
 
 def parse_args():
@@ -29,6 +30,12 @@ def parse_args():
     parser.add_argument(
         '-m', '--min_mapq', default=0, type=int,
         help='Min MAPQ to consider. Alignments with lower MAPQ are considered as invalid. [0]'
+    )
+    parser.add_argument(
+        '--report_records_closer_than', default=-1, type=int,
+        help=(
+            'Only report records within a positional difference. '
+            'Set to a negative value to turn off. [-1]')
     )
     args = parser.parse_args()
     return args
@@ -65,9 +72,26 @@ class Summary():
                 is_unmapped_or_invalid = True
             if is_unmapped_or_invalid:
                 return
-
+            
             if query.reference_name == baseline.reference_name:
-                self.pos_diff.append(abs(query.reference_start - baseline.reference_start))
+                if True:
+                    self.pos_diff.append(abs(query.reference_start - baseline.reference_start))
+                else:
+                    # TODO
+                    # I tried to handle "S" bases here, but the logic
+                    # might be wrong
+                    # 
+                    # Consider soft clipped ("S") bases
+                    cigar_re = re.compile('[SIDM]+')
+                    q_cigar = cigar_re.findall(query.cigarstring)
+                    b_cigar = cigar_re.findall(baseline.cigarstring)
+                    q_start = query.reference_start
+                    b_start = baseline.reference_start
+                    if q_cigar[0] == 'S':
+                        q_start += int(cigar_re.split(query.cigarstring)[0])
+                    if b_cigar[0] == 'S':
+                        b_start += int(cigar_re.split(baseline.cigarstring)[0])
+                    self.pos_diff.append(abs(q_start - b_start))
             else:
                 self.pos_diff.append(-1)
             self.records.append([query, baseline])
@@ -80,7 +104,7 @@ class Summary():
         #         print('baseline=', baseline.query_name, baseline.reference_name, baseline.reference_start)
 
 
-    def report(self, fn_out, num_err_printed):
+    def report(self, fn_out, num_err_printed, out_pos_diff):
         if fn_out == '':
             f_out = sys.stdout
         else:
@@ -91,6 +115,8 @@ class Summary():
         cnt = 0
         for i, rec in enumerate(self.records):
             if self.pos_diff[i] > self.allowed_pos_diff:
+                if out_pos_diff >= 0 and self.pos_diff[i] > out_pos_diff:
+                    continue
                 query = rec[0]
                 baseline = rec[1]
                 msg_query = (
@@ -151,10 +177,14 @@ def compare_sam(args):
     for i_q, [name, [first_seg, second_seg]] in enumerate(dict_query.items()):
         if dict_baseline.get(name):
             summary.update(
-                query=first_seg, baseline=dict_baseline[name][0], aln_filter=aln_filter)
+                query=first_seg, baseline=dict_baseline[name][0],
+                aln_filter=aln_filter)
             summary.update(
-                query=second_seg, baseline=dict_baseline[name][1], aln_filter=aln_filter)
-    summary.report(args.out, args.num_err_printed)
+                query=second_seg, baseline=dict_baseline[name][1],
+                aln_filter=aln_filter)
+    summary.report(
+        fn_out=args.out, num_err_printed=args.num_err_printed,
+        out_pos_diff=args.report_records_closer_than)
 
 
 if __name__ == '__main__':
