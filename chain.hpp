@@ -8,53 +8,27 @@
 #include <htslib/sam.h>
 #include "leviosam.hpp"
 
-
 namespace chain {
+void debug_print_cigar(bam1_t* aln);
+
+/* Chain interval object
+ * Each interval is a gapless alignment between the source and the dest references.
+ */
 class Interval {
     public:
-    Interval() {
-        // source = "";
-        target = "";
-        offset = 0;
-        source_start = 0;
-        source_end = 0;
-        strand = true;
-    }
+        Interval();
+        Interval(std::string t, int so, int se, int o, bool ss);
+        Interval(std::ifstream& in);
+        void debug_print_interval();
+        // Save to stream
+        size_t serialize(std::ofstream& out) const;
+        // Load from stream
+        void load(std::istream& in);
 
-    Interval(
-        // std::string s, 
-        std::string t, int so, int se, int o, bool ss
-    ) {
-        // source = s;
-        target = t;
-        offset = o;
-        source_start = so;
-        source_end = se;
-        strand = ss;
-    }
-    
-    Interval(std::ifstream& in) {
-        this->load(in);
-    }
-
-    void debug_print_interval() {
-        std::string ss = (strand)? "+" : "-";
-        std::cerr << "[" << source_start << ":" << source_end << ")->" << target << " (" << ss << "); offset = " << offset << "\n";
-    }
-
-    // std::string source;
-    std::string target;
-    int offset;
-    int source_start, source_end;
-    bool strand; // true: "+"; false: "-"
-
-
-    // Save to stream
-    size_t serialize(std::ofstream& out) const;
-    // Load from stream
-    void load(std::istream& in);
-
-    void debug_print();
+        std::string target;
+        int offset;
+        int source_start, source_end;
+        bool strand; // true: "+"; false: "-"
 };
 
 using BitVectorMap = std::unordered_map<std::string, sdsl::bit_vector>;
@@ -63,7 +37,6 @@ using IntervalMap = std::unordered_map<std::string, std::vector<Interval>>;
 
 
 class ChainMap {
-
     public:
         ChainMap() {}
         ~ChainMap() {}
@@ -81,12 +54,12 @@ class ChainMap {
         int get_start_rank(std::string contig, int pos);
         int get_end_rank(std::string contig, int pos);
 
-        void show_interval_info(std::string contig, int pos);
+        // void show_interval_info(std::string contig, int pos);
 
-        // std::string lift_contig(std::string contig, size_t pos);
+        std::string lift_contig(std::string contig, size_t pos);
         // std::string lift_contig(
         //     std::string contig, int start_intvl_idx, int end_intvl_idx);
-        // void lift_cigar(const std::string& contig, bam1_t* aln);
+        void lift_cigar(const std::string& contig, bam1_t* aln);
         void lift_cigar(
             const std::string& contig, bam1_t* aln,
             int start_intvl_idx, int pend_start_intvl_idx, int num_clipped);
@@ -96,9 +69,9 @@ class ChainMap {
             int start_intvl_idx, int pend_start_intvl_idx, int num_clipped);
 
         size_t lift_pos(std::string contig, size_t pos);
-        size_t lift_pos(
-            std::string contig, size_t pos,
-            int start_intvl_idx, int end_intvl_idx);
+        // size_t lift_pos(
+        //     std::string contig, size_t pos,
+        //     int start_intvl_idx, int end_intvl_idx);
 
         bool lift_segment(
             bam1_t* aln, bam_hdr_t* hdr,

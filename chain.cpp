@@ -3,7 +3,34 @@
 #include <queue>
 #include "chain.hpp"
 
-using namespace chain;
+
+namespace chain {
+Interval::Interval() {
+    target = "";
+    offset = 0;
+    source_start = 0;
+    source_end = 0;
+    strand = true;
+}
+
+Interval::Interval(
+    std::string t, int so, int se, int o, bool ss
+) {
+    target = t;
+    offset = o;
+    source_start = so;
+    source_end = se;
+    strand = ss;
+}
+
+Interval::Interval(std::ifstream& in) {
+    this->load(in);
+}
+
+void Interval::debug_print_interval() {
+    std::string ss = (strand)? "+" : "-";
+    std::cerr << "[" << source_start << ":" << source_end << ")->" << target << " (" << ss << "); offset = " << offset << "\n";
+}
 
 size_t Interval::serialize(std::ofstream& out) const {
     size_t size = 0;
@@ -92,6 +119,7 @@ ChainMap::ChainMap(std::string fname, int verbose) {
     // TEMP
     this->interval_map_sanity_check();
 }
+
 
 /* Create start and end bitvectors when see a new `source`.
  * Do nothing if `source` has been seen.
@@ -328,12 +356,6 @@ void ChainMap::parse_chain_line(
 }
 
 
-void ChainMap::show_interval_info(std::string contig, int pos) {
-    int rank = this->get_start_rank(contig, pos);
-    int intvl_idx = rank - 1;
-    this->interval_map[contig][intvl_idx].debug_print_interval();
-}
-
 /* Update SAM flag to set a record as an unmapped alignment
  *   - Clear forward/reverse status.
  *   - If paired, changed to improper paired. 
@@ -350,7 +372,32 @@ void ChainMap::update_flag_unmap(bam1_core_t* c, const bool is_first_seg) {
     }
 }
 
-/* Lift CIGAR */
+/* Lift CIGAR
+ * This version of `lift_cigar()` can be called when no interval indexes are
+ * available, but is slower because of additional calls to query for interval indexes.
+ */
+void ChainMap::lift_cigar(const std::string& contig, bam1_t* aln) {
+    bam1_core_t* c = &(aln->core);
+    auto pos_end = c->pos + bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln));
+    // Note that intvl_idx = rank - 1
+    auto start_intvl_idx = this->get_start_rank(contig, c->pos) - 1;
+    auto end_intvl_idx = this->get_end_rank(contig, c->pos) - 1;
+    auto pend_start_intvl_idx = this->get_start_rank(contig, pos_end) - 1;
+
+    auto next_intvl = this->interval_map[contig][start_intvl_idx+1];
+    int num_sclip_start = 0;
+    if ((start_intvl_idx == end_intvl_idx) &&
+        (start_intvl_idx < this->interval_map[contig].size() - 1))
+        num_sclip_start = std::abs(c->pos - next_intvl.source_start);
+    this->lift_cigar(
+        contig, aln,
+        start_intvl_idx, pend_start_intvl_idx, num_sclip_start);
+}
+
+/* Lift CIGAR
+ * A fast version of `lift_cigar()`, which is used when auxiliary information 
+ * including query start/end interval ranks and #clipped bases is available.
+ */
 void ChainMap::lift_cigar(
     const std::string& contig, bam1_t* aln,
     int start_intvl_idx, int pend_start_intvl_idx, int num_clipped) {
@@ -419,12 +466,7 @@ void ChainMap::lift_cigar(
     }
     if (this->verbose > 3) {
         std::cerr << "* new: ";
-        for (int i = 0; i < aln->core.n_cigar; i++){
-            auto cigar_op_len = bam_cigar_oplen(cigar[i]);
-            auto cigar_op = bam_cigar_op(cigar[i]);
-            std::cerr << cigar_op_len << bam_cigar_opchr(cigar_op);
-        }
-        std::cerr << "\n";
+        debug_print_cigar(aln);
     }
 }
 
@@ -972,22 +1014,6 @@ void ChainMap::load(std::ifstream& in) {
 }
 
 // size_t ChainMap::lift_pos(
-//     std::string contig, size_t pos) {
-//     int rank = this->get_start_rank(contig, pos);
-//     int intvl_idx = rank - 1;
-//     if (intvl_idx == -1)
-//         return pos;
-//     else {
-//         auto intvl = this->interval_map[contig][intvl_idx];
-//         if (intvl.strand) {
-//             return pos + intvl.offset;
-//         } else {
-//             return -pos + intvl.offset + intvl.source_start + intvl.source_end;
-//         }
-//     }
-// }
-// 
-// size_t ChainMap::lift_pos(
 //     std::string contig, size_t pos,
 //     int start_intvl_idx, int end_intvl_idx) {
 //     if (start_intvl_idx == -1)
@@ -1018,15 +1044,6 @@ void ChainMap::load(std::ifstream& in) {
 //         return true;
 //     return false;
 // }
-
-// std::string ChainMap::lift_contig(std::string contig, size_t pos) {
-//     int rank = this->get_start_rank(contig, pos);
-//     int intvl_idx = rank - 1;
-//     if (intvl_idx == -1)
-//         return "*";
-//     else
-//         return this->interval_map[contig][intvl_idx].target;
-// }
 // 
 // std::string ChainMap::lift_contig(
 //     std::string contig, int start_intvl_idx, int end_intvl_idx) {
@@ -1035,4 +1052,47 @@ void ChainMap::load(std::ifstream& in) {
 //     else
 //         return this->interval_map[contig][start_intvl_idx].target;
 // }
+//
+// void ChainMap::show_interval_info(std::string contig, int pos) {
+//     int rank = this->get_start_rank(contig, pos);
+//     int intvl_idx = rank - 1;
+//     this->interval_map[contig][intvl_idx].debug_print_interval();
+// }
 
+
+size_t ChainMap::lift_pos(
+    std::string contig, size_t pos) {
+    int rank = this->get_start_rank(contig, pos);
+    int intvl_idx = rank - 1;
+    if (intvl_idx == -1)
+        return pos;
+    else {
+        auto intvl = this->interval_map[contig][intvl_idx];
+        if (intvl.strand) {
+            return pos + intvl.offset;
+        } else {
+            return -pos + intvl.offset + intvl.source_start + intvl.source_end;
+        }
+    }
+}
+
+std::string ChainMap::lift_contig(std::string contig, size_t pos) {
+    int rank = this->get_start_rank(contig, pos);
+    int intvl_idx = rank - 1;
+    if (intvl_idx == -1)
+        return "*";
+    else
+        return this->interval_map[contig][intvl_idx].target;
+}
+
+void debug_print_cigar(bam1_t* aln) {
+    uint32_t* cigar = bam_get_cigar(aln);
+    for (int i = 0; i < aln->core.n_cigar; i++){
+        auto cigar_op_len = bam_cigar_oplen(cigar[i]);
+        auto cigar_op = bam_cigar_op(cigar[i]);
+        std::cerr << cigar_op_len << bam_cigar_opchr(cigar_op);
+    }
+    std::cerr << "\n";
+}
+
+}
