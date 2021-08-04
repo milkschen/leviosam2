@@ -275,7 +275,6 @@ TEST(ChainMap, SimpleRankAndLift) {
     int pos = 674047;
     std::string contig = "chr1";
     int rank = cmap.get_start_rank(contig, pos);
-    // std::cerr << "rank(" << pos << ")=" << rank << "\n";
     EXPECT_EQ(rank, 1);
     EXPECT_EQ(cmap.lift_contig(contig, pos), contig);
     EXPECT_EQ(cmap.lift_pos(contig, pos), 100272);
@@ -283,7 +282,6 @@ TEST(ChainMap, SimpleRankAndLift) {
     pos = 207130;
     contig = "chr2";
     rank = cmap.get_start_rank(contig, pos);
-    // std::cerr << "rank(" << pos << ")=" << rank << "\n";
     EXPECT_EQ(rank, 2);
     EXPECT_EQ(cmap.lift_contig(contig, pos), contig);
     EXPECT_EQ(cmap.lift_pos(contig, pos), 206846+121+8);
@@ -313,7 +311,6 @@ TEST(ChainMap, ParseChainLineCornerZero) {
         EXPECT_EQ(i.first, "corner_zero");
     }
     for (int i = 0; i < 28; i++) {
-        // std::cerr << start_bv_map["corner_zero"][i];
         if (i == 0 || i == 19)
             EXPECT_EQ(start_bv_map["corner_zero"][i], 1);
         else
@@ -343,3 +340,54 @@ TEST(ChainMap, LiftInReversedRegion) {
         EXPECT_EQ(cmap.lift_pos(contig, pos), gold_pos_array[i]);
     }
 }
+
+TEST(ChainMap, LiftCigar) {
+    chain::ChainMap cmap ("small.chain", 0);
+    samFile* sam_fp = sam_open("chain_cigar.sam", "r");
+    bam_hdr_t* sam_hdr = sam_hdr_read(sam_fp);
+    bam1_t* aln = bam_init1();
+    int err;
+    size_t x;
+    uint32_t* test_cigar;
+    // Note: can use the helper function to print out CIGAR results
+    // chain::debug_print_cigar(aln);
+
+    // CIGAR should not change
+    err = sam_read1(sam_fp, sam_hdr, aln);
+    cmap.lift_cigar(sam_hdr->target_name[aln->core.tid], aln);
+    test_cigar = bam_get_cigar(aln);
+    EXPECT_EQ(aln->core.n_cigar, 3);
+    EXPECT_EQ(test_cigar[0], bam_cigar_gen( 7, BAM_CMATCH));
+    EXPECT_EQ(test_cigar[1], bam_cigar_gen( 13, BAM_CDEL));
+    EXPECT_EQ(test_cigar[2], bam_cigar_gen( 13, BAM_CMATCH));
+
+    // Add 3 BAM_CSOFT_CLIPs in the beginning
+    err = sam_read1(sam_fp, sam_hdr, aln);
+    EXPECT_EQ(err, 0);
+    cmap.lift_cigar(sam_hdr->target_name[aln->core.tid], aln);
+    test_cigar = bam_get_cigar(aln);
+    EXPECT_EQ(aln->core.n_cigar, 2);
+    EXPECT_EQ(test_cigar[0], bam_cigar_gen( 3, BAM_CSOFT_CLIP));
+    EXPECT_EQ(test_cigar[1], bam_cigar_gen( 13, BAM_CMATCH));
+    
+    // Add 2 BAM_CINSs in the middle
+    err = sam_read1(sam_fp, sam_hdr, aln);
+    EXPECT_EQ(err, 0);
+    cmap.lift_cigar(sam_hdr->target_name[aln->core.tid], aln);
+    test_cigar = bam_get_cigar(aln);
+    EXPECT_EQ(aln->core.n_cigar, 3);
+    EXPECT_EQ(test_cigar[0], bam_cigar_gen( 10, BAM_CMATCH));
+    EXPECT_EQ(test_cigar[1], bam_cigar_gen( 2, BAM_CINS));
+    EXPECT_EQ(test_cigar[2], bam_cigar_gen( 4, BAM_CMATCH));
+    
+    // Add 3 BAM_CDELs in the middle
+    err = sam_read1(sam_fp, sam_hdr, aln);
+    EXPECT_EQ(err, 0);
+    cmap.lift_cigar(sam_hdr->target_name[aln->core.tid], aln);
+    test_cigar = bam_get_cigar(aln);
+    EXPECT_EQ(aln->core.n_cigar, 3);
+    EXPECT_EQ(test_cigar[0], bam_cigar_gen( 10, BAM_CMATCH));
+    EXPECT_EQ(test_cigar[1], bam_cigar_gen( 3, BAM_CDEL));
+    EXPECT_EQ(test_cigar[2], bam_cigar_gen( 6, BAM_CMATCH));
+}
+
