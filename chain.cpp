@@ -634,15 +634,16 @@ void ChainMap::lift_cigar_core(
                 tmp_clipped += cigar_op_len;
                 num_clipped -= cigar_op_len;
             }
-        } else {
-            if (cigar_op_len <= num_clipped) {
-                tmp_clipped -= cigar_op_len;
-                num_clipped += cigar_op_len;
-            } else {
-                new_cigar.push_back(
-                    bam_cigar_gen(cigar_op_len - num_clipped, cigar_op));
-            }
         }
+        // } else {
+        //     if (cigar_op_len <= num_clipped) {
+        //         tmp_clipped -= cigar_op_len;
+        //         num_clipped += cigar_op_len;
+        //     } else {
+        //         new_cigar.push_back(
+        //             bam_cigar_gen(cigar_op_len - num_clipped, cigar_op));
+        //     }
+        // }
     }
     if (tmp_gap > 0) {
         // TODO: trim bases from the end
@@ -760,12 +761,19 @@ bool ChainMap::lift_segment(
      * unliftable (return false).
      */
     if (start_intvl_idx != pend_start_intvl_idx) {
-        auto next_intvl = this->interval_map[source_contig][pend_start_intvl_idx];
-        if (std::abs(next_intvl.offset - current_intvl.offset) > allowed_num_indel) {
-            // is_liftable = false;
-            update_flag_unmap(c, is_first_seg);
-            return false;
+        for (auto j=start_intvl_idx; j < pend_start_intvl_idx - 1; j ++) {
+            if (std::abs(this->interval_map[source_contig][j+1].offset -
+                         this->interval_map[source_contig][j].offset) > allowed_num_indel) {
+                update_flag_unmap(c, is_first_seg);
+                return false;
+            }
         }
+        // auto next_intvl = this->interval_map[source_contig][pend_start_intvl_idx];
+        // if (std::abs(next_intvl.offset - current_intvl.offset) > allowed_num_indel) {
+        //     // is_liftable = false;
+        //     update_flag_unmap(c, is_first_seg);
+        //     return false;
+        // }
     }
 
     // Debug messages
