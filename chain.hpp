@@ -17,7 +17,7 @@ void debug_print_cigar(bam1_t* aln);
 class Interval {
     public:
         Interval();
-        Interval(std::string t, int so, int se, int o, bool ss);
+        Interval(std::string t, int64_t so, int64_t se, int64_t o, bool ss);
         Interval(std::ifstream& in);
         void debug_print_interval();
         // Save to stream
@@ -26,8 +26,8 @@ class Interval {
         void load(std::istream& in);
 
         std::string target;
-        int offset;
-        int source_start, source_end;
+        int64_t offset;
+        int64_t source_start, source_end;
         bool strand; // true: "+"; false: "-"
 };
 
@@ -91,7 +91,7 @@ class ChainMap {
 
         void parse_chain_line(
             std::string line, std::string &source, std::string &target,
-            int &source_len, int &source_offset, int &target_offset, bool &strand,
+            int &source_len, int64_t &source_offset, int64_t &target_offset, bool &strand,
             BitVectorMap &start_bv_map, BitVectorMap &end_bv_map);
 
         size_t serialize(std::ofstream& out);

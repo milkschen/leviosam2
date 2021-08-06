@@ -14,7 +14,7 @@ Interval::Interval() {
 }
 
 Interval::Interval(
-    std::string t, int so, int se, int o, bool ss
+    std::string t, int64_t so, int64_t se, int64_t o, bool ss
 ) {
     target = t;
     offset = o;
@@ -55,11 +55,11 @@ void Interval::load(std::istream& in) {
     std::vector<char> buf(str_size);
     in.read(reinterpret_cast<char*>(buf.data()), str_size);
     std::string target(buf.begin(), buf.end());
-    int offset;
+    int64_t offset;
     in.read(reinterpret_cast<char*>(&offset), sizeof(offset));
-    int source_start;
+    int64_t source_start;
     in.read(reinterpret_cast<char*>(&source_start), sizeof(source_start));
-    int source_end;
+    int64_t source_end;
     in.read(reinterpret_cast<char*>(&source_end), sizeof(source_end));
     bool strand;
     in.read(reinterpret_cast<char*>(&strand), sizeof(strand));
@@ -82,8 +82,8 @@ ChainMap::ChainMap(std::string fname, int verbose) {
     if (chain_f.is_open()) {
         std::string source;
         std::string target;
-        int source_offset = 0;
-        int target_offset = 0;
+        int64_t source_offset = 0;
+        int64_t target_offset = 0;
         int source_len = 0;
         bool current_ss = true;
         while (getline(chain_f, line)) {
@@ -249,7 +249,7 @@ void ChainMap::init_rs() {
  */
 void ChainMap::parse_chain_line(
     std::string line, std::string &source, std::string &target,
-    int &source_len, int &source_offset, int &target_offset, bool &strand,
+    int &source_len, int64_t &source_offset, int64_t &target_offset, bool &strand,
     BitVectorMap &start_bv_map, BitVectorMap &end_bv_map
 ) {
     // Split `line` using space as deliminater.
@@ -757,23 +757,26 @@ bool ChainMap::lift_segment(
 
 
     /* If an alignment is overlapped with multiple intervals, check the gap size between the 
-     * intervals. If the gap size is greater than `allowed_num_indel`, mark the alignment as
-     * unliftable (return false).
+     * intervals. If either
+     *   (1) the offset difference between any adjacent interval pair 
+     *   (2) the total offset difference between the first and the last interval 
+     * is greater than `allowed_num_indel`, mark the alignment as unliftable (return false).
      */
     if (start_intvl_idx != pend_start_intvl_idx) {
-        for (auto j=start_intvl_idx; j < pend_start_intvl_idx - 1; j ++) {
+        // Check the first and the last intervals
+        auto next_intvl = this->interval_map[source_contig][pend_start_intvl_idx];
+        if (std::abs(next_intvl.offset - current_intvl.offset) > allowed_num_indel) {
+            update_flag_unmap(c, is_first_seg);
+            return false;
+        }
+        // Check all interval pairs
+        for (auto j = start_intvl_idx; j < pend_start_intvl_idx - 1; j ++) {
             if (std::abs(this->interval_map[source_contig][j+1].offset -
                          this->interval_map[source_contig][j].offset) > allowed_num_indel) {
                 update_flag_unmap(c, is_first_seg);
                 return false;
             }
         }
-        // auto next_intvl = this->interval_map[source_contig][pend_start_intvl_idx];
-        // if (std::abs(next_intvl.offset - current_intvl.offset) > allowed_num_indel) {
-        //     // is_liftable = false;
-        //     update_flag_unmap(c, is_first_seg);
-        //     return false;
-        // }
     }
 
     // Debug messages
@@ -983,6 +986,8 @@ ChainMap::ChainMap(std::ifstream& in, int verbose) {
 // loads from stream
 void ChainMap::load(std::ifstream& in) {
     size_t map_size;
+    if (this->verbose > 2)
+        std::cerr << "Reading interval map...\n";
     in.read(reinterpret_cast<char*>(&map_size), sizeof(map_size));
     for (auto i = 0; i < map_size; ++i) {
         size_t str_size;
@@ -996,6 +1001,8 @@ void ChainMap::load(std::ifstream& in) {
             this->interval_map[key].push_back(Interval(in));
         }
     }
+    if (this->verbose > 2)
+        std::cerr << "Reading start BV...\n";
     in.read(reinterpret_cast<char*>(&map_size), sizeof(map_size));
     for (auto i = 0; i < map_size; ++i) {
         size_t str_size;
@@ -1007,6 +1014,8 @@ void ChainMap::load(std::ifstream& in) {
         sdv.load(in);
         this->start_map[key] = sdv;
     }
+    if (this->verbose > 2)
+        std::cerr << "Reading end BV...\n";
     in.read(reinterpret_cast<char*>(&map_size), sizeof(map_size));
     for (auto i = 0; i < map_size; ++i) {
         size_t str_size;
@@ -1018,6 +1027,8 @@ void ChainMap::load(std::ifstream& in) {
         sdv.load(in);
         this->end_map[key] = sdv;
     }
+    if (this->verbose > 2)
+        std::cerr << "Initialize BVs...\n";
     this->init_rs();
 }
 
