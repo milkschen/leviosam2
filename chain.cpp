@@ -14,7 +14,7 @@ Interval::Interval() {
 }
 
 Interval::Interval(
-    std::string t, int64_t so, int64_t se, int64_t o, bool ss
+    std::string t, int32_t so, int32_t se, int32_t o, bool ss
 ) {
     target = t;
     offset = o;
@@ -55,11 +55,11 @@ void Interval::load(std::istream& in) {
     std::vector<char> buf(str_size);
     in.read(reinterpret_cast<char*>(buf.data()), str_size);
     std::string target(buf.begin(), buf.end());
-    int64_t offset;
+    int32_t offset;
     in.read(reinterpret_cast<char*>(&offset), sizeof(offset));
-    int64_t source_start;
+    int32_t source_start;
     in.read(reinterpret_cast<char*>(&source_start), sizeof(source_start));
-    int64_t source_end;
+    int32_t source_end;
     in.read(reinterpret_cast<char*>(&source_end), sizeof(source_end));
     bool strand;
     in.read(reinterpret_cast<char*>(&strand), sizeof(strand));
@@ -82,8 +82,8 @@ ChainMap::ChainMap(std::string fname, int verbose) {
     if (chain_f.is_open()) {
         std::string source;
         std::string target;
-        int64_t source_offset = 0;
-        int64_t target_offset = 0;
+        int32_t source_offset = 0;
+        int32_t target_offset = 0;
         int source_len = 0;
         bool current_ss = true;
         while (getline(chain_f, line)) {
@@ -249,103 +249,85 @@ void ChainMap::init_rs() {
  */
 void ChainMap::parse_chain_line(
     std::string line, std::string &source, std::string &target,
-    int &source_len, int64_t &source_offset, int64_t &target_offset, bool &strand,
+    int32_t &source_len, int32_t &source_offset,
+    int32_t &target_offset, bool &strand,
     BitVectorMap &start_bv_map, BitVectorMap &end_bv_map
 ) {
     // Split `line` using space as deliminater.
     std::regex s_re("\\s+"); // space
     std::vector<std::string> vec(
-        std::sregex_token_iterator(
-            line.begin(), line.end(), s_re, -1),
+        std::sregex_token_iterator(line.begin(), line.end(), s_re, -1),
         std::sregex_token_iterator());
     
-    int target_len;
-    if (vec[0] == "chain"){
-        if (vec.size() != 13){
-            std::cerr << "Error during parsing chain" << line << "\n";
-            std::cerr << "Invalid chain header\n";
-            exit(1);
-        }
-        source = vec[2];
-        target = vec[7];
-        source_len = stoi(vec[3]);
-        target_len = stoi(vec[8]);
-        strand = (vec[4] == vec[9]);
-        // std::cerr << source << "->" << target << " " << target_len << " " << strand << "\n";
-        try {
+    int32_t target_len;
+    try{
+        if (vec[0] == "chain"){
+            if (vec.size() != 13){
+                std::cerr << "Error during parsing chain" << line << "\n";
+                std::cerr << "Invalid chain header\n";
+                exit(1);
+            }
+            source = vec[2];
+            target = vec[7];
+            source_len = stoi(vec[3]);
+            target_len = stoi(vec[8]);
+            strand = (vec[4] == vec[9]);
             source_offset = stoi(vec[5]);
-            if (strand) {
-                target_offset = stoi(vec[10]);
-            } else {
-                // target_offset = target_len - stoi(vec[11]);
-                target_offset = target_len - stoi(vec[10]);
+            target_offset = (strand)? stoi(vec[10]) : target_len - stoi(vec[10]);
+            this->init_bitvectors(source, source_len, start_bv_map, end_bv_map);
+        } else if (vec[0] != "") {
+            int32_t s_int_start = source_offset;
+            int32_t t_int_start = target_offset;
+            int32_t s = stoi(vec[0]);
+            int32_t s_int_end = source_offset + s;
+            int32_t t_int_end = (strand)? target_offset + s : target_offset - s;
+            // Set bitvectors
+            if (s_int_start > 0)
+                start_bv_map[source][s_int_start-1] = 1;
+            else if (s_int_start == 0)
+                start_bv_map[source][0] = 1;
+            if (s_int_end >= source_len)
+                end_bv_map[source][source_len-1] = 1;
+            else
+                // end_bv_map[source][s_int_end-1] = 1;
+                end_bv_map[source][s_int_end] = 1;
+
+            if (this->verbose > 1)
+                fprintf(stderr, "source (%d-%d), target (%d-%d)\n",
+                        s_int_start, s_int_end, t_int_start, t_int_end);
+            int32_t offset = (strand)? t_int_start - s_int_start :
+                                       t_int_end - s_int_start;
+            Interval intvl(target, s_int_start, s_int_end, offset, strand);
+            if (this->verbose > 1)
+                intvl.debug_print_interval();
+
+            IntervalMap::const_iterator find_start =
+                this->interval_map.find(source);
+            if (find_start == this->interval_map.end()) {
+                std::vector<chain::Interval> new_intervals;
+                this->interval_map[source] = new_intervals;
             }
-        }
-        catch(...) {
-            std::cerr << "Error during parsing chain:\n" << line << "\n";
-            exit(1);
-        }
-        this->init_bitvectors(source, source_len, start_bv_map, end_bv_map);
-    } else if (vec[0] != "") {
-        int s_int_start = source_offset;
-        int t_int_start = target_offset;
-        int s_int_end = source_offset + stoi(vec[0]);
-        int t_int_end;
-        if (strand) {
-            t_int_end = target_offset + stoi(vec[0]);
-        } else {
-            t_int_end = target_offset - stoi(vec[0]);
-        }
-        // Set bitvectors
-        if (s_int_start > 0)
-            start_bv_map[source][s_int_start-1] = 1;
-        else if (s_int_start == 0)
-            start_bv_map[source][0] = 1;
-        if (s_int_end >= source_len)
-            end_bv_map[source][source_len-1] = 1;
-        else
-            // end_bv_map[source][s_int_end-1] = 1;
-            end_bv_map[source][s_int_end] = 1;
+            this->interval_map[source].push_back(intvl);
 
-        if (this->verbose > 1)
-            fprintf(stderr, "source (%d-%d), target (%d-%d)\n",
-                    s_int_start, s_int_end, t_int_start, t_int_end);
-        int offset;
-        if (strand) {
-            offset = t_int_start - s_int_start;
-            // Interval intvl(target, s_int_start, s_int_end,
-            //                t_int_start-s_int_start, strand);
-        } else {
-            offset = t_int_end - s_int_start;
-        }
-        Interval intvl(target, s_int_start, s_int_end,
-                       offset, strand);
-        if (this->verbose > 1)
-            intvl.debug_print_interval();
-
-        IntervalMap::const_iterator find_start =
-            this->interval_map.find(source);
-        if (find_start == this->interval_map.end()) {
-            std::vector<chain::Interval> new_intervals;
-            this->interval_map[source] = new_intervals;
-        }
-        this->interval_map[source].push_back(intvl);
-
-        if (vec.size() == 3) {
-            // Update offsets contributed by the variant
-            source_offset = s_int_end + stoi(vec[1]);
-            if (strand) {
-                target_offset = t_int_end + stoi(vec[2]);
-            } else {
-                target_offset = t_int_end - stoi(vec[2]);
+            if (vec.size() == 3) {
+                // Update offsets contributed by the variant
+                source_offset = s_int_end + stoi(vec[1]);
+                if (strand) {
+                    target_offset = t_int_end + stoi(vec[2]);
+                } else {
+                    target_offset = t_int_end - stoi(vec[2]);
+                }
             }
+        } else {
+            source = "";
+            target = "";
+            source_offset = 0;
+            target_offset = 0;
+            strand = true;
         }
-    } else {
-        source = "";
-        target = "";
-        source_offset = 0;
-        target_offset = 0;
-        strand = true;
+    } catch(...) {
+        std::cerr << "Error during parsing chain:\n" << line << "\n";
+        exit(1);
     }
 
     if (this->verbose > 1) {
