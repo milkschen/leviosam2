@@ -53,33 +53,37 @@ class ChainMap {
         bool interval_map_sanity_check();
         int get_start_rank(std::string contig, int pos);
         int get_end_rank(std::string contig, int pos);
+        void update_interval_indexes(const std::string contig, const int32_t pos,
+                                     int32_t &sidx, int32_t &eidx);
 
         // void show_interval_info(std::string contig, int pos);
 
         std::string lift_contig(std::string contig, size_t pos);
         // std::string lift_contig(
-        //     std::string contig, int start_intvl_idx, int end_intvl_idx);
-        void lift_cigar(const std::string& contig, bam1_t* aln);
+        //     std::string contig, int start_sidx, int end_intvl_idx);
+        void lift_cigar(const std::string &contig, bam1_t* aln);
         void lift_cigar(
-            const std::string& contig, bam1_t* aln,
-            int start_intvl_idx, int pend_start_intvl_idx, int num_clipped);
+            const std::string &contig, bam1_t* aln,
+            int start_sidx, int end_sidx, int num_clipped);
         void lift_cigar_core(
             std::vector<uint32_t>& new_cigar,
-            const std::string& contig, bam1_t* aln,
-            int start_intvl_idx, int pend_start_intvl_idx, int num_clipped);
+            const std::string &contig, bam1_t* aln,
+            int start_sidx, int end_sidx, int num_clipped);
 
         size_t lift_pos(std::string contig, size_t pos);
         // size_t lift_pos(
         //     std::string contig, size_t pos,
-        //     int start_intvl_idx, int end_intvl_idx);
+        //     int start_sidx, int end_intvl_idx);
 
         bool lift_segment(
             bam1_t* aln, bam_hdr_t* hdr,
-            bool is_first_seg, std::string &dest_contig,
-            int &start_intvl_idx, int &end_intvl_idx);
+            bool first_seg, std::string &dest_contig);
+        int32_t get_num_clipped(
+            bam1_core_t* c, const bool leftmost,
+            const std::string &contig, int32_t &sidx, int32_t &eidx);
         // bool is_liftable(
         //     std::string contig, size_t pos,
-        //     int &start_intvl_idx, int &end_intvl_idx);
+        //     int &start_sidx, int &end_intvl_idx);
         void lift_aln(
             bam1_t* aln,
             bam_hdr_t* hdr,
@@ -100,7 +104,7 @@ class ChainMap {
 
     private:
         void init_rs();
-        void update_flag_unmap(bam1_core_t* c, const bool is_first_seg);
+        void update_flag_unmap(bam1_core_t* c, const bool first_seg);
 
         int verbose;
         IntervalMap interval_map;
