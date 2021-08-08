@@ -431,7 +431,7 @@ void print_lift_help_msg(){
     fprintf(stderr, "         ChainMap options (one of -c and -C must be set to perform lift-over using a ChainMap):\n");
     fprintf(stderr, "           -c string If -C is not specified, build a ChainMap from a chain file.\n");
     fprintf(stderr, "           -C string Path to an indexed ChainMap.\n");
-    fprintf(stderr, "           -G INT    Number of allowed CIGAR changes for one alingment. [0]\n");
+    fprintf(stderr, "           -G INT    Number of allowed CIGAR changes for one alingment. [10]\n");
     fprintf(stderr, "\n");
     fprintf(stderr, "         -t INT    Number of threads used. [1] \n");
     fprintf(stderr, "         -T INT    Chunk size for each thread. [256] \n");

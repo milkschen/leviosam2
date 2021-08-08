@@ -52,7 +52,7 @@ struct lift_opts {
     std::string sam_fname = "";
     std::string cmd = "";
     std::string haplotype = "0";
-    int allowed_cigar_changes = 0;
+    int allowed_cigar_changes = 10;
     int threads = 1;
     int chunk_size = 256;
     int verbose = 0;
