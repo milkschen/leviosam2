@@ -61,6 +61,8 @@ class ChainMap {
         std::string lift_contig(std::string contig, size_t pos);
         // std::string lift_contig(
         //     std::string contig, int start_sidx, int end_intvl_idx);
+
+        void push_cigar(std::vector<uint32_t> &cigar, uint32_t len, uint16_t op);
         void lift_cigar(const std::string &contig, bam1_t* aln);
         void lift_cigar(
             const std::string &contig, bam1_t* aln,
