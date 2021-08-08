@@ -24,6 +24,11 @@
 #define VERSION "0.4"
 // const char* VERSION("0.4");
 
+#define VERBOSE_CLEAN 0
+#define VERBOSE_INFO  1
+#define VERBOSE_DEBUG 2
+#define VERBOSE_DEV   3
+
 using NameMap = std::vector<std::pair<std::string,std::string>>;
 using LengthMap = std::unordered_map<std::string,size_t>;
 
@@ -47,6 +52,7 @@ struct lift_opts {
     std::string sam_fname = "";
     std::string cmd = "";
     std::string haplotype = "0";
+    int allowed_cigar_changes = 0;
     int threads = 1;
     int chunk_size = 256;
     int verbose = 0;
