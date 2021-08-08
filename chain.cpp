@@ -73,8 +73,14 @@ void Interval::load(std::istream& in) {
 }
 
 
-ChainMap::ChainMap(std::string fname, int verbose) {
-    this->verbose = verbose;
+ChainMap::ChainMap(std::ifstream& in, int verbose, int allowed_cigar_changes) :
+    verbose(verbose), allowed_cigar_changes(allowed_cigar_changes){
+    this->load(in);
+}
+
+
+ChainMap::ChainMap(std::string fname, int verbose, int allowed_cigar_changes) :
+    verbose(verbose), allowed_cigar_changes(allowed_cigar_changes){
     std::ifstream chain_f(fname);
     std::string line;
     BitVectorMap start_bv_map;
@@ -455,13 +461,17 @@ void ChainMap::lift_cigar(
 }
 
 
+/* Core CIGAR lifting function
+ *
+ * Return a pointer of uint32_t in the htslib CIGAR format.
+ */
 void ChainMap::lift_cigar_core(
     std::vector<uint32_t>& new_cigar, const std::string& contig,
     bam1_t* aln, int start_sidx, int end_sidx, int num_clipped) {
     uint32_t* cigar = bam_get_cigar(aln);
     bam1_core_t* c = &(aln->core);
 
-    bool TMP_DEBUG = (this->verbose > 3);
+    bool TMP_DEBUG = (this->verbose >= VERBOSE_DEV);
     // DEBUG
     if (TMP_DEBUG) {
         std::cerr << "\n" << bam_get_qname(aln) << "\n";
@@ -486,7 +496,7 @@ void ChainMap::lift_cigar_core(
         if (bp > 0) {
             break_points.push(std::make_tuple(bp, diff));
             // DEBUG
-            if (TMP_DEBUG) {
+            if (this->verbose >= VERBOSE_DEV) {
                 this->interval_map[contig][i].debug_print_interval();
                 std::cerr << "bp=" << bp << ", diff=" << diff << "\n";
             }
@@ -693,12 +703,6 @@ int32_t ChainMap::get_num_clipped(
     if ((sidx <= -1) || (eidx <= -1)) {
         num_clipped = -1;
     } else if (sidx == eidx) {
-        /* If the starting position is not within any intervals in the ChainMap,
-         * this segment is set to unmapped (BAM_FUNMAP or BAM_FMUNMAP).
-         *
-         * If the alignment is close enough with the next interval (`<allowed_num_indel`),
-         * we still consier this alignment as liftable
-         */
         if (sidx < this->interval_map[contig].size() - 1) {
             auto next_intvl = this->interval_map[contig][sidx+1];
             num_clipped = std::abs(c->pos - next_intvl.source_start);
@@ -721,7 +725,7 @@ bool ChainMap::lift_segment(
     bam1_t* aln, bam_hdr_t* hdr,
     bool first_seg, std::string &dest_contig
 ) {
-    const int allowed_num_indel = 10;
+    // const int allowed_cigar_changes = 10;
     bam1_core_t* c = &(aln->core);
 
     // If unmapped, the alignment is not liftable
@@ -737,33 +741,26 @@ bool ChainMap::lift_segment(
     int start_sidx = 0;
     int start_eidx = 0;
     if (first_seg)
-        this->update_interval_indexes(
-            source_contig, c->pos, start_sidx, start_eidx);
+        this->update_interval_indexes(source_contig, c->pos, start_sidx, start_eidx);
     else
-        this->update_interval_indexes(
-            source_contig, c->mpos, start_sidx, start_eidx);
+        this->update_interval_indexes(source_contig, c->mpos, start_sidx, start_eidx);
 
     /* Check liftability
      * If an aln cannot be mapped to an interval
      *   (a) the position is not valid in the intervalmap
-     *   (b) the position is within the gap between two valid intervals,
-     *   set it as unliftable.
+     *   (b) the position is between two valid intervals, set it as 
+     *   unliftable if the gap is greater than `allowed_cigar_changes`.
      *
      * We currenly set an unliftable read as unampped, and thus the 
      * BAM_FUNMAP or BAM_FMUNMAP flags will be raised.
-     *
-     * An exception is if the aln is close enough to the next interval
-     * (under scenario (b)), we rescue it and the bases outside are clipped.
      */
+    bool leftmost = true;
     int num_sclip_start = get_num_clipped(
-        c, true, source_contig, start_sidx, start_eidx);
-    if (num_sclip_start < 0 || num_sclip_start >= allowed_num_indel) {
+        c, leftmost, source_contig, start_sidx, start_eidx);
+    if (num_sclip_start < 0 || num_sclip_start > this->allowed_cigar_changes) {
         update_flag_unmap(c, first_seg);
         return false;
     }
-    // TODO TEST
-    // num_sclip_start = 0;
-    // END_TEST
     
     // Debug messages
     if (this->verbose > 1) {
@@ -796,28 +793,34 @@ bool ChainMap::lift_segment(
     // Estimate ending pos of the mate
     auto mpos_end = c->mpos + c->l_qseq;
     // Note that intvl_idx = rank - 1
-    auto end_sidx = (first_seg)? 
-        this->get_start_rank(source_contig, pos_end) - 1 :
-        this->get_start_rank(source_contig, mpos_end) - 1;
+    // auto end_sidx = (first_seg)? 
+    //     this->get_start_rank(source_contig, pos_end) - 1 :
+    //     this->get_start_rank(source_contig, mpos_end) - 1;
+    int end_sidx = 0;
+    int end_eidx = 0;
+    if (first_seg)
+        this->update_interval_indexes(source_contig, pos_end, end_sidx, end_eidx);
+    else
+        this->update_interval_indexes(source_contig, mpos_end, end_sidx, end_eidx);
 
 
     /* If an alignment is overlapped with multiple intervals, check the gap size between the 
      * intervals. If either
      *   (1) the offset difference between any adjacent interval pair 
      *   (2) the total offset difference between the first and the last interval 
-     * is greater than `allowed_num_indel`, mark the alignment as unliftable (return false).
+     * is greater than `allowed_cigar_changes`, mark the alignment as unliftable (return false).
      */
     if (start_sidx != end_sidx) {
         // Check the first and the last intervals
         auto next_intvl = this->interval_map[source_contig][end_sidx];
-        if (std::abs(next_intvl.offset - current_intvl.offset) > allowed_num_indel) {
+        if (std::abs(next_intvl.offset - current_intvl.offset) > this->allowed_cigar_changes) {
             update_flag_unmap(c, first_seg);
             return false;
         }
         // Check all interval pairs
         for (auto j = start_sidx; j < end_sidx - 1; j ++) {
             if (std::abs(this->interval_map[source_contig][j+1].offset -
-                         this->interval_map[source_contig][j].offset) > allowed_num_indel) {
+                         this->interval_map[source_contig][j].offset) > this->allowed_cigar_changes) {
                 update_flag_unmap(c, first_seg);
                 return false;
             }
@@ -1013,13 +1016,6 @@ size_t ChainMap::serialize(std::ofstream& out) {
         size += x.second.serialize(out);
     }
     return size;
-}
-
-ChainMap::ChainMap(std::ifstream& in, int verbose) {
-    this->verbose = verbose;
-    this->load(in);
-    // debug messages
-    // this->debug_print_interval_map();
 }
 
 // loads from stream

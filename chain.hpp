@@ -38,10 +38,10 @@ using IntervalMap = std::unordered_map<std::string, std::vector<Interval>>;
 
 class ChainMap {
     public:
-        ChainMap() {}
+        ChainMap(): verbose(0), allowed_cigar_changes(0) {}
         ~ChainMap() {}
-        ChainMap(std::string fname, int verbose);
-        ChainMap(std::ifstream& in, int verbose);
+        ChainMap(std::string fname, int verbose, int allowed_cigar_changes);
+        ChainMap(std::ifstream& in, int verbose, int allowed_cigar_changes);
         void init_bitvectors(
             std::string source, int source_length,
             std::unordered_map<std::string, sdsl::bit_vector> &start_bv_map,
@@ -106,7 +106,8 @@ class ChainMap {
         void init_rs();
         void update_flag_unmap(bam1_core_t* c, const bool first_seg);
 
-        int verbose;
+        const int verbose;
+        const int allowed_cigar_changes;
         IntervalMap interval_map;
         SdVectorMap start_map;
         SdVectorMap end_map;
