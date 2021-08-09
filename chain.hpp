@@ -53,7 +53,7 @@ class ChainMap {
         bool interval_map_sanity_check();
         int get_start_rank(std::string contig, int pos);
         int get_end_rank(std::string contig, int pos);
-        void update_interval_indexes(const std::string contig, const int32_t pos,
+        bool update_interval_indexes(const std::string contig, const int32_t pos,
                                      int32_t &sidx, int32_t &eidx);
 
         // void show_interval_info(std::string contig, int pos);
@@ -80,7 +80,7 @@ class ChainMap {
             bam1_t* aln, bam_hdr_t* hdr,
             bool first_seg, std::string &dest_contig);
         int32_t get_num_clipped(
-            bam1_core_t* c, const bool leftmost,
+            const int32_t pos, const bool leftmost,
             const std::string &contig, int32_t &sidx, int32_t &eidx);
         // bool is_liftable(
         //     std::string contig, size_t pos,
@@ -114,6 +114,12 @@ class ChainMap {
         SdVectorMap end_map;
         std::unordered_map<std::string, sdsl::sd_vector<>::rank_1_type> start_rs1_map;
         std::unordered_map<std::string, sdsl::sd_vector<>::rank_1_type> end_rs1_map;
+        
+        // Debug functions
+        void debug_print_interval_queries(
+            const bool first_seg, const bool leftmost,
+            const std::string contig, const int32_t pos,
+            const int32_t sidx, const int32_t eidx);
 };
 
 };

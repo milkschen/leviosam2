@@ -346,6 +346,9 @@ void ChainMap::parse_chain_line(
 /* Update SAM flag to set a record as an unmapped alignment
  *   - Clear forward/reverse status.
  *   - If paired, changed to improper paired. 
+ *
+ * We currenly set an unliftable read as unampped, and thus the 
+ * BAM_FUNMAP or BAM_FMUNMAP flags will be raised.
  */
 void ChainMap::update_flag_unmap(bam1_core_t* c, const bool first_seg) {
     if (first_seg) {
@@ -387,6 +390,12 @@ void ChainMap::lift_cigar(const std::string& contig, bam1_t* aln) {
 /* Lift CIGAR
  * A fast version of `lift_cigar()`, which is used when auxiliary information 
  * including query start/end interval ranks and #clipped bases is available.
+ *
+ * The CIGAR string is updated in two cases:
+ *   (1) the start-/end-ing position of the segment is outside of an interval, where we set
+ *       the overhangs as soft clipped
+ *   (2) the segment overlaps one or more gaps between two valid intervals, where we update
+ *       the CIGAR with INS or DEL operators
  */
 void ChainMap::lift_cigar(
     const std::string& contig, bam1_t* aln,
@@ -510,7 +519,6 @@ std::vector<uint32_t> ChainMap::lift_cigar_core(
     bool TMP_DEBUG = (verbose >= VERBOSE_DEV);
     // DEBUG
     if (TMP_DEBUG) {
-        std::cerr << "\n" << bam_get_qname(aln) << "\n";
         std::cerr << "  Num_clipped = " << num_clipped << "\n";
         std::cerr << "    start " << start_sidx << ", pend " << end_sidx << "\n";
         std::cerr << "* old: ";
@@ -689,19 +697,22 @@ std::vector<uint32_t> ChainMap::lift_cigar_core(
 
 
 /* Query start_map and end_map for a contig-pos pair and update the indexes
+ * Return a bool value:
+ *   false if any of the queried contig-pos pair is unavailable
+ *   true otherwise
  *
  * sidx: the interval index in start_bv_map[contig]
  * eidx: the interval index in end_bv_map[contig]
  *
  * Note that "interval index = rank - 1"
  */
-void ChainMap::update_interval_indexes(
+bool ChainMap::update_interval_indexes(
     const std::string contig, const int32_t pos,
     int32_t& sidx, int32_t& eidx) {
     if (pos < 0) {
         sidx = -1;
         eidx = -1;
-        return;
+        return false;
     }
     // If `contig` is not in the map, set the idx to -1
     // If `pos` is out of scope, query the largest possible position
@@ -722,11 +733,15 @@ void ChainMap::update_interval_indexes(
         eidx = end_rs1_map[contig](tmp_pos) - 1;
     } else
         eidx = end_rs1_map[contig](pos) - 1;
+
+    if (sidx == -1 || eidx == -1)
+        return false;
+    return true;
 }
 
 
 int32_t ChainMap::get_num_clipped(
-    bam1_core_t* c, const bool leftmost,
+    const int32_t pos, const bool leftmost,
     const std::string &contig, int32_t &sidx, int32_t &eidx) {
     /* Check liftability
      * If an aln cannot be mapped to an interval
@@ -743,12 +758,16 @@ int32_t ChainMap::get_num_clipped(
         num_clipped = -1;
     } else if (sidx == eidx) {
         if (sidx < interval_map[contig].size() - 1) {
-            auto next_intvl = interval_map[contig][sidx+1];
-            num_clipped = std::abs(c->pos - next_intvl.source_start);
             // Advance sidx if we are checking the starting pos of a query
             // Keep sidx unchanged if we are checking the ending pos
-            if (leftmost)
+            if (leftmost) {
+                auto next_intvl = interval_map[contig][sidx+1];
+                num_clipped = std::abs(pos - next_intvl.source_start);
                 sidx += 1;
+            } else {
+                auto curr_intvl = interval_map[contig][sidx];
+                num_clipped = std::abs(pos - curr_intvl.source_end);
+            }
         } else {
             num_clipped = -1;
         }
@@ -766,45 +785,36 @@ bool ChainMap::lift_segment(
 ) {
     bam1_core_t* c = &(aln->core);
 
-    // If unmapped, the alignment is not liftable
-    // When the mate is aligned, the info of the unmapped segment will be updated in lift_aln()
-    if (first_seg && (c->flag & BAM_FUNMAP))
-        return false;
-    else if (!first_seg && (c->flag & BAM_FMUNMAP))
-        return false;
-
-    // Check if the aligned REF is in the map. If not, set to unmapped and return false
-    if (c->tid < 0) {
-        update_flag_unmap(c, first_seg);
-        return false;
+    // If unmapped, the segment is not liftable.
+    // If the aligned REF is not in the map, set the segment to be unliftable.
+    if (first_seg) {
+        if ((c->flag & BAM_FUNMAP) || (c->tid < 0))
+            return false;
+    } else {
+        if ((c->flag & BAM_FMUNMAP) || (c->mtid < 0))
+            return false;
     }
-    std::string source_contig = (first_seg)?
-        hdr->target_name[c->tid] : hdr->target_name[c->mtid];
 
     int start_sidx = 0;
     int start_eidx = 0;
-    if (first_seg)
-        update_interval_indexes(source_contig, c->pos, start_sidx, start_eidx);
-    else
-        update_interval_indexes(source_contig, c->mpos, start_sidx, start_eidx);
-
-    /* Check liftability
-     * If an aln cannot be mapped to an interval
-     *   (a) the position is not valid in the intervalmap
-     *   (b) the position is between two valid intervals, set it as 
-     *   unliftable if the gap is greater than `allowed_cigar_changes`.
-     *
-     * We currenly set an unliftable read as unampped, and thus the 
-     * BAM_FUNMAP or BAM_FMUNMAP flags will be raised.
-     */
     bool leftmost = true;
-    int num_sclip_start = get_num_clipped(
-        c, leftmost, source_contig, start_sidx, start_eidx);
+    auto pos = (first_seg)? c->pos : c->mpos;
+    std::string source_contig = (first_seg)?
+        hdr->target_name[c->tid] : hdr->target_name[c->mtid];
+    // Update start intervals; if any of the indexes is not value, the segment is unliftable
+    if (!update_interval_indexes(source_contig, pos, start_sidx, start_eidx))
+        return false;
+    if (verbose > 1) {
+        debug_print_interval_queries(
+            first_seg, leftmost, source_contig, pos, start_sidx, start_eidx);
+    }
+    // Set a segment as unliftable if the gap between it and the nearby interval is too large
+    auto num_sclip_start = get_num_clipped(
+        pos, leftmost, source_contig, start_sidx, start_eidx);
     if (num_sclip_start < 0 || num_sclip_start > allowed_cigar_changes) {
-        update_flag_unmap(c, first_seg);
         return false;
     }
-    
+
     // Lift contig
     auto start_sintvl = interval_map[source_contig][start_sidx];
     dest_contig = start_sintvl.target;
@@ -813,46 +823,36 @@ bool ChainMap::lift_segment(
     else
         c->mtid = sam_hdr_name2tid(hdr, dest_contig.c_str());
     
-    // Debug messages
-    if (verbose > 1) {
-        if (first_seg) {
-            std::cerr << "First segment\n";
-            std::cerr << "  Source: " << source_contig << ":" << c->pos << "\n";
-        } else {
-            std::cerr << "Second segment\n";
-            std::cerr << "  Source: " << source_contig << ":" << c->mpos << "\n";
-        }
-        std::cerr << "  Queried interval indexes:\n";
-        std::cerr << "    start: " << start_sidx << "\n    ";
-        interval_map[source_contig][start_sidx].debug_print_interval();
-        std::cerr << "    end  : " << start_eidx << "\n";
-    }
-
-
     // Estimate ending pos of the mate
-    auto pos_end = c->pos + bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln));
-    // mpos_end is a rough estimate because we don't know the rlen of the mate
-    auto mpos_end = c->mpos + c->l_qseq;
+    // If it's the first segment, we can calculate the query length wrt the REF;
+    // If it's the second segment, we can only do a rough estimate b/c we don't know the RLEN of
+    // the mate.
+    auto pos_end = (first_seg)? c->pos + bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln)) :
+                                c->mpos + c->l_qseq;
     int end_sidx = 0;
     int end_eidx = 0;
-    if (first_seg)
-        update_interval_indexes(source_contig, pos_end, end_sidx, end_eidx);
-    else
-        update_interval_indexes(source_contig, mpos_end, end_sidx, end_eidx);
-    // TODO
-    leftmost = false;
-    int num_sclip_end = get_num_clipped(
-        c, leftmost, source_contig, end_sidx, end_eidx);
-    if (num_sclip_end < 0 || num_sclip_end > allowed_cigar_changes) {
-        update_flag_unmap(c, first_seg);
+    // Update end indexes; if either is unavailable, mark the segment as unliftable
+    if (!update_interval_indexes(source_contig, pos_end, end_sidx, end_eidx))
         return false;
+    if (verbose > 1) {
+        debug_print_interval_queries(
+            first_seg, leftmost, source_contig, pos_end, end_sidx, end_eidx);
     }
-    if (num_sclip_end > 0) {
-        std::cerr << bam_get_qname(aln) << "\n";
-        std::cerr << "num soft-clipped bases (end) = " << num_sclip_end << "\n";
+
+    // TODO: trim from the right
+    int num_sclip_end = 0;
+    leftmost = false;
+    if (first_seg) {
+        num_sclip_end = get_num_clipped(
+            pos_end, leftmost, source_contig, end_sidx, end_eidx);
+        if (num_sclip_end < 0 || num_sclip_end > allowed_cigar_changes) {
+            return false;
+        }
+        if (num_sclip_end > 0) {
+            std::cerr << "num soft-clipped bases (end) = " << num_sclip_end << "\n";
+        }
     }
     // END_TODO
-
 
     /* If an alignment is overlapped with multiple intervals, check the gap size between the 
      * intervals. If either
@@ -864,31 +864,15 @@ bool ChainMap::lift_segment(
         // Check the first and the last intervals
         auto next_intvl = interval_map[source_contig][end_sidx];
         if (std::abs(next_intvl.offset - start_sintvl.offset) > allowed_cigar_changes) {
-            update_flag_unmap(c, first_seg);
             return false;
         }
         // Check all interval pairs
         for (auto j = start_sidx; j < end_sidx - 1; j ++) {
             if (std::abs(interval_map[source_contig][j+1].offset -
                          interval_map[source_contig][j].offset) > allowed_cigar_changes) {
-                update_flag_unmap(c, first_seg);
                 return false;
             }
         }
-    }
-
-    // Debug messages
-    if (verbose > 1) {
-        std::cerr << "* Estimated ending position:\n";
-        if (first_seg) {
-            std::cerr << "  Source: " << source_contig << ":" << pos_end << "\n";
-        } else {
-            std::cerr << "  Source: " << source_contig << ":" << mpos_end << "\n";
-        }
-        std::cerr << "  Queried interval indexes:\n";
-        std::cerr << "    start: " << end_sidx << "\n    ";
-        interval_map[source_contig][end_sidx].debug_print_interval();
-        std::cerr << "\n";
     }
 
     // Lift CIGAR
@@ -911,7 +895,7 @@ bool ChainMap::lift_segment(
         if (strand)
             c->mpos = c->mpos + offset;
         else {
-            c->mpos = -mpos_end + offset + start_sintvl.source_start + start_sintvl.source_end;
+            c->mpos = -pos_end + offset + start_sintvl.source_start + start_sintvl.source_end;
             c->flag ^= BAM_FMREVERSE;
         }
     }
@@ -926,7 +910,15 @@ void ChainMap::lift_aln(
     bam1_t* aln, bam_hdr_t* hdr, std::string &dest_contig
 ) {
     bam1_core_t* c = &(aln->core);
+
+    if (verbose > 1) {
+        std::cerr << "\n" << bam_get_qname(aln) << " (" << c->flag << ")\n";
+    }
+
     bool r1_liftable = lift_segment(aln, hdr, true, dest_contig);
+    if (!r1_liftable) {
+        update_flag_unmap(c, true);
+    }
     size_t lift_status;
     std::string lo;
 
@@ -934,8 +926,10 @@ void ChainMap::lift_aln(
     if (c->flag & BAM_FPAIRED) {
         size_t pos = c->pos;
         size_t mpos = c->mpos;
-        auto mdest_contig = dest_contig;
+        std::string mdest_contig;
         bool r2_liftable = lift_segment(aln, hdr, false, mdest_contig);
+        if (!r2_liftable)
+            update_flag_unmap(c, false);
 
         // R1 unmapped
         if (c->flag & BAM_FUNMAP) {
@@ -1199,6 +1193,24 @@ void debug_print_cigar(bam1_t* aln) {
         std::cerr << cigar_op_len << bam_cigar_opchr(cigar_op);
     }
     std::cerr << "\n";
+}
+
+void ChainMap::debug_print_interval_queries(
+    const bool first_seg, const bool leftmost,
+    const std::string contig, const int32_t pos,
+    const int32_t sidx, const int32_t eidx) {
+    if (!leftmost)
+        std::cerr << "* Estimated ending position:\n";
+    if (first_seg) {
+        std::cerr << "First segment\n";
+    } else {
+        std::cerr << "Second segment\n";
+    }
+    std::cerr << "  Source: " << contig << ":" << pos << "\n";
+    std::cerr << "  Queried interval indexes:\n";
+    std::cerr << "    start: " << sidx << "\n    ";
+    interval_map[contig][sidx].debug_print_interval();
+    std::cerr << "    end  : " << eidx << "\n";
 }
 
 }
