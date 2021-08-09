@@ -392,12 +392,21 @@ void ChainMap::lift_cigar(
     const std::string& contig, bam1_t* aln,
     int start_sidx, int end_sidx, int num_clipped
 ) {
+    uint32_t* cigar = bam_get_cigar(aln);
     // If POS is inside an interval, `num_clipped` <= 0
     if ((num_clipped <= 0) && (start_sidx == end_sidx)) {
+        // If in a reversed interval, reverse CIGAR
+        if (!interval_map[contig][start_sidx].strand) {
+            std::vector<uint32_t> new_cigar;
+            for (int i = 0; i < aln->core.n_cigar; i++)
+                new_cigar.push_back(cigar[i]);
+            for (int i = 0; i < aln->core.n_cigar; i++){
+                *(cigar + i) = new_cigar[aln->core.n_cigar - i - 1];
+            }
+        }
         return;
     }
 
-    uint32_t* cigar = bam_get_cigar(aln);
     auto new_cigar = lift_cigar_core(
         contig, aln, start_sidx, end_sidx, num_clipped);
 
@@ -672,6 +681,9 @@ std::vector<uint32_t> ChainMap::lift_cigar_core(
     if (TMP_DEBUG) {
         std::cerr << "  len(new_cigar) = " << new_cigar.size() << "\n";
     }
+    if (!interval_map[contig][start_sidx].strand) {
+        std::reverse(new_cigar.begin(), new_cigar.end());
+    }
     return new_cigar;
 }
 
@@ -752,7 +764,6 @@ bool ChainMap::lift_segment(
     bam1_t* aln, bam_hdr_t* hdr,
     bool first_seg, std::string &dest_contig
 ) {
-    // const int allowed_cigar_changes = 10;
     bam1_core_t* c = &(aln->core);
 
     // If unmapped, the alignment is not liftable
@@ -762,6 +773,11 @@ bool ChainMap::lift_segment(
     else if (!first_seg && (c->flag & BAM_FMUNMAP))
         return false;
 
+    // Check if the aligned REF is in the map. If not, set to unmapped and return false
+    if (c->tid < 0) {
+        update_flag_unmap(c, first_seg);
+        return false;
+    }
     std::string source_contig = (first_seg)?
         hdr->target_name[c->tid] : hdr->target_name[c->mtid];
 
@@ -789,6 +805,14 @@ bool ChainMap::lift_segment(
         return false;
     }
     
+    // Lift contig
+    auto start_sintvl = interval_map[source_contig][start_sidx];
+    dest_contig = start_sintvl.target;
+    if (first_seg)
+        c->tid = sam_hdr_name2tid(hdr, dest_contig.c_str());
+    else
+        c->mtid = sam_hdr_name2tid(hdr, dest_contig.c_str());
+    
     // Debug messages
     if (verbose > 1) {
         if (first_seg) {
@@ -805,16 +829,9 @@ bool ChainMap::lift_segment(
     }
 
 
-    // Lift contig
-    auto current_intvl = interval_map[source_contig][start_sidx];
-    dest_contig = current_intvl.target;
-    if (first_seg)
-        c->tid = sam_hdr_name2tid(hdr, dest_contig.c_str());
-    else
-        c->mtid = sam_hdr_name2tid(hdr, dest_contig.c_str());
-
     // Estimate ending pos of the mate
     auto pos_end = c->pos + bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln));
+    // mpos_end is a rough estimate because we don't know the rlen of the mate
     auto mpos_end = c->mpos + c->l_qseq;
     int end_sidx = 0;
     int end_eidx = 0;
@@ -846,7 +863,7 @@ bool ChainMap::lift_segment(
     if (start_sidx != end_sidx) {
         // Check the first and the last intervals
         auto next_intvl = interval_map[source_contig][end_sidx];
-        if (std::abs(next_intvl.offset - current_intvl.offset) > allowed_cigar_changes) {
+        if (std::abs(next_intvl.offset - start_sintvl.offset) > allowed_cigar_changes) {
             update_flag_unmap(c, first_seg);
             return false;
         }
@@ -879,20 +896,22 @@ bool ChainMap::lift_segment(
         lift_cigar(source_contig, aln, start_sidx, end_sidx, num_sclip_start);
 
     // Lift POS and MPOS
-    auto offset = current_intvl.offset;
-    auto strand = current_intvl.strand;
+    // Updating positions affects the lift-over of other fields (e.g. CIGAR), so this has to be
+    // performed in the end of the lift-over process.
+    auto offset = start_sintvl.offset;
+    auto strand = start_sintvl.strand;
     if (first_seg) {
         if (strand)
             c->pos = c->pos + offset;
         else {
-            c->pos = -pos_end + offset + current_intvl.source_start + current_intvl.source_end;
+            c->pos = -pos_end + offset + start_sintvl.source_start + start_sintvl.source_end;
             c->flag ^= BAM_FREVERSE;
         }
     } else {
         if (strand)
             c->mpos = c->mpos + offset;
         else {
-            c->mpos = -mpos_end + offset + current_intvl.source_start + current_intvl.source_end;
+            c->mpos = -mpos_end + offset + start_sintvl.source_start + start_sintvl.source_end;
             c->flag ^= BAM_FMREVERSE;
         }
     }
