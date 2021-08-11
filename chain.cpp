@@ -848,7 +848,7 @@ bool ChainMap::lift_segment(
         if (num_sclip_end < 0 || num_sclip_end > allowed_cigar_changes) {
             return false;
         }
-        if (num_sclip_end > 0) {
+        if (num_sclip_end > 0 && verbose > 1) {
             std::cerr << "num soft-clipped bases (end) = " << num_sclip_end << "\n";
         }
     }
