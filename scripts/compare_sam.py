@@ -32,7 +32,7 @@ def parse_args():
         help='Min MAPQ to consider. Alignments with lower MAPQ are considered as invalid. [0]'
     )
     parser.add_argument(
-        '--report_records_closer_than', default=-1, type=int,
+        '--max_posdiff_reported', default=-1, type=int,
         help=(
             'Only report records within a positional difference. '
             'Set to a negative value to turn off. [-1]')
@@ -41,7 +41,7 @@ def parse_args():
     return args
 
 
-class Summary():
+class CompareSamSummary():
     def __init__(self, allowed_pos_diff):
         self.pos_diff = []
         self.mapq_diff = []
@@ -52,70 +52,67 @@ class Summary():
         self.unmapped_records = [[], []]
         self.invalid_records = [[], []] # MAPQ = 255
 
+    # Read one record from query and baseline and update the summary
+    # Inputs:
+    #   - query/baseline (pysam alignment record)
+    #   - aln_filter (dict): alignment filtering criteria
     def update(self, query, baseline, aln_filter):
-        if query and baseline:
-            is_unmapped_or_invalid = False
-            if query.is_unmapped:
-                self.unmapped_records[0].append(query.query_name + ('_1' if query.is_read1 else '_2'))
-                is_unmapped_or_invalid = True
-            if baseline.is_unmapped:
-                self.unmapped_records[1].append(baseline.query_name + ('_1' if baseline.is_read1 else '_2'))
-                is_unmapped_or_invalid = True
-            if is_unmapped_or_invalid:
-                return
-            # Mapped but invalid
-            if query.mapping_quality == 255 or query.mapping_quality < aln_filter['MAPQ']:
-                self.invalid_records[0].append(query.query_name + ('_1' if query.is_read1 else '_2'))
-                is_unmapped_or_invalid = True
-            if baseline.mapping_quality == 255 or baseline.mapping_quality < aln_filter['MAPQ']:
-                self.invalid_records[1].append(baseline.query_name + ('_1' if baseline.is_read1 else '_2'))
-                is_unmapped_or_invalid = True
-            if is_unmapped_or_invalid:
-                return
-            
-            if query.reference_name == baseline.reference_name:
-                if True:
-                    self.pos_diff.append(abs(query.reference_start - baseline.reference_start))
-                else:
-                    # TODO
-                    # I tried to handle "S" bases here, but the logic
-                    # might be wrong
-                    # 
-                    # Consider soft clipped ("S") bases
-                    cigar_re = re.compile('[SIDM]+')
-                    q_cigar = cigar_re.findall(query.cigarstring)
-                    b_cigar = cigar_re.findall(baseline.cigarstring)
-                    q_start = query.reference_start
-                    b_start = baseline.reference_start
-                    if q_cigar[0] == 'S':
-                        q_start += int(cigar_re.split(query.cigarstring)[0])
-                    if b_cigar[0] == 'S':
-                        b_start += int(cigar_re.split(baseline.cigarstring)[0])
-                    self.pos_diff.append(abs(q_start - b_start))
-            else:
-                self.pos_diff.append(-1)
-            self.records.append([query, baseline])
-            self.mapq_diff.append(query.mapping_quality - baseline.mapping_quality)
-            self.cigar_diff.append(query.cigarstring == baseline.cigarstring)
-        # except:
-        #     if query:
-        #         print('query=', query.query_name, query.reference_name, query.reference_start)
-        #     if baseline:
-        #         print('baseline=', baseline.query_name, baseline.reference_name, baseline.reference_start)
+        if (not query) or (not baseline):
+            return
+
+        # Exlude unmapped alignments
+        is_unmapped_or_invalid = False
+        if query.is_unmapped:
+            self.unmapped_records[0].append(
+                query.query_name + ('_1' if query.is_read1 else '_2'))
+            is_unmapped_or_invalid = True
+        # Whether to filter the baseline dataset is a bit tricky - on one hand, we should
+        # not filter the "truth"; on the other, there can be failed heuristics, especially for
+        # unmapped and/or low-mapping-quality alignments.
+        if baseline.is_unmapped:
+            self.unmapped_records[1].append(
+                baseline.query_name + ('_1' if baseline.is_read1 else '_2'))
+            is_unmapped_or_invalid = True
+        if is_unmapped_or_invalid:
+            return
+        # Mapped but invalid
+        if query.mapping_quality == 255 or query.mapping_quality < aln_filter['MAPQ']:
+            self.invalid_records[0].append(
+                query.query_name + ('_1' if query.is_read1 else '_2'))
+            is_unmapped_or_invalid = True
+        if baseline.mapping_quality == 255 or baseline.mapping_quality < aln_filter['MAPQ']:
+            self.invalid_records[1].append(
+                baseline.query_name + ('_1' if baseline.is_read1 else '_2'))
+            is_unmapped_or_invalid = True
+        if is_unmapped_or_invalid:
+            return
+        
+        if query.reference_name == baseline.reference_name:
+            self.pos_diff.append(abs(query.reference_start - baseline.reference_start))
+        else:
+            self.pos_diff.append(-1)
+        self.records.append([query, baseline])
+        self.mapq_diff.append(query.mapping_quality - baseline.mapping_quality)
+        self.cigar_diff.append(query.cigarstring == baseline.cigarstring)
 
 
-    def report(self, fn_out, num_err_printed, out_pos_diff):
+    def report(self, fn_out, num_err_printed, max_posdiff_reported):
         if fn_out == '':
             f_out = sys.stdout
         else:
             f_out = open(fn_out, 'w')
+
+        if len(self.pos_diff) == 0:
+            print('Zero matched records. Exit.', file=f_out)
+            exit(1)
+
         print('## Position', file=f_out)
         num_pos_match = sum([i >= 0 and i < self.allowed_pos_diff for i in self.pos_diff])
         print(f'{num_pos_match / len(self.pos_diff)} ({num_pos_match}/{len(self.pos_diff)})', file=f_out)
         cnt = 0
         for i, rec in enumerate(self.records):
             if self.pos_diff[i] > self.allowed_pos_diff:
-                if out_pos_diff >= 0 and self.pos_diff[i] > out_pos_diff:
+                if max_posdiff_reported >= 0 and self.pos_diff[i] > max_posdiff_reported:
                     continue
                 query = rec[0]
                 baseline = rec[1]
@@ -154,7 +151,9 @@ class Summary():
         print((f'{len(set_invalid)} (query={len(self.invalid_records[0])}, '
                f'baseline={len(self.invalid_records[1])})'), file=f_out)
 
-def read_sam_as_dict(fn):
+
+''' Read a SAM/BAM file as a dictionary (key: query name; value: pysam alignment record) '''
+def read_sam_as_dict(fn: str) -> dict:
     dict_reads = {}
     f = pysam.AlignmentFile(fn, 'r')
     for read in f:
@@ -170,7 +169,7 @@ def read_sam_as_dict(fn):
 
 
 def compare_sam(args):
-    summary = Summary(args.allowed_pos_diff)
+    summary = CompareSamSummary(args.allowed_pos_diff)
     dict_query = read_sam_as_dict(args.input_query)
     dict_baseline = read_sam_as_dict(args.input_baseline)
     aln_filter = {'MAPQ': args.min_mapq}
@@ -184,7 +183,7 @@ def compare_sam(args):
                 aln_filter=aln_filter)
     summary.report(
         fn_out=args.out, num_err_printed=args.num_err_printed,
-        out_pos_diff=args.report_records_closer_than)
+        max_posdiff_reported=args.max_posdiff_reported)
 
 
 if __name__ == '__main__':
