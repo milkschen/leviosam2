@@ -74,81 +74,82 @@ void serialize_run(lift_opts args) {
 }
 
 
+// TODO: to be removed
 // Lift over an alignment. Lifted information will be updated in the htslib aln object.
-template <class T>
-void _lift_aln(
-    bam1_t* aln,
-    T* lift_map,
-    bam_hdr_t* hdr,
-    bool md_flag,
-    std::string &ref_name,
-    std::map<std::string, std::string>* ref_dict,
-    std::vector<std::string>* unrecorded_contigs,
-    std::mutex* mutex_vec
-) {
-    bam1_core_t c = aln->core;
-    std::string dest_contig, source_contig;
-    size_t pos;
-    std::string ref;
-    // If a read is mapped, lift its position.
-    if (!(c.flag & BAM_FUNMAP)) {
-        source_contig = hdr->target_name[c.tid];
-        dest_contig = lift_map->lift_contig(source_contig, c.pos);
-        // unrecorded_contigs needs to be protected because unrecorded_contigs is shared
-        pos = lift_map->lift_pos(
-            source_contig, c.pos, unrecorded_contigs, mutex_vec);
-        // std::cerr << dest_contig << " " << pos << "\n";
-        // CIGAR
-        lift_map->lift_cigar(source_contig, aln);
-        aln->core.pos = pos;
-    // If a read is unmapped, but its mate is mapped, lift its mates position.
-    // Otherwise leave it unchanged.
-    } else if ((c.flag & BAM_FPAIRED) && !(c.flag & BAM_FMUNMAP)) {
-        source_contig = hdr->target_name[c.mtid];
-        dest_contig = lift_map->lift_contig(source_contig, c.mpos);
-        // unrecorded_contigs needs to be protected because unrecorded_contigs is shared
-        pos = lift_map->lift_pos(
-            source_contig, c.mpos, unrecorded_contigs, mutex_vec);
-        aln->core.pos = pos;
-    }
-    // Lift mate position.
-    if (c.flag & BAM_FPAIRED) {
-        // If the mate is unmapped, use the lifted position of the read.
-        if (c.flag & BAM_FMUNMAP){
-            aln->core.mpos = aln->core.pos;
-        // If the mate is mapped, lift its position.
-        } else {
-            std::string msource_contig(hdr->target_name[c.mtid]);
-            // std::cerr << "msource_contig: " << msource_contig << " mpos: " << c.mpos << "\n";
-            std::string mdest_contig(lift_map->lift_contig(msource_contig, c.mpos));
-            c.mtid = sam_hdr_name2tid(hdr, mdest_contig.c_str());
-            // std::cerr << "mtid " << c.mtid << "\n";
-            size_t mpos = lift_map->lift_pos(msource_contig, c.mpos, unrecorded_contigs, mutex_vec);
-            // std::cerr << "mpos " << mpos << "\n";
-            aln->core.mpos = mpos;
-            // std::cerr << mdest_contig << " " << aln->core.mpos << "\n";
-            int isize = (c.isize == 0)? 0 : c.isize + (mpos - c.mpos) - (pos - c.pos);
-            aln->core.isize = isize;
-        }
-    }
-    if (md_flag) {
-        // change ref if needed
-        if (dest_contig != ref_name) {
-            ref = (*ref_dict)[dest_contig];
-        }
-        bam_fillmd1(aln, ref.data(), md_flag, 1);
-    }
-    else { // strip MD and NM tags if md_flag not set bc the liftover invalidates them
-        uint8_t* ptr = NULL;
-        if ((ptr = bam_aux_get(aln, "MD")) != NULL) {
-            bam_aux_del(aln, ptr);
-        }
-        if ((ptr = bam_aux_get(aln, "NM")) != NULL) {
-            bam_aux_del(aln, bam_aux_get(aln, "NM"));
-        }
-    }
-    ref_name = dest_contig;
-}
+// template <class T>
+// void _lift_aln(
+//     bam1_t* aln,
+//     T* lift_map,
+//     bam_hdr_t* hdr,
+//     bool md_flag,
+//     std::string &ref_name,
+//     std::map<std::string, std::string>* ref_dict,
+//     std::vector<std::string>* unrecorded_contigs,
+//     std::mutex* mutex_vec
+// ) {
+//     bam1_core_t c = aln->core;
+//     std::string dest_contig, source_contig;
+//     size_t pos;
+//     std::string ref;
+//     // If a read is mapped, lift its position.
+//     if (!(c.flag & BAM_FUNMAP)) {
+//         source_contig = hdr->target_name[c.tid];
+//         dest_contig = lift_map->lift_contig(source_contig, c.pos);
+//         // unrecorded_contigs needs to be protected because unrecorded_contigs is shared
+//         pos = lift_map->lift_pos(
+//             source_contig, c.pos, unrecorded_contigs, mutex_vec);
+//         // std::cerr << dest_contig << " " << pos << "\n";
+//         // CIGAR
+//         lift_map->lift_cigar(source_contig, aln);
+//         aln->core.pos = pos;
+//     // If a read is unmapped, but its mate is mapped, lift its mates position.
+//     // Otherwise leave it unchanged.
+//     } else if ((c.flag & BAM_FPAIRED) && !(c.flag & BAM_FMUNMAP)) {
+//         source_contig = hdr->target_name[c.mtid];
+//         dest_contig = lift_map->lift_contig(source_contig, c.mpos);
+//         // unrecorded_contigs needs to be protected because unrecorded_contigs is shared
+//         pos = lift_map->lift_pos(
+//             source_contig, c.mpos, unrecorded_contigs, mutex_vec);
+//         aln->core.pos = pos;
+//     }
+//     // Lift mate position.
+//     if (c.flag & BAM_FPAIRED) {
+//         // If the mate is unmapped, use the lifted position of the read.
+//         if (c.flag & BAM_FMUNMAP){
+//             aln->core.mpos = aln->core.pos;
+//         // If the mate is mapped, lift its position.
+//         } else {
+//             std::string msource_contig(hdr->target_name[c.mtid]);
+//             // std::cerr << "msource_contig: " << msource_contig << " mpos: " << c.mpos << "\n";
+//             std::string mdest_contig(lift_map->lift_contig(msource_contig, c.mpos));
+//             c.mtid = sam_hdr_name2tid(hdr, mdest_contig.c_str());
+//             // std::cerr << "mtid " << c.mtid << "\n";
+//             size_t mpos = lift_map->lift_pos(msource_contig, c.mpos, unrecorded_contigs, mutex_vec);
+//             // std::cerr << "mpos " << mpos << "\n";
+//             aln->core.mpos = mpos;
+//             // std::cerr << mdest_contig << " " << aln->core.mpos << "\n";
+//             int isize = (c.isize == 0)? 0 : c.isize + (mpos - c.mpos) - (pos - c.pos);
+//             aln->core.isize = isize;
+//         }
+//     }
+//     if (md_flag) {
+//         // change ref if needed
+//         if (dest_contig != ref_name) {
+//             ref = (*ref_dict)[dest_contig];
+//         }
+//         bam_fillmd1(aln, ref.data(), md_flag, 1);
+//     }
+//     else { // strip MD and NM tags if md_flag not set bc the liftover invalidates them
+//         uint8_t* ptr = NULL;
+//         if ((ptr = bam_aux_get(aln, "MD")) != NULL) {
+//             bam_aux_del(aln, ptr);
+//         }
+//         if ((ptr = bam_aux_get(aln, "NM")) != NULL) {
+//             bam_aux_del(aln, bam_aux_get(aln, "NM"));
+//         }
+//     }
+//     ref_name = dest_contig;
+// }
 
 
 template <class T>
@@ -361,17 +362,6 @@ void lift_run(lift_opts args) {
     threads.clear();
     sam_close(out_sam_fp);
 }
-
-
-// chain::ChainMap lift_from_chain(lift_opts args) {
-//     if (args.chain_fname == "") {
-//         fprintf(stderr, "chain file name is required!! \n");
-//         print_serialize_help_msg();
-//         exit(1);
-//     }
-//     chain::ChainMap cfp (args.chain_fname, args.verbose);
-//     return cfp;
-// }
 
 
 lift::LiftMap lift_from_vcf(std::string fname, 
