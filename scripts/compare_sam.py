@@ -114,9 +114,9 @@ class CompareSamSummary():
         - aln_filter: alignment filtering criteria
     '''
     def __init__(
-        self, allowed_posdiff: int, num_err_printed: int,
-        max_posdiff_reported: int, identity_cutoff: float,
-        fn_out: str, aln_filter: dict) -> None:
+        self, allowed_posdiff: int=1, num_err_printed: int=10,
+        max_posdiff_reported: int=sys.maxsize, identity_cutoff: float=0.8,
+        fn_out: str='', aln_filter: dict={'MAPQ': 0}) -> None:
         self.posdiff = []
         self.mapq_diff = []
         self.cigar_diff = []
