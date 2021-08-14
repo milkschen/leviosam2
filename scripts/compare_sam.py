@@ -24,34 +24,114 @@ def parse_args():
         help='Number of printed errors. Set to -1 to print all. [20]'
     )
     parser.add_argument(
-        '-p', '--allowed_pos_diff', default=1, type=int,
+        '-p', '--allowed_posdiff', default=1, type=int,
         help='Allowed bases of positional difference. [1]'
+    )
+    parser.add_argument(
+        '-i', '--identity_cutoff', default=0.8, type=float,
+        help=(
+            'Identify cutoff. An alignment with an identity >= this value '
+            'is considered as correct. [0.8]')
     )
     parser.add_argument(
         '-m', '--min_mapq', default=0, type=int,
         help='Min MAPQ to consider. Alignments with lower MAPQ are considered as invalid. [0]'
     )
     parser.add_argument(
-        '--max_posdiff_reported', default=-1, type=int,
+        '--max_posdiff_reported', default=sys.maxsize, type=int,
         help=(
-            'Only report records within a positional difference. '
-            'Set to a negative value to turn off. [-1]')
+            'Only report records within this value of positional difference. '
+            'Set to a negative value to turn off. [sys.maxsize]')
     )
     args = parser.parse_args()
     return args
 
 
+class CigarSegment:
+    def __init__(self, cigartuple, q_offset, r_offset) -> None:
+        self.op = cigartuple[0]
+        self.size = cigartuple[1]
+        self.r_offset = r_offset
+        self.q_offset = q_offset
+        self.intercept = r_offset - q_offset
+
+    def __repr__(self) -> str:
+        return f'{self.op}\t{self.size}\t{self.q_offset:<10d}\t{self.intercept}'
+    
+    def truncate_front(self, y) -> int:
+        if self.op != y.op or self.intercept != y.intercept:
+            pass
+        diff = y.q_offset - self.q_offset
+        self.size = self.size - diff
+        self.q_offset += diff
+        self.r_offset += diff
+
+    def overlap(self, y) -> int:
+        assert (self.q_offset == y.q_offset)
+        if self.op == y.op and self.intercept == y.intercept:
+            return min(self.size, y.size)
+        else:
+            return 0
+
+
+class CigarSegments:
+    def __init__(self, aln) -> None:
+        stats = []
+        r_offset = aln.reference_start
+        q_offset = 0
+        for i, (op, n) in enumerate(aln.cigartuples):
+            # cigartuples: e.g [(0, 30), (1, 5), (0, 20)] -> 30M5I20M
+            stats.append(CigarSegment((op, n), q_offset, r_offset))
+            if op in [0, 1, 4, 7, 8]: # consume QUERY
+                q_offset += n
+            if op in [0, 2, 3, 7, 8]: # consume REF
+                r_offset += n
+        self.cigar = stats
+
+    def __repr__(self) -> str:
+        out = 'OP\tSIZE\tQ_OFFSET\tINTETCEPT\n'
+        for s in self.cigar:
+            out += (s.__repr__() + '\n')
+        return out
+
+    def __getitem__(self, key):
+        return self.cigar[key]
+
+    def __len__(self):
+        return len(self.cigar)
+
+    def pop(self, key) -> None:
+        self.cigar.pop(key)
+
+
 class CompareSamSummary():
-    def __init__(self, allowed_pos_diff):
-        self.pos_diff = []
+    '''
+    Inputs:
+        - allowed_posdiff: allowed bases of positional difference
+        - num_err_printed: number of printed errors
+        - max_posdiff_reported: only report records within this value of positional difference
+        - fn_out: path to the ouput report
+        - aln_filter: alignment filtering criteria
+    '''
+    def __init__(
+        self, allowed_posdiff: int, num_err_printed: int,
+        max_posdiff_reported: int, identity_cutoff: float,
+        fn_out: str, aln_filter: dict) -> None:
+        self.posdiff = []
         self.mapq_diff = []
         self.cigar_diff = []
         self.records = []
-        self.allowed_pos_diff = allowed_pos_diff
         # Unaligned or invalid alignments
         self.unmapped_records = [[], []]
         self.invalid_records = [[], []] # MAPQ = 255
         self.identity = []
+
+        self.allowed_posdiff = allowed_posdiff
+        self.identity_cutoff = identity_cutoff
+        self.num_err_printed = num_err_printed
+        self.max_posdiff_reported = max_posdiff_reported
+        self.fn_out = fn_out
+        self.aln_filter = aln_filter
 
     ''' Convert a typical CIGAR string to the expanded form
     Example:
@@ -73,12 +153,7 @@ class CompareSamSummary():
             ecigar += int(lens[i]) * op
         return ecigar
 
-
-    #TODO this is currently incorrect
     ''' Caculate CIGAR identity between two sequences
-
-    Note that I didn't implment it with a fast algorithm. There should be some way to speed this
-    up.
     '''
     def _calc_identity(
         self, query: pysam.AlignedSegment, baseline: pysam.AlignedSegment
@@ -91,56 +166,34 @@ class CompareSamSummary():
             # Quick return for nicely-matched query-baseline pairs
             return 1
 
-        # query_ecigar = self._expand_cigar(cigarstring=query.cigarstring, consumes='query')
-        # baseline_ecigar = self._expand_cigar(cigarstring=baseline.cigarstring, consumes='query')
-        # query_ecigar = self._expand_cigar(cigarstring=query.cigarstring, consumes='ref')
-        # baseline_ecigar = self._expand_cigar(cigarstring=baseline.cigarstring, consumes='ref')
-        query_ecigar = self._expand_cigar(cigarstring=query.cigarstring, consumes=None)
-        baseline_ecigar = self._expand_cigar(cigarstring=baseline.cigarstring, consumes=None)
-
-        def _get_cigar_offsets(aln):
-            stats = aln.cigartuples
-            # e.g [(0, 30), (1, 5), (0, 20)] -> 30M5I20M
-            r_offset = aln.reference_start
-            q_offset = 0
-            for i, (op, n) in enumerate(stats):
-                stats[i] = (op, n, q_offset, r_offset, r_offset - q_offset)
-                if op in [0, 1, 4, 7, 8]:
-                    q_offset += n
-                if op in [0, 2, 3, 7, 8]:
-                    r_offset += n
-            return stats
-        query_cigar_offsets = _get_cigar_offsets(query)
-        baseline_cigar_offsets = _get_cigar_offsets(baseline)
-        while query_cigar_offsets and baseline_cigar_offsets:
-            for i
-            if baseline_cigar_offsets[0][3] < query_cigar_offsets[0][3]:
+        query_cigar_offsets = CigarSegments(query)
+        baseline_cigar_offsets = CigarSegments(baseline)
+        while len(query_cigar_offsets) and len(baseline_cigar_offsets):
+            # print('QUERY')
+            # print(query_cigar_offsets)
+            # print('BASELINE')
+            # print(baseline_cigar_offsets)
+            b = baseline_cigar_offsets[0]
+            q = query_cigar_offsets[0]
+            if q.q_offset == b.q_offset:
+                idy += q.overlap(b)
+                if q.size == b.size:
+                    baseline_cigar_offsets.pop(0)
+                    query_cigar_offsets.pop(0)
+                elif q.size < b.size:
+                    query_cigar_offsets.pop(0)
+                else:
+                    baseline_cigar_offsets.pop(0)
+            elif q.q_offset < b.q_offset:
+                q.truncate_front(b)
+            else:
+                b.truncate_front(q)
+            # input(idy)
                 
-        print(query)
-        print(query_cigar_offsets)
-        print(baseline)
-        print(baseline_cigar_offsets)
-        exit(0)
-
-
-        # diff = query.reference_start - baseline.reference_start
-        # if diff > 0:
-        #     baseline_ecigar = baseline_ecigar[diff:]
-        # elif diff < 0:
-        #     query_ecigar = query_ecigar[diff:]
-        # idxb = 0
-        # idxq = 0
-        # for i, q in enumerate(query_ecigar):
-        #     if i >= len(baseline_ecigar):
-        #         break
-        #     if q not in ['M', 'I', 'S']:
-        #         idxq -= 1
-        #     if baseline_ecigar[i] not in ['M', 'I', 'S']:
-        #         idxb -= 1
-        #     idxq += 1
-        #     idxb += 1
-        #     if q == baseline_ecigar[idxb]:
-        #         idy += 1
+        # print(query)
+        # print(baseline)
+        # print(f'idy = {idy}')
+        # input()
         
         return idy / query.infer_read_length()
 
@@ -179,15 +232,14 @@ class CompareSamSummary():
     return true otherwise.
     '''
     def _check_low_qual(
-        self, query: pysam.AlignedSegment,
-        baseline: pysam.AlignedSegment, aln_filter: dict
+        self, query: pysam.AlignedSegment, baseline: pysam.AlignedSegment
     ) -> bool:
         is_low_qual = False
-        if query.mapping_quality == 255 or query.mapping_quality < aln_filter['MAPQ']:
+        if query.mapping_quality == 255 or query.mapping_quality < self.aln_filter['MAPQ']:
             self.invalid_records[0].append(
                 query.query_name + ('_1' if query.is_read1 else '_2'))
             is_low_qual = True
-        if baseline.mapping_quality == 255 or baseline.mapping_quality < aln_filter['MAPQ']:
+        if baseline.mapping_quality == 255 or baseline.mapping_quality < self.aln_filter['MAPQ']:
             self.invalid_records[1].append(
                 baseline.query_name + ('_1' if baseline.is_read1 else '_2'))
             is_low_qual = True
@@ -198,11 +250,9 @@ class CompareSamSummary():
     
     Inputs:
       - query/baseline (pysam alignment record)
-      - aln_filter (dict): alignment filtering criteria
     '''
     def update(
-        self, query: pysam.AlignedSegment,
-        baseline: pysam.AlignedSegment, aln_filter: dict
+        self, query: pysam.AlignedSegment, baseline: pysam.AlignedSegment
     ) -> None:
         if (not query) or (not baseline):
             return
@@ -214,36 +264,33 @@ class CompareSamSummary():
         if self._check_unmap(query, baseline):
             return
         # Mapped but invalid
-        if self._check_low_qual(query, baseline, aln_filter):
+        if self._check_low_qual(query, baseline):
             return
         
-        self.pos_diff.append(self._calc_posdiff(query, baseline))
+        self.posdiff.append(self._calc_posdiff(query, baseline))
         self.records.append([query, baseline])
         self.mapq_diff.append(query.mapping_quality - baseline.mapping_quality)
         self.cigar_diff.append(query.cigarstring == baseline.cigarstring)
         self.identity.append(self._calc_identity(query, baseline))
 
     ''' Report summary results '''
-    def report(self, fn_out: str, num_err_printed: int, max_posdiff_reported: int) -> None:
-        if fn_out == '':
-            f_out = sys.stdout
-        else:
-            f_out = open(fn_out, 'w')
-
-        if len(self.pos_diff) == 0:
-            print('Zero matched records. Exit.', file=f_out)
-            exit(1)
-
-        print('## Position', file=f_out)
-        num_pos_match = sum([i >= 0 and i < self.allowed_pos_diff for i in self.pos_diff])
-        print(
-            f'{num_pos_match / len(self.pos_diff)} ({num_pos_match}/{len(self.pos_diff)})',
-            file=f_out)
+    def _print_records(self, f_out, by='pos') -> None:
         cnt = 0
+        show = False
         for i, rec in enumerate(self.records):
-            if self.pos_diff[i] > self.allowed_pos_diff:
-                if max_posdiff_reported >= 0 and self.pos_diff[i] > max_posdiff_reported:
-                    continue
+            if cnt >= self.num_err_printed:
+                break
+            if by == 'pos':
+                show = (self.posdiff[i] > self.allowed_posdiff and 
+                        self.posdiff[i] <= self.max_posdiff_reported)
+            elif by == 'idy':
+                show = (self.identity[i] < self.identity_cutoff)
+            elif by == 'pos_idy':
+                show = (self.posdiff[i] > self.allowed_posdiff and 
+                        self.posdiff[i] <= self.max_posdiff_reported)
+                show &= (self.identity[i] < self.identity_cutoff)
+
+            if show:
                 query = rec[0]
                 baseline = rec[1]
                 msg_query = (
@@ -257,18 +304,42 @@ class CompareSamSummary():
                     f'{baseline.reference_start+1:10d}\t'
                     f'{baseline.mapping_quality:3d}\t{baseline.cigarstring}')
                 print(f'{query.query_name}', file=f_out)
-                print(f'  p_diff = {self.pos_diff[i]:<10d}\t{msg_query}', file=f_out)
-                # print(f'{" ":17s}\t{msg_baseline}', file=f_out)
+                print(f'  p_diff = {self.posdiff[i]:<10d}\t{msg_query}', file=f_out)
                 print(f'  idy    = {self.identity[i]:.4f}\t{msg_baseline}', file=f_out)
                 cnt += 1
-            if cnt >= num_err_printed and num_err_printed >= 0:
-                break
+        return
+
+    def report(self) -> None:
+        if self.fn_out == '':
+            f_out = sys.stdout
+        else:
+            f_out = open(self.fn_out, 'w')
+
+        if len(self.posdiff) == 0:
+            print('Zero matched records. Exit.', file=f_out)
+            exit(1)
+
+        print('## Position', file=f_out)
+        num_pos_match = sum([i >= 0 and i < self.allowed_posdiff for i in self.posdiff])
+        print(f'{num_pos_match / len(self.posdiff)} '
+              f'({num_pos_match}/{len(self.posdiff)})',
+              file=f_out)
+        if self.num_err_printed > 1:
+            self._print_records(f_out, by='pos')
 
         print('## Identity', file=f_out)
-        num_idy = sum([i >= 0.8 for i in self.identity])
-        print(
-            f'{num_idy / len(self.identity)} ({num_idy}/{len(self.identity)})',
-            file=f_out)
+        num_idy = sum([i >= self.identity_cutoff for i in self.identity])
+        print(f'{num_idy / len(self.identity)} ({num_idy}/{len(self.identity)})',
+              file=f_out)
+        # if self.num_err_printed > 1:
+        #     self._print_records(f_out, by='idy')
+
+        print('## Position || Identity', file=f_out)
+        num_pos_idy = sum([d >= self.identity_cutoff or (self.posdiff[i] >= 0 and self.posdiff[i] < self.allowed_posdiff) for i, d in enumerate(self.identity)])
+        print(f'{num_pos_idy / len(self.identity)} ({num_pos_idy}/{len(self.identity)})',
+              file=f_out)
+        if self.num_err_printed > 1:
+            self._print_records(f_out, by='pos_idy')
 
         print('## MAPQ', file=f_out)
         print((f'{self.mapq_diff.count(0) / len(self.mapq_diff)} '
@@ -308,21 +379,20 @@ def read_sam_as_dict(fn: str) -> dict:
 
 
 def compare_sam(args):
-    summary = CompareSamSummary(args.allowed_pos_diff)
+    aln_filter = {'MAPQ': args.min_mapq}
+    summary = CompareSamSummary(
+        allowed_posdiff=args.allowed_posdiff,
+        identity_cutoff=args.identity_cutoff,
+        num_err_printed=args.num_err_printed,
+        max_posdiff_reported=args.max_posdiff_reported,
+        fn_out=args.out, aln_filter=aln_filter)
     dict_query = read_sam_as_dict(args.input_query)
     dict_baseline = read_sam_as_dict(args.input_baseline)
-    aln_filter = {'MAPQ': args.min_mapq}
-    for i_q, [name, [first_seg, second_seg]] in enumerate(dict_query.items()):
+    for _, [name, [first_seg, second_seg]] in enumerate(dict_query.items()):
         if dict_baseline.get(name):
-            summary.update(
-                query=first_seg, baseline=dict_baseline[name][0],
-                aln_filter=aln_filter)
-            summary.update(
-                query=second_seg, baseline=dict_baseline[name][1],
-                aln_filter=aln_filter)
-    summary.report(
-        fn_out=args.out, num_err_printed=args.num_err_printed,
-        max_posdiff_reported=args.max_posdiff_reported)
+            summary.update(query=first_seg, baseline=dict_baseline[name][0])
+            summary.update(query=second_seg, baseline=dict_baseline[name][1])
+    summary.report()
 
 
 if __name__ == '__main__':
