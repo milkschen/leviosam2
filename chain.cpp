@@ -149,7 +149,7 @@ void ChainMap::sort_interval_map() {
 }
 
 
-/* Sort the intervals in a ChainMap in ascending order. */
+/* Sort the intervals in a ChainMap in ascending order */
 void ChainMap::sort_intervals(std::string contig) {
     std::sort(
         interval_map[contig].begin(), interval_map[contig].end(),
@@ -166,7 +166,7 @@ void ChainMap::debug_print_interval_map() {
 }
 
 
-/* Print the intervals in a ChainMap. */
+/* Print the intervals in a ChainMap */
 void ChainMap::debug_print_intervals(std::string contig) {
     for (auto &intvl: interval_map[contig]) {
         intvl.debug_print_interval();
@@ -175,23 +175,21 @@ void ChainMap::debug_print_intervals(std::string contig) {
 }
 
 
-/* Check if the interval map contains any overlaps.
- * Logic:
- *   For each interval, its ending position <= next starting position
+/* Check if the interval map contains any overlaps in the source reference
+ * Logic: for each interval, its ending position <= next starting position
  * 
- * Returns a bool:
- *   true if pass; false otherwise
+ * Return true if pass; false otherwise.
  */
 bool ChainMap::interval_map_sanity_check() {
     for (auto& itr : interval_map){
-            std::vector<chain::Interval> v = interval_map[itr.first];
-            for (int i = 0; i < v.size()-1; i++) {
-                if (v[i].source_end > v[i+1].source_start) {
-                    std::cerr << "Error: " << itr.first << "\n";
-                    v[i].debug_print_interval();
-                    return false;
-                }
+        std::vector<chain::Interval> v = interval_map[itr.first];
+        for (int i = 0; i < v.size()-1; i++) {
+            if (v[i].source_end > v[i+1].source_start) {
+                std::cerr << "Error: " << itr.first << "\n";
+                v[i].debug_print_interval();
+                return false;
             }
+        }
     }
     std::cerr << "Interval_map sanity check: passed (no overlaps)\n";
     return true;
@@ -199,6 +197,7 @@ bool ChainMap::interval_map_sanity_check() {
 
 /* Get the rank in the start bitvector at contig[pos]
  * If pos > len(contig): return rank(contig[-1])
+ *
  * Returns:
  *   non-negative int: rank
  *   -1: if pos < 0 or contig does not exist
@@ -215,6 +214,7 @@ int ChainMap::get_start_rank(std::string contig, int pos) {
 
 /* Get the rank in the end bitvector at contig[pos]
  * If pos > len(contig): return rank(contig[-1])
+ *
  * Returns:
  *   non-negative int: rank
  *   -1: if pos < 0 or contig does not exist
@@ -230,7 +230,7 @@ int ChainMap::get_end_rank(std::string contig, int pos) {
     return end_rs1_map[contig](pos);
 }
 
-/* Init rank support for all start/end bitvectors. */
+/* Init rank support for all start/end bitvectors */
 void ChainMap::init_rs() {
     for (auto& it: start_map) {
         std::string contig = it.first;
@@ -250,7 +250,7 @@ void ChainMap::init_rs() {
     }
 }
 
-/* Parse a chain line and update the chain object.
+/* Parse a chain line and update the ChainMap
  */
 void ChainMap::parse_chain_line(
     std::string line, std::string &source, std::string &target,
@@ -546,7 +546,6 @@ std::vector<uint32_t> ChainMap::lift_cigar_core(
             }
             // END_DEBUG
         }
-        // break_points.push(std::make_tuple(bp, diff));
     }
 
     // Number of bases that need to be clipped in next iterations
@@ -583,12 +582,11 @@ std::vector<uint32_t> ChainMap::lift_cigar_core(
                 if (TMP_DEBUG) {
                     std::cerr << "next_bp =" << next_bp << ", next_q_offset =" << next_q_offset << "\n";
                     std::cerr << "original CIGAR = " << cigar_op_len << bam_cigar_opchr(cigar_op) << "\n";
+                    if (next_q_offset <= next_bp)
+                        std::cerr << "have not reach next_bp: " << cigar_op_len << bam_cigar_opchr(cigar_op) << "\n";
                 }
                 // Have not reached the next breakpoint
                 if (next_q_offset <= next_bp){
-                    if (TMP_DEBUG) {
-                        std::cerr << "have not reach next_bp: " << cigar_op_len << bam_cigar_opchr(cigar_op) << "\n";
-                    }
                     push_cigar(new_cigar, cigar_op_len, cigar_op);
                     query_offset += cigar_op_len;
                 // Split one CIGAR chunk into two parts and insert lift-over bases there
@@ -606,10 +604,27 @@ std::vector<uint32_t> ChainMap::lift_cigar_core(
                             std::cerr << "query offset = " << query_offset << "\n";
                         }
                         auto diff = std::get<1>(break_points.front());
-                        // `diff` could be zero when there's a postive-sized poorly aligned chunk
-                        // but that will not affect CIGAR updates
+                        // `diff` could be zero when there's a postive-sized poorly 
+                        // aligned chunk but that will not affect CIGAR updates
+                        //
+                        // Unmatched bases in the dest reference
+                        // (Dest has an insertion w.r.t. source)
+                        // E.g.
+                        // read:   TTTT----CCCCCCCGGGG
+                        // source: TTTT----CCCCCCCGGGG
+                        // dest:   TTTTAAAACCCCCCCGGGG
+                        // bp = 4, diff = 4
+                        // 15M -> 4M4D11M
                         if (diff > 0) { // D
                             push_cigar(new_cigar, diff, BAM_CDEL);
+                        // Unmatched bases in the source reference
+                        // (Dest has an deletion w.r.t source)
+                        // E.g.
+                        // read:   TTTTAAAACCCCCCC
+                        // source: TTTTAAAACCCCCCC
+                        // dest:   TTTT----CCCCCCC
+                        // bp = 4, diff = -4
+                        // 15M -> 4M4I7M
                         } else if (diff < 0) { // I
                             // Adding `diff` makes the CIGAR longer than QUERY
                             if (query_offset - diff > c->l_qseq)
@@ -627,9 +642,6 @@ std::vector<uint32_t> ChainMap::lift_cigar_core(
 
                         break_points.pop();
                         next_bp = std::get<0>(break_points.front());
-                    }
-                    if (TMP_DEBUG) {
-                        std::cerr << "second_half_len=" << second_half_len << "\n";
                     }
                     if (second_half_len < 0) {
                         tmp_gap = -second_half_len;
@@ -681,10 +693,6 @@ std::vector<uint32_t> ChainMap::lift_cigar_core(
         //             bam_cigar_gen(cigar_op_len - num_clipped, cigar_op));
         //     }
         // }
-    }
-    if (tmp_gap > 0) {
-        // TODO: trim bases from the end
-        // This case should not happen.
     }
     if (TMP_DEBUG) {
         std::cerr << "  len(new_cigar) = " << new_cigar.size() << "\n";
