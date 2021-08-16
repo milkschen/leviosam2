@@ -3,6 +3,7 @@
 #include <string>
 #include "leviosam.hpp"
 #include "chain.hpp"
+#include "htslib/sam.h"
 #include "gtest/gtest.h"
 
 //
@@ -270,7 +271,7 @@ TEST(LiftMap, SimpleSplicedBamCigarLift) {
 
 /* Chain tests */
 TEST(ChainMap, SimpleRankAndLift) {
-    chain::ChainMap cmap ("small.chain", 0);
+    chain::ChainMap cmap ("small.chain", 0, 0);
 
     int pos = 674047;
     std::string contig = "chr1";
@@ -324,7 +325,7 @@ TEST(ChainMap, ParseChainLineCornerZero) {
 
 
 TEST(ChainMap, LiftInReversedRegion) {
-    chain::ChainMap cmap ("chr1_reversed_region.chain", 0);
+    chain::ChainMap cmap ("chr1_reversed_region.chain", 0, 0);
 
     std::string contig = "chr1";
     int pos_array [4] = {146735453, 146735605, 146735135, 146735235};
@@ -342,7 +343,7 @@ TEST(ChainMap, LiftInReversedRegion) {
 }
 
 TEST(ChainMap, LiftCigar) {
-    chain::ChainMap cmap ("small.chain", 0);
+    chain::ChainMap cmap ("small.chain", 0, 0);
     samFile* sam_fp = sam_open("chain_cigar.sam", "r");
     bam_hdr_t* sam_hdr = sam_hdr_read(sam_fp);
     bam1_t* aln = bam_init1();
@@ -350,7 +351,7 @@ TEST(ChainMap, LiftCigar) {
     size_t x;
     uint32_t* test_cigar;
     // Note: can use the helper function to print out CIGAR results
-    // chain::debug_print_cigar(aln);
+    // chain::debug_print_cigar(bam_get_cigar(aln), aln->core.n_cigar);
 
     // CIGAR should not change
     err = sam_read1(sam_fp, sam_hdr, aln);
@@ -389,5 +390,14 @@ TEST(ChainMap, LiftCigar) {
     EXPECT_EQ(test_cigar[0], bam_cigar_gen( 10, BAM_CMATCH));
     EXPECT_EQ(test_cigar[1], bam_cigar_gen( 3, BAM_CDEL));
     EXPECT_EQ(test_cigar[2], bam_cigar_gen( 6, BAM_CMATCH));
+
+    // Add 3 BAM_CSOFT_CLIPs in the beginning (secondary alignment)
+    err = sam_read1(sam_fp, sam_hdr, aln);
+    EXPECT_EQ(err, 0);
+    cmap.lift_cigar(sam_hdr->target_name[aln->core.tid], aln);
+    test_cigar = bam_get_cigar(aln);
+    EXPECT_EQ(aln->core.n_cigar, 2);
+    EXPECT_EQ(test_cigar[0], bam_cigar_gen( 3, BAM_CSOFT_CLIP));
+    EXPECT_EQ(test_cigar[1], bam_cigar_gen( 13, BAM_CMATCH));
 }
 

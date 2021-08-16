@@ -9,7 +9,7 @@
 #include "leviosam.hpp"
 
 namespace chain {
-void debug_print_cigar(bam1_t* aln);
+void debug_print_cigar(uint32_t* cigar, size_t n_cigar);
 
 /* Chain interval object
  * Each interval is a gapless alignment between the source and the dest references.
@@ -68,8 +68,8 @@ class ChainMap {
             const std::string &contig, bam1_t* aln,
             int start_sidx, int end_sidx, int num_clipped);
         std::vector<uint32_t> lift_cigar_core(
-            const std::string &contig, bam1_t* aln,
-            int start_sidx, int end_sidx, int num_clipped);
+            const std::string &contig, bam1_t* aln, int num_clipped,
+            const int start_sidx, const int end_sidx);
 
         size_t lift_pos(std::string contig, size_t pos);
         // size_t lift_pos(
