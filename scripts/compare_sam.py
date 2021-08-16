@@ -186,7 +186,7 @@ class CompareSamSummary():
         increment `idy` with the size of the popped segment.
 
     This algorithm can be executed in O(len(rx)+len(ry)) time, where rx and ry
-    are number of CIGAR runs for the input sequences respectively.
+    are the number of CIGAR runs for the input sequences respectively.
     '''
     def _calc_identity(
         self, query: pysam.AlignedSegment, baseline: pysam.AlignedSegment
@@ -344,7 +344,7 @@ class CompareSamSummary():
 
         print('## Position', file=f_out)
         num_pos_match = sum([i >= 0 and i < self.allowed_posdiff for i in self.posdiff])
-        print(f'{num_pos_match / len(self.posdiff)} '
+        print(f'{num_pos_match / len(self.posdiff):.6f} '
               f'({num_pos_match}/{len(self.posdiff)})',
               file=f_out)
         if self.num_err_printed > 1:
@@ -352,24 +352,24 @@ class CompareSamSummary():
 
         print('## Identity', file=f_out)
         num_idy = sum([i >= self.identity_cutoff for i in self.identity])
-        print(f'{num_idy / len(self.identity)} ({num_idy}/{len(self.identity)})',
+        print(f'{num_idy / len(self.identity):.6f} ({num_idy}/{len(self.identity)})',
               file=f_out)
         # if self.num_err_printed > 1:
         #     self._print_records(f_out, by='idy')
 
         print('## Position || Identity', file=f_out)
         num_pos_idy = sum([d >= self.identity_cutoff or (self.posdiff[i] >= 0 and self.posdiff[i] < self.allowed_posdiff) for i, d in enumerate(self.identity)])
-        print(f'{num_pos_idy / len(self.identity)} ({num_pos_idy}/{len(self.identity)})',
+        print(f'{num_pos_idy / len(self.identity):.6f} ({num_pos_idy}/{len(self.identity)})',
               file=f_out)
         if self.num_err_printed > 1:
             self._print_records(f_out, by='pos_idy')
 
         print('## MAPQ', file=f_out)
-        print((f'{self.mapq_diff.count(0) / len(self.mapq_diff)} '
+        print((f'{self.mapq_diff.count(0) / len(self.mapq_diff):.6f} '
                f'({self.mapq_diff.count(0)}/{len(self.mapq_diff)})'), file=f_out)
 
         print('## CIGAR', file=f_out)
-        print((f'{self.cigar_diff.count(True) / len(self.cigar_diff)} '
+        print((f'{self.cigar_diff.count(True) / len(self.cigar_diff):.6f} '
                f'({self.cigar_diff.count(True)}/{len(self.cigar_diff)})'), file=f_out)
 
         print('## Unaligned', file=f_out)
