@@ -401,3 +401,27 @@ TEST(ChainMap, LiftCigar) {
     EXPECT_EQ(test_cigar[1], bam_cigar_gen( 13, BAM_CMATCH));
 }
 
+
+TEST(HtslibTest, CigarOpType) {
+    auto typeM = bam_cigar_type(BAM_CMATCH);
+    auto typeD = bam_cigar_type(BAM_CDEL);
+    auto typeI = bam_cigar_type(BAM_CINS);
+    auto typeS = bam_cigar_type(BAM_CSOFT_CLIP);
+    EXPECT_EQ(typeM & 1, 1);
+    EXPECT_EQ(typeM & 2, 2);
+    EXPECT_EQ(typeM & 3, 3);
+    EXPECT_EQ(bool(typeM & 2), true);
+
+    EXPECT_EQ(typeD & 1, 0);
+    EXPECT_EQ(typeD & 2, 2);
+    EXPECT_EQ(typeD & 3, 2);
+    EXPECT_EQ(typeD, 2);
+
+    EXPECT_EQ(typeI & 1, 1);
+    EXPECT_EQ(typeI & 2, 0);
+    EXPECT_EQ(typeI & 3, 1);
+    
+    EXPECT_EQ(typeS & 1, 1);
+    EXPECT_EQ(typeS & 2, 0);
+    EXPECT_EQ(typeS & 3, 1);
+}
