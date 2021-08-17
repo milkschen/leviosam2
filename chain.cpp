@@ -537,15 +537,8 @@ std::vector<uint32_t> ChainMap::lift_cigar_core(
     uint32_t qlen = (c->l_qseq > 0)?
         c->l_qseq : bam_cigar2qlen(aln->core.n_cigar, cigar);;
     if (qlen == 0) {
-        std::vector<uint32_t> new_cigar(cigar, cigar+c->n_cigar);
+        std::vector<uint32_t> new_cigar(cigar, cigar + c->n_cigar);
         return new_cigar;
-        // // qlen = bam_cigar2qlen(aln->core.n_cigar, cigar);
-        // for (int i = 0; i < aln->core.n_cigar; i++){
-        //     auto cigar_op_len = bam_cigar_oplen(cigar[i]);
-        //     auto cigar_op = bam_cigar_op(cigar[i]);
-        //     if (bam_cigar_type(cigar_op) & 1)
-        //         qlen += cigar_op_len;
-        // }
     }
 
     bool TMP_DEBUG = (verbose >= VERBOSE_DEV);
@@ -664,6 +657,8 @@ std::vector<uint32_t> ChainMap::lift_cigar_core(
                             }
                             if (diff > 0){
                                 std::cerr << "Error: illegal CIGAR update\n";
+                                std::vector<uint32_t> tmp_cigar(cigar, cigar + c->n_cigar);
+                                return tmp_cigar;
                             } else {
                                 push_cigar(new_cigar, -diff, BAM_CINS, false);
                                 second_half_len += diff;
@@ -677,8 +672,13 @@ std::vector<uint32_t> ChainMap::lift_cigar_core(
                                 std::cerr << "  update liftover CINS: " << -diff << bam_cigar_opchr(BAM_CINS) << "\n";
                         }
 
-                        break_points.pop();
-                        next_bp = std::get<0>(break_points.front());
+                        // Popping an empty queue results in undefined behaviors
+                        if (break_points.size() == 0){
+                            break;
+                        } else {
+                            break_points.pop();
+                            next_bp = std::get<0>(break_points.front());
+                        }
                     }
                     if (second_half_len < 0) {
                         tmp_gap = -second_half_len;
