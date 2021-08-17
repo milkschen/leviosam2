@@ -389,7 +389,7 @@ def read_sam_as_dict(fn: str) -> dict:
     f = pysam.AlignmentFile(fn, 'r')
     for read in f:
         if not read.is_paired:
-            segmend_idx = 0
+            segment_idx = 0
         else:
             if read.is_read1:
                 segment_idx = 0
