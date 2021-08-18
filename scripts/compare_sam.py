@@ -312,6 +312,8 @@ class CompareSamSummary():
                 show = (self.posdiff[i] > self.allowed_posdiff and 
                         self.posdiff[i] <= self.max_posdiff_reported)
                 show &= (self.identity[i] < self.identity_cutoff)
+            elif by == 'cigar':
+                show = not self.cigar_diff[i]
 
             if show:
                 query = rec[0]
@@ -356,6 +358,9 @@ class CompareSamSummary():
               file=f_out)
         # if self.num_err_printed > 1:
         #     self._print_records(f_out, by='idy')
+        print('## Average Identity', file=f_out)
+        avg_idy = sum([i for i in self.identity]) / len(self.identity)
+        print(f'{avg_idy:.6f}', file=f_out)
 
         print('## Position || Identity', file=f_out)
         num_pos_idy = sum([d >= self.identity_cutoff or (self.posdiff[i] >= 0 and self.posdiff[i] < self.allowed_posdiff) for i, d in enumerate(self.identity)])
@@ -371,6 +376,8 @@ class CompareSamSummary():
         print('## CIGAR', file=f_out)
         print((f'{self.cigar_diff.count(True) / len(self.cigar_diff):.6f} '
                f'({self.cigar_diff.count(True)}/{len(self.cigar_diff)})'), file=f_out)
+        if self.num_err_printed > 1:
+            self._print_records(f_out, by='cigar')
 
         print('## Unaligned', file=f_out)
         set_unaligned = set(self.unmapped_records[0] + self.unmapped_records[1])
