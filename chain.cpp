@@ -386,42 +386,17 @@ void ChainMap::lift_cigar(const std::string& contig, bam1_t* aln) {
         start_sidx, end_sidx, num_sclip_start);
 }
 
-
-/* Lift CIGAR
- * A fast version of `lift_cigar()`, which is used when auxiliary information 
- * including query start/end interval ranks and #clipped bases is available.
+/* Update a CIGAR string
  *
- * The CIGAR string is updated in two cases:
- *   (1) the start-/end-ing position of the segment is outside of an interval, where we set
- *       the overhangs as soft clipped
- *   (2) the segment overlaps one or more gaps between two valid intervals, where we update
- *       the CIGAR with INS or DEL operators
+ * Adjust the bam1_t struct when n_cigar is changed.
+ * `n_cigar` could either be increased or decreased.
+ * 
+ * TODO: move this to leviosam.hpp
  */
-void ChainMap::lift_cigar(
-    const std::string& contig, bam1_t* aln,
-    int start_sidx, int end_sidx, int num_clipped
+void ChainMap::update_cigar(
+    bam1_t* aln, std::vector<uint32_t> &new_cigar
 ) {
     uint32_t* cigar = bam_get_cigar(aln);
-    // If POS is inside an interval, `num_clipped` <= 0
-    if ((num_clipped <= 0) && (start_sidx == end_sidx)) {
-        // If in a reversed interval, reverse CIGAR
-        if (!interval_map[contig][start_sidx].strand) {
-            std::vector<uint32_t> new_cigar;
-            for (int i = 0; i < aln->core.n_cigar; i++)
-                new_cigar.push_back(cigar[i]);
-            for (int i = 0; i < aln->core.n_cigar; i++){
-                *(cigar + i) = new_cigar[aln->core.n_cigar - i - 1];
-            }
-        }
-        return;
-    }
-
-    auto new_cigar = lift_cigar_core(
-        contig, aln, num_clipped, start_sidx, end_sidx);
-
-    // Adjust data position when n_cigar is changed by levioSAM. n_cigar could either be
-    // increased or decreased.
-    //
     // Adapted from samtools/sam.c
     // https://github.com/samtools/htslib/blob/2264113e5df1946210828e45d29c605915bd3733/sam.c#L515
     if (aln->core.n_cigar != new_cigar.size()){
@@ -473,6 +448,97 @@ void ChainMap::lift_cigar(
     }
 }
 
+/* Lift CIGAR
+ * A fast version of `lift_cigar()`, which is used when auxiliary information 
+ * including query start/end interval ranks and #clipped bases is available.
+ *
+ * The CIGAR string is updated in two cases:
+ *   (1) the start-/end-ing position of the segment is outside of an interval, where we set
+ *       the overhangs as soft clipped
+ *   (2) the segment overlaps one or more gaps between two valid intervals, where we update
+ *       the CIGAR with INS or DEL operators
+ */
+void ChainMap::lift_cigar(
+    const std::string& contig, bam1_t* aln,
+    int start_sidx, int end_sidx, int num_clipped
+) {
+    uint32_t* cigar = bam_get_cigar(aln);
+    // If POS is inside an interval, `num_clipped` <= 0
+    if ((num_clipped <= 0) && (start_sidx == end_sidx)) {
+        // If in a reversed interval, reverse CIGAR
+        if (!interval_map[contig][start_sidx].strand) {
+            std::vector<uint32_t> new_cigar;
+            for (int i = 0; i < aln->core.n_cigar; i++)
+                new_cigar.push_back(cigar[i]);
+            for (int i = 0; i < aln->core.n_cigar; i++){
+                *(cigar + i) = new_cigar[aln->core.n_cigar - i - 1];
+            }
+        }
+        return;
+    }
+
+    auto new_cigar = lift_cigar_core(
+        contig, aln, num_clipped, start_sidx, end_sidx);
+
+    update_cigar(aln, new_cigar);
+
+    bool comment = true;
+    if (comment) {
+        // Adjust data position when n_cigar is changed by levioSAM. n_cigar could either be
+        // increased or decreased.
+        //
+        // Adapted from samtools/sam.c
+        // https://github.com/samtools/htslib/blob/2264113e5df1946210828e45d29c605915bd3733/sam.c#L515
+        if (aln->core.n_cigar != new_cigar.size()){
+            auto cigar_st = (uint8_t*)bam_get_cigar(aln) - aln->data;
+            auto fake_bytes = aln->core.n_cigar * 4;
+            aln->core.n_cigar = (uint32_t)new_cigar.size();
+            auto n_cigar4 = aln->core.n_cigar * 4;
+            auto orig_len = aln->l_data;
+            if (n_cigar4 > fake_bytes){
+                // Check if we need to update `aln->m_data`.
+                //
+                // Adapted from htslib/sam_internal.h
+                // https://github.com/samtools/htslib/blob/31f0a76d338c9bf3a6893b71dd437ef5fcaaea0e/sam_internal.h#L48
+                auto new_m_data = (size_t) aln->l_data + n_cigar4 - fake_bytes;
+                kroundup32(new_m_data);
+                if (new_m_data > aln->m_data){
+                    auto new_data = static_cast<uint8_t *>(realloc(aln->data, new_m_data));
+                    if (!new_data){
+                        std::cerr << "[Error] Failed to expand a bam1_t struct for " << bam_get_qname(aln) << "\n";
+                        std::cerr << "This is likely due to out of memory\n";
+                        exit(1);
+                    }
+                    aln->data = new_data;
+                    aln->m_data = new_m_data;
+                    cigar = bam_get_cigar(aln);
+                }
+            }
+            // Update memory usage of data.
+            aln->l_data = aln->l_data - fake_bytes + n_cigar4;
+            // Move data to the correct place.
+            memmove(aln->data + cigar_st + n_cigar4,
+                    aln->data + cigar_st + fake_bytes,
+                    orig_len - (cigar_st + fake_bytes));
+            // If new n_cigar is greater, copy the real CIGAR to the right place.
+            // Skipped this if new n_cigar is smaller than the original value.
+            if (n_cigar4 > fake_bytes){
+                memcpy(aln->data + cigar_st,
+                    aln->data + (n_cigar4 - fake_bytes) + 8,
+                    n_cigar4);
+            }
+            aln->core.n_cigar = new_cigar.size();
+        }
+        for (int i = 0; i < aln->core.n_cigar; i++){
+            *(cigar + i) = new_cigar[i];
+        }
+        if (verbose > VERBOSE_DEBUG) {
+            std::cerr << "* new: ";
+            debug_print_cigar(bam_get_cigar(aln), aln->core.n_cigar);
+        }
+    }
+}
+
 /* Update a cigar vector
  * It is essentially equivalent with 
  * `cigar.push_back(bam_cigar_gen(len, op));`
@@ -485,35 +551,43 @@ void ChainMap::lift_cigar(
  */
 void ChainMap::push_cigar(
     std::vector<uint32_t> &cigar, uint32_t len,
-    uint16_t op, const bool no_reduct
+    uint16_t op, const bool no_reduct=false
 ) {
+    if (len == 0)
+        return;
     if (cigar.size() == 0 || no_reduct) {
         cigar.push_back(bam_cigar_gen(len, op));
         return;
     }
-    auto back = cigar.back();
-    auto back_type = bam_cigar_type(bam_cigar_op(back));
+    auto back_op = bam_cigar_op(cigar.back());
+    auto back_type = bam_cigar_type(back_op);
+    auto back_len = bam_cigar_oplen(cigar.back());
     auto op_type = bam_cigar_type(op);
     // If operators are the same, merge
     // We also merge S-I/I-S cases
     // We don't merge N-D, H-P because they might mean differently
-    if (bam_cigar_op(back) == op || (back_type == 1 && op_type == 1)) {
-        len += bam_cigar_oplen(back);
-        cigar.back() = bam_cigar_gen(len, op);
+    if (back_op == op || (back_type == 1 && op_type == 1)) {
+        len += back_len;
+        cigar.back() = bam_cigar_gen(len, back_op);
     // Cancel out complementary operators
     } else if ((back_type == 2 && op_type == 1) ||
                (back_type == 1 && op_type == 2)) {
-        auto blen = bam_cigar_oplen(back);
-        if (len == blen) {
+        // TODO: need more validation
+        // For cases S-D, we ignore Ds, since deletions don't 
+        // contribute to either the alignment or the position 
+        // in soft-clipped regions.
+        if (back_op == BAM_CSOFT_CLIP) {
+            return;
+        } if (len == back_len) {
             cigar.pop_back();
-            cigar.push_back(bam_cigar_gen(len, BAM_CMATCH));
-        } else if (len > blen){
-            len -= blen;
-            cigar.back() = bam_cigar_gen(blen, BAM_CMATCH);
+            push_cigar(cigar, len, BAM_CMATCH, false);
+        } else if (len > back_len){
+            len -= back_len;
+            cigar.back() = bam_cigar_gen(back_len, BAM_CMATCH);
             cigar.push_back(bam_cigar_gen(len, op));
         } else {
-            blen -= len;
-            cigar.back() = bam_cigar_gen(blen, bam_cigar_op(back));
+            back_len -= len;
+            cigar.back() = bam_cigar_gen(back_len, back_op);
             cigar.push_back(bam_cigar_gen(len, BAM_CMATCH));
         }
     } else
@@ -583,10 +657,36 @@ std::vector<uint32_t> ChainMap::lift_cigar_core(
         if (verbose >= VERBOSE_DEBUG) {
             std::cerr << "  OP=" << cigar_op << ", OP_LEN=" << cigar_op_len << "\n";
         }
+        // We first handle soft clipped bases
+        if (num_clipped > 0) {
+            // Only replace bases that consume the QUERY with the SOFT_CLIP ("S") operator
+            if (bam_cigar_type(cigar_op) & 1) {
+                // If there are bases need clipping, check if this OP has enough bases to clip:
+                //   If so, add soft clippings ("S") and update the length of the current OP
+                //   If not, cancel out OPLEN bases of clippings
+                if (cigar_op_len >= num_clipped) {
+                    cigar_op_len -= num_clipped;
+                    push_cigar(new_cigar, num_clipped + tmp_clipped, BAM_CSOFT_CLIP, false);
+                    query_offset += num_clipped + tmp_clipped;
+                    num_clipped = 0;
+                    tmp_clipped = 0;
+                    if (cigar_op_len == 0)
+                        continue;
+                } else {
+                    tmp_clipped += cigar_op_len;
+                    num_clipped -= cigar_op_len;
+                    continue;
+                }
+            }
+        }
+        // Note this cannot be an "else if" - there are cases where
+        // some bases in a CIGAR run is clipped, but the remaining ones
+        // have not yet processed
         if (num_clipped == 0) {
             // If within one interval, update CIGAR and jump to the next CIGAR operator
             if (start_sidx == end_sidx) {
-                push_cigar(new_cigar, cigar_op_len, cigar_op, true);
+                push_cigar(new_cigar, cigar_op_len, cigar_op, false);
+                // push_cigar(new_cigar, cigar_op_len, cigar_op, true);
                 continue;
             }
 
@@ -699,45 +799,12 @@ std::vector<uint32_t> ChainMap::lift_cigar_core(
             }
             continue;
         }
-
-        // Handle soft clipped bases
-        // Only replace bases that consume the QUERY with the SOFT_CLIP ("S") operator
-        if (bam_cigar_type(cigar_op) & 1) {
-            // If there are bases need clipping, check if this OP has enough bases to clip:
-            //   If so, add soft clippings ("S") and update the length of the current OP
-            //   If not, cancel out OPLEN bases of clippings
-            if (cigar_op_len >= num_clipped) {
-                cigar_op_len -= num_clipped;
-                push_cigar(new_cigar, num_clipped + tmp_clipped, BAM_CSOFT_CLIP, false);
-                query_offset += num_clipped + tmp_clipped;
-                num_clipped = 0;
-                tmp_clipped = 0;
-                if (cigar_op_len > 0) {
-                    push_cigar(new_cigar, cigar_op_len, cigar_op, false);
-                    query_offset += cigar_op_len;
-                }
-            } else {
-                tmp_clipped += cigar_op_len;
-                num_clipped -= cigar_op_len;
-            }
-        }
-        // } else {
-        //     if (cigar_op_len <= num_clipped) {
-        //         tmp_clipped -= cigar_op_len;
-        //         num_clipped += cigar_op_len;
-        //     } else {
-        //         new_cigar.push_back(
-        //             bam_cigar_gen(cigar_op_len - num_clipped, cigar_op));
-        //     }
-        // }
-    }
-    if (verbose > VERBOSE_DEBUG) {
-        std::cerr << "  len(new_cigar) = " << new_cigar.size() << "\n";
     }
     if (!interval_map[contig][start_sidx].strand) {
         std::reverse(new_cigar.begin(), new_cigar.end());
     }
     if (verbose > VERBOSE_DEBUG) {
+        std::cerr << "  len(new_cigar) = " << new_cigar.size() << "\n";
         debug_print_cigar(&new_cigar[0], new_cigar.size());
     }
     return new_cigar;
