@@ -73,19 +73,12 @@ class ChainMap {
         );
 
         size_t lift_pos(std::string contig, size_t pos);
-        // size_t lift_pos(
-        //     std::string contig, size_t pos,
-        //     int start_sidx, int end_intvl_idx);
-
-        bool lift_segment(
-            bam1_t* aln, bam_hdr_t* hdr,
-            bool first_seg, std::string &dest_contig);
         int32_t get_num_clipped(
             const int32_t pos, const bool leftmost,
             const std::string &contig, int32_t &sidx, int32_t &eidx);
-        // bool is_liftable(
-        //     std::string contig, size_t pos,
-        //     int &start_sidx, int &end_intvl_idx);
+        bool lift_segment(
+            bam1_t* aln, bam_hdr_t* hdr,
+            bool first_seg, std::string &dest_contig);
         void lift_aln(
             bam1_t* aln,
             bam_hdr_t* hdr,
