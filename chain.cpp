@@ -908,6 +908,8 @@ void ChainMap::lift_aln(
     bam1_t* aln, bam_hdr_t* hdr, std::string &dest_contig
 ) {
     bam1_core_t* c = &(aln->core);
+    size_t pos = c->pos;
+    size_t mpos = c->mpos;
 
     if (verbose > 1) {
         std::cerr << "\n" << bam_get_qname(aln) << " (" << c->flag << ")\n";
@@ -922,8 +924,6 @@ void ChainMap::lift_aln(
 
     // Paired
     if (c->flag & BAM_FPAIRED) {
-        size_t pos = c->pos;
-        size_t mpos = c->mpos;
         std::string mdest_contig;
         bool r2_liftable = lift_segment(aln, hdr, false, mdest_contig);
         if (!r2_liftable)
@@ -991,12 +991,17 @@ void ChainMap::lift_aln(
                 lo = "UL_UL";
             }
         }
-        // TODO consider STRAND
-        c->isize = 
-            (lift_status != LIFT_R1_L_R2_L)? 0 : // If any is unliftable/unmapped, set isize to 0
-            (c->isize == 0)? 0 : 
-            (c->tid != c->mtid)? 0 : 
-                c->isize + (mpos - c->mpos) - (pos - c->pos);
+        // Lift the TLEN (c->isize) field
+        if ((lift_status != LIFT_R1_L_R2_L) || // If any is unliftable/unmapped
+            (c->isize == 0) || // The reads were originally not paired properly
+            (c->tid != c->mtid)) // Mismatched contigs
+            // !(c->flag & 2)) // Not properly paired
+        { 
+            c->isize = 0;
+        } else {
+            c->isize = c->isize + (mpos - c->mpos) - (pos - c->pos);
+        }
+
     // Unpaired
     } else {
         if (c->flag & BAM_FUNMAP) {
