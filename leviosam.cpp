@@ -79,22 +79,21 @@ void read_and_lift(
     T* lift_map,
     std::mutex* mutex_fread,
     std::mutex* mutex_fwrite,
-    std::mutex* mutex_vec,
     samFile* sam_fp,
     samFile* out_sam_fp,
     bam_hdr_t* hdr,
     int chunk_size,
-    std::vector<std::string>* unrecorded_contigs,
-    std::map<std::string, std::string>* ref_dict,
+    const std::map<std::string, std::string> &ref_dict,
     int md_flag
 ){
-    std::string ref_name;
+    std::string current_contig;
     std::vector<bam1_t*> aln_vec;
     for (int i = 0; i < chunk_size; i++){
         bam1_t* aln = bam_init1();
         aln_vec.push_back(aln);
     }
     int read = 1;
+    std::string ref;
     while (read >= 0){
         int num_actual_reads = chunk_size;
         {
@@ -109,36 +108,27 @@ void read_and_lift(
             }
         }
         for (int i = 0; i < num_actual_reads; i++){
-            std::string dest_contig;
-            lift_map->lift_aln(aln_vec[i], hdr, dest_contig);
-                // md_flag, ref_name,
-                // ref_dict);
-            //lift_aln<T>(
-            //    aln_vec[i],
-            //    lift_map,
-            //    hdr,
-            //    md_flag, ref_name,
-            //    ref_dict,
-            //    unrecorded_contigs,
-            //    mutex_vec);
-            std::string ref;
+            // TODO: Plan to remove `null_dest_contig`.
+            // Need to test scenarios with `NameMap`
+            std::string null_dest_contig;
+            lift_map->lift_aln(aln_vec[i], hdr, null_dest_contig);
             if (md_flag) {
-                // change ref if needed
-                if (dest_contig != ref_name) {
-                    ref = (*ref_dict)[dest_contig];
+                auto tid = aln_vec[i]->core.tid;
+                if (tid == -1) {
+                    LevioSamUtils::remove_mn_md_tag(aln_vec[i]);
+                } else {
+                    std::string dest_contig(hdr->target_name[aln_vec[i]->core.tid]);
+                    // change ref if needed
+                    if (dest_contig != current_contig) {
+                        ref = ref_dict.at(dest_contig);
+                        current_contig = dest_contig;
+                    }
+                    bam_fillmd1(aln_vec[i], ref.data(), md_flag, 1);
                 }
-                bam_fillmd1(aln_vec[i], ref.data(), md_flag, 1);
             }
             else { // strip MD and NM tags if md_flag not set bc the liftover invalidates them
-                uint8_t* ptr = NULL;
-                if ((ptr = bam_aux_get(aln_vec[i], "MD")) != NULL) {
-                    bam_aux_del(aln_vec[i], ptr);
-                }
-                if ((ptr = bam_aux_get(aln_vec[i], "NM")) != NULL) {
-                    bam_aux_del(aln_vec[i], bam_aux_get(aln_vec[i], "NM"));
-                }
+                LevioSamUtils::remove_mn_md_tag(aln_vec[i]);
             }
-            ref_name = dest_contig;
         }
         {
             // write to file, thread corruption protected by lock_guard
@@ -260,28 +250,30 @@ void lift_run(lift_opts args) {
 
     // Store chromosomes found in SAM but not in the VCF.
     // We use a vector to avoid printing out the same warning msg multiple times.
-    std::vector<std::string> unrecorded_contigs;
+    // std::vector<std::string> unrecorded_contigs;
     const int num_threads = args.threads;
     const int chunk_size = args.chunk_size;
     std::vector<std::thread> threads;
-    std::mutex mutex_fread, mutex_fwrite, mutex_vec;
+    std::mutex mutex_fread, mutex_fwrite;
     for (int j = 0; j < num_threads; j++){
         if (args.chain_fname == "" && args.chainmap_fname == "") {
             threads.push_back(
                 std::thread(
                     read_and_lift<lift::LiftMap>,
                     &lift_map,
-                    &mutex_fread, &mutex_fwrite, &mutex_vec,
+                    &mutex_fread, &mutex_fwrite,
                     sam_fp, out_sam_fp, hdr, chunk_size,
-                    &unrecorded_contigs, &ref_dict, args.md_flag));
+                    // &unrecorded_contigs, 
+                    ref_dict, args.md_flag));
         } else {
             threads.push_back(
                 std::thread(
                     read_and_lift<chain::ChainMap>,
                     &chain_map,
-                    &mutex_fread, &mutex_fwrite, &mutex_vec,
+                    &mutex_fread, &mutex_fwrite,
                     sam_fp, out_sam_fp, hdr, chunk_size,
-                    &unrecorded_contigs, &ref_dict, args.md_flag));
+                    // &unrecorded_contigs, 
+                    ref_dict, args.md_flag));
         }
     }
     for (int j = 0; j < num_threads; j++){
@@ -290,21 +282,6 @@ void lift_run(lift_opts args) {
     }
     threads.clear();
     sam_close(out_sam_fp);
-}
-
-
-lift::LiftMap lift::lift_from_vcf(std::string fname, 
-                            std::string sample, 
-                            std::string haplotype, 
-                            NameMap names, LengthMap lengths) {
-    if (fname == "" && sample == "") {
-        fprintf(stderr, "vcf file name and sample name are required!! \n");
-        print_serialize_help_msg();
-        exit(1);
-    }
-    vcfFile* fp = bcf_open(fname.data(), "r");
-    bcf_hdr_t* hdr = bcf_hdr_read(fp);
-    return lift::LiftMap(fp, hdr, sample, haplotype, names, lengths);
 }
 
 
@@ -358,7 +335,8 @@ void print_lift_help_msg(){
     fprintf(stderr, "                   Setting a higher <-T> uses slightly more memory but might benefit thread scaling.\n");
     fprintf(stderr, "         -m        add MD and NM to output alignment records (requires -f option)\n");
     fprintf(stderr, "         -f string Fasta reference that corresponds to input SAM/BAM (for use w/ -m option)\n");
-    fprintf(stderr, "         The options for serialize can also be used here, if -v is set.\n");
+    fprintf(stderr, "         -S string Split the aligned reads with an indicator. Options: mapq, none. [none]\n");
+    fprintf(stderr, "         The options for serialize can also be used here, if -v/-c is set.\n");
     fprintf(stderr, "\n");
 }
 
@@ -393,12 +371,13 @@ int main(int argc, char** argv) {
         {"out_format", required_argument, 0, 'O'},
         {"prefix", required_argument, 0, 'p'},
         {"sample", required_argument, 0, 's'},
+        {"split_mode", required_argument, 0, 'S'},
         {"threads", required_argument, 0, 't'},
         {"chunk_size", required_argument, 0, 'T'},
         {"verbose", required_argument, 0, 'V'},
     };
     int long_index = 0;
-    while((c = getopt_long(argc, argv, "hmv:a:c:C:f:g:G:k:l:n:O:p:s:t:T:V:", long_options, &long_index)) != -1) {
+    while((c = getopt_long(argc, argv, "hmv:a:c:C:f:g:G:k:l:n:O:p:s:S:t:T:V:", long_options, &long_index)) != -1) {
         switch (c) {
             case 'v':
                 args.vcf_fname = optarg;
@@ -446,6 +425,9 @@ int main(int argc, char** argv) {
                 break;
             case 's':
                 args.sample = optarg;
+                break;
+            case 'S':
+                args.split_mode = optarg;
                 break;
             case 't':
                 args.threads = atoi(optarg);

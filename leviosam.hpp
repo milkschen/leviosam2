@@ -53,6 +53,7 @@ struct lift_opts {
     std::string sam_fname = "";
     std::string cmd = "";
     std::string haplotype = "0";
+    std::string split_mode = "none";
     int allowed_cigar_changes = 10;
     int threads = 1;
     int chunk_size = 256;
@@ -75,6 +76,10 @@ struct lift_opts {
 #define LIFT_R1_UM_R2_L     9   // paired, R1 unmapped, R2 liftable
 #define LIFT_R1_UM_R2_UL    10  // paired, R1 unmapped, R2 un-liftable
 #define LIFT_R1_UM_R2_UM    11  // paired, R1 unmapped, R2 unmapped
+
+void print_main_help_msg();
+void print_lift_help_msg();
+void print_serialize_help_msg();
 
 namespace lift {
 // Serialization
@@ -624,9 +629,6 @@ class LiftMap {
         bam1_t* aln,
         bam_hdr_t* hdr,
         std::string &dest_contig
-        // bool md_flag,
-        // std::string &ref_name,
-        // std::map<std::string, std::string>* ref_dict
     ) {
         bam1_core_t c = aln->core;
         size_t pos;
@@ -746,13 +748,20 @@ class LiftMap {
 
 LiftMap lift_from_vcf(
     std::string fname, std::string sample, 
-    std::string haplotype, NameMap names, LengthMap lengths
-);
+    std::string haplotype, 
+    NameMap names, LengthMap lengths
+) {
+    if (fname == "" && sample == "") {
+        fprintf(stderr, "vcf file name and sample name are required!! \n");
+        print_serialize_help_msg();
+        exit(1);
+    }
+    vcfFile* fp = bcf_open(fname.data(), "r");
+    bcf_hdr_t* hdr = bcf_hdr_read(fp);
+    return LiftMap(fp, hdr, sample, haplotype, names, lengths);
+}
 
 };
 
-void print_main_help_msg();
-void print_lift_help_msg();
-void print_serialize_help_msg();
 
 #endif
