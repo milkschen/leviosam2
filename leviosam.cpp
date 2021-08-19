@@ -56,7 +56,7 @@ void serialize_run(lift_opts args) {
     }
     if (args.verbose) std::cerr << "verbose\n";
     if (args.vcf_fname != "") {
-        lift::LiftMap l(lift_from_vcf(
+        lift::LiftMap l(lift::lift_from_vcf(
             args.vcf_fname, args.sample, args.haplotype,
             args.name_map, args.length_map));
         std::ofstream o(args.outpre + ".lft", std::ios::binary);
@@ -72,84 +72,6 @@ void serialize_run(lift_opts args) {
         exit(1);
     }
 }
-
-
-// TODO: to be removed
-// Lift over an alignment. Lifted information will be updated in the htslib aln object.
-// template <class T>
-// void _lift_aln(
-//     bam1_t* aln,
-//     T* lift_map,
-//     bam_hdr_t* hdr,
-//     bool md_flag,
-//     std::string &ref_name,
-//     std::map<std::string, std::string>* ref_dict,
-//     std::vector<std::string>* unrecorded_contigs,
-//     std::mutex* mutex_vec
-// ) {
-//     bam1_core_t c = aln->core;
-//     std::string dest_contig, source_contig;
-//     size_t pos;
-//     std::string ref;
-//     // If a read is mapped, lift its position.
-//     if (!(c.flag & BAM_FUNMAP)) {
-//         source_contig = hdr->target_name[c.tid];
-//         dest_contig = lift_map->lift_contig(source_contig, c.pos);
-//         // unrecorded_contigs needs to be protected because unrecorded_contigs is shared
-//         pos = lift_map->lift_pos(
-//             source_contig, c.pos, unrecorded_contigs, mutex_vec);
-//         // std::cerr << dest_contig << " " << pos << "\n";
-//         // CIGAR
-//         lift_map->lift_cigar(source_contig, aln);
-//         aln->core.pos = pos;
-//     // If a read is unmapped, but its mate is mapped, lift its mates position.
-//     // Otherwise leave it unchanged.
-//     } else if ((c.flag & BAM_FPAIRED) && !(c.flag & BAM_FMUNMAP)) {
-//         source_contig = hdr->target_name[c.mtid];
-//         dest_contig = lift_map->lift_contig(source_contig, c.mpos);
-//         // unrecorded_contigs needs to be protected because unrecorded_contigs is shared
-//         pos = lift_map->lift_pos(
-//             source_contig, c.mpos, unrecorded_contigs, mutex_vec);
-//         aln->core.pos = pos;
-//     }
-//     // Lift mate position.
-//     if (c.flag & BAM_FPAIRED) {
-//         // If the mate is unmapped, use the lifted position of the read.
-//         if (c.flag & BAM_FMUNMAP){
-//             aln->core.mpos = aln->core.pos;
-//         // If the mate is mapped, lift its position.
-//         } else {
-//             std::string msource_contig(hdr->target_name[c.mtid]);
-//             // std::cerr << "msource_contig: " << msource_contig << " mpos: " << c.mpos << "\n";
-//             std::string mdest_contig(lift_map->lift_contig(msource_contig, c.mpos));
-//             c.mtid = sam_hdr_name2tid(hdr, mdest_contig.c_str());
-//             // std::cerr << "mtid " << c.mtid << "\n";
-//             size_t mpos = lift_map->lift_pos(msource_contig, c.mpos, unrecorded_contigs, mutex_vec);
-//             // std::cerr << "mpos " << mpos << "\n";
-//             aln->core.mpos = mpos;
-//             // std::cerr << mdest_contig << " " << aln->core.mpos << "\n";
-//             int isize = (c.isize == 0)? 0 : c.isize + (mpos - c.mpos) - (pos - c.pos);
-//             aln->core.isize = isize;
-//         }
-//     }
-//     if (md_flag) {
-//         // change ref if needed
-//         if (dest_contig != ref_name) {
-//             ref = (*ref_dict)[dest_contig];
-//         }
-//         bam_fillmd1(aln, ref.data(), md_flag, 1);
-//     }
-//     else { // strip MD and NM tags if md_flag not set bc the liftover invalidates them
-//         uint8_t* ptr = NULL;
-//         if ((ptr = bam_aux_get(aln, "MD")) != NULL) {
-//             bam_aux_del(aln, ptr);
-//         }
-//         if ((ptr = bam_aux_get(aln, "NM")) != NULL) {
-//             bam_aux_del(aln, bam_aux_get(aln, "NM"));
-//         }
-//     }
-//     ref_name = dest_contig;
-// }
 
 
 template <class T>
@@ -257,9 +179,13 @@ void lift_run(lift_opts args) {
     chain::ChainMap chain_map = [&] {
         if (args.chainmap_fname != "") {
             std::ifstream in(args.chainmap_fname, std::ios::binary);
-            return chain::ChainMap(in, args.verbose, args.allowed_cigar_changes);
+            return chain::ChainMap(
+                in, args.verbose, args.allowed_cigar_changes
+            );
         } else if (args.chain_fname != ""){
-            return chain::ChainMap(args.chain_fname, args.verbose, args.allowed_cigar_changes);
+            return chain::ChainMap(
+                args.chain_fname, args.verbose, args.allowed_cigar_changes
+            );
         } else {
             return chain::ChainMap();
         }
@@ -270,11 +196,14 @@ void lift_run(lift_opts args) {
             return lift::LiftMap(in);
         // if "-l" not specified, then create a levioSAM
         } else if (args.vcf_fname != "") {
-            return lift::LiftMap(lift_from_vcf(args.vcf_fname, args.sample, args.haplotype, args.name_map, args.length_map));
+            return lift::LiftMap(
+                lift::lift_from_vcf(
+                    args.vcf_fname, args.sample, args.haplotype,
+                    args.name_map, args.length_map)
+            );
         } else if ((args.chain_fname != "") || (args.chainmap_fname != "")) {
             return lift::LiftMap();
         } else {
-        // } else {
             fprintf(stderr, "Not enough parameters specified to build/load lift-over\n");
             print_lift_help_msg();
             exit(1);
@@ -364,7 +293,7 @@ void lift_run(lift_opts args) {
 }
 
 
-lift::LiftMap lift_from_vcf(std::string fname, 
+lift::LiftMap lift::lift_from_vcf(std::string fname, 
                             std::string sample, 
                             std::string haplotype, 
                             NameMap names, LengthMap lengths) {

@@ -6,11 +6,8 @@
 #include <sdsl/bit_vectors.hpp>
 #include <sdsl/util.hpp>
 #include <htslib/sam.h>
-#include "leviosam.hpp"
 
 namespace chain {
-void debug_print_cigar(uint32_t* cigar, size_t n_cigar);
-
 /* Chain interval object
  * Each interval is a gapless alignment between the source and the dest references.
  */
@@ -69,9 +66,6 @@ class ChainMap {
         void lift_cigar(
             const std::string &contig, bam1_t* aln,
             int start_sidx, int end_sidx, int num_clipped
-        );
-        void update_cigar(
-            bam1_t* aln, std::vector<uint32_t> &new_cigar
         );
         std::vector<uint32_t> lift_cigar_core(
             const std::string &contig, bam1_t* aln, int num_clipped,

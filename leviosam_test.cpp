@@ -425,3 +425,8 @@ TEST(HtslibTest, CigarOpType) {
     EXPECT_EQ(typeS & 2, 0);
     EXPECT_EQ(typeS & 3, 1);
 }
+
+int main(int argc, char **argv){
+    testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
+}
