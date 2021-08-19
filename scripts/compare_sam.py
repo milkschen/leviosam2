@@ -168,6 +168,7 @@ class CompareSamSummary():
         self.unmapped_records = [[], []]
         self.invalid_records = [[], []] # MAPQ = 255
         self.identity = []
+        self.tlendiff = []
 
         self.allowed_posdiff = allowed_posdiff
         self.identity_cutoff = identity_cutoff
@@ -220,7 +221,6 @@ class CompareSamSummary():
         
         return idy / query.infer_read_length()
 
-
     '''
     Calculate the difference of the leftmost aligned positions between query and baseline.
     If query and baseline are aligned to different contigs, return -1.
@@ -229,6 +229,17 @@ class CompareSamSummary():
     def _calc_posdiff(self, query: pysam.AlignedSegment, baseline: pysam.AlignedSegment) -> int:
         if query.reference_name == baseline.reference_name:
             return abs(query.reference_start - baseline.reference_start)
+        else:
+            return -1
+    
+    '''
+    Calculate the difference of TLEN between query and baseline.
+    If query and baseline are aligned to different contigs, return -1.
+    Otherwise results are always >= 0.
+    '''
+    def _calc_tlendiff(self, query: pysam.AlignedSegment, baseline: pysam.AlignedSegment) -> int:
+        if query.reference_name == baseline.reference_name:
+            return abs(query.template_length - baseline.template_length)
         else:
             return -1
 
@@ -295,6 +306,7 @@ class CompareSamSummary():
         self.mapq_diff.append(query.mapping_quality - baseline.mapping_quality)
         self.cigar_diff.append(query.cigarstring == baseline.cigarstring)
         self.identity.append(self._calc_identity(query, baseline))
+        self.tlendiff.append(self._calc_tlendiff(query, baseline))
 
     ''' Report summary results '''
     def _print_records(self, f_out, by='pos') -> None:
@@ -314,6 +326,8 @@ class CompareSamSummary():
                 show &= (self.identity[i] < self.identity_cutoff)
             elif by == 'cigar':
                 show = not self.cigar_diff[i]
+            elif by == 'tlen':
+                show = (self.tlendiff[i] >= 50 and self.tlendiff[i] >= 0)
 
             if show:
                 query = rec[0]
@@ -322,12 +336,14 @@ class CompareSamSummary():
                     '    '
                     f'{query.flag:5d}\t{query.reference_name:6s}\t'
                     f'{query.reference_start+1:10d}\t'
-                    f'{query.mapping_quality:3d}\t{query.cigarstring}')
+                    f'{query.mapping_quality:3d}\t{query.cigarstring}\t'
+                    f'{query.template_length}')
                 msg_baseline = (
                     '    '
                     f'{baseline.flag:5d}\t{baseline.reference_name:6s}\t'
                     f'{baseline.reference_start+1:10d}\t'
-                    f'{baseline.mapping_quality:3d}\t{baseline.cigarstring}')
+                    f'{baseline.mapping_quality:3d}\t{baseline.cigarstring}\t'
+                    f'{baseline.template_length}')
                 print(f'{query.query_name}', file=f_out)
                 print(f'  p_diff = {self.posdiff[i]:<10d}\t{msg_query}', file=f_out)
                 print(f'  idy    = {self.identity[i]:.4f}\t{msg_baseline}', file=f_out)
@@ -378,6 +394,14 @@ class CompareSamSummary():
                f'({self.cigar_diff.count(True)}/{len(self.cigar_diff)})'), file=f_out)
         if self.num_err_printed > 1:
             self._print_records(f_out, by='cigar')
+        
+        print('## TLEN', file=f_out)
+        num_tlen_match = sum([i <= 50 and i >= 0 for i in self.tlendiff])
+        print(f'{num_tlen_match / len(self.tlendiff):.6f} '
+              f'({num_tlen_match}/{len(self.tlendiff)})',
+              file=f_out)
+        if self.num_err_printed > 1:
+            self._print_records(f_out, by='tlen')
 
         print('## Unaligned', file=f_out)
         set_unaligned = set(self.unmapped_records[0] + self.unmapped_records[1])
