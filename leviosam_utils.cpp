@@ -66,4 +66,12 @@ void LevioSamUtils::debug_print_cigar(
     std::cerr << "\n";
 }
 
-
+void LevioSamUtils::remove_mn_md_tag(bam1_t* aln) {
+    uint8_t* ptr = NULL;
+    if ((ptr = bam_aux_get(aln, "MD")) != NULL) {
+        bam_aux_del(aln, ptr);
+    }
+    if ((ptr = bam_aux_get(aln, "NM")) != NULL) {
+        bam_aux_del(aln, bam_aux_get(aln, "NM"));
+    }
+}
