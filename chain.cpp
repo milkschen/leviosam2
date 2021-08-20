@@ -280,6 +280,8 @@ void ChainMap::parse_chain_line(
             strand = (vec[4] == vec[9]);
             source_offset = stoi(vec[5]);
             target_offset = (strand)? stoi(vec[10]) : target_len - stoi(vec[10]);
+            length_map.insert(
+                std::pair<std::string, int32_t>(source, source_len));
             init_bitvectors(source, source_len, start_bv_map, end_bv_map);
         } else if (vec[0] != "") {
             int32_t s_int_start = source_offset;
@@ -1064,6 +1066,19 @@ size_t ChainMap::serialize(std::ofstream& out) {
         size += sizeof(str_size) + str_size;
         size += x.second.serialize(out);
     }
+
+    // length_map
+    std::cerr << "serializing length_maps...\n";
+    nelems = length_map.size();
+    out.write(reinterpret_cast<char*>(&nelems), sizeof(nelems));
+    size += sizeof(nelems);
+    for (auto& x: length_map) {
+        size_t str_size = x.first.size();
+        out.write(reinterpret_cast<char*>(&str_size), sizeof(str_size));
+        out.write(reinterpret_cast<const char*>(x.first.data()), str_size);
+        out.write(reinterpret_cast<char*>(&x.second), sizeof(x.second));
+        size += sizeof(str_size) + str_size + sizeof(x.second);
+    }
     return size;
 }
 
@@ -1110,6 +1125,20 @@ void ChainMap::load(std::ifstream& in) {
         sdsl::sd_vector<> sdv;
         sdv.load(in);
         end_map[key] = sdv;
+    }
+    if (verbose > 2)
+        std::cerr << "Reading length map...\n";
+    in.read(reinterpret_cast<char*>(&map_size), sizeof(map_size));
+    for (auto i = 0; i < map_size; ++i) {
+        size_t str_size;
+        in.read(reinterpret_cast<char*>(&str_size), sizeof(str_size));
+        std::vector<char> buf(str_size);
+        in.read(reinterpret_cast<char*>(buf.data()), str_size);
+        std::string key(buf.begin(), buf.end());
+        int32_t value;
+        in.read(reinterpret_cast<char*>(&value), sizeof(value));
+        length_map.insert(
+            std::pair<std::string, int32_t>(key, value));
     }
     if (verbose > 2)
         std::cerr << "Initialize BVs...\n";
@@ -1159,6 +1188,63 @@ void ChainMap::debug_print_interval_queries(
     std::cerr << "    start: " << sidx << "\n    ";
     interval_map[contig][sidx].debug_print_interval();
     std::cerr << "    end  : " << eidx << "\n";
+}
+
+/* Prepare SAM headers using the ChainMap structure
+ * Contig lengths are updated if needed.
+ */
+bam_hdr_t* ChainMap::bam_hdr_from_chainmap(
+    samFile* sam_fp
+) {
+    // We need the header of the original SAM because the aligned data
+    // is based on this index system
+    bam_hdr_t* hdr = sam_hdr_read(sam_fp);
+    // For the contigs that don't appear in the chain file, we set their
+    // lengths to zero. There can be alignments based on the contigs in 
+    // the source SAM/BAM file, so we cannot remove them at this point.
+    for (auto i = 0; i < hdr->n_targets; i++) {
+        auto find_map = length_map.find (hdr->target_name[i]);
+        if (find_map == length_map.end()) {
+            if (sam_hdr_update_line(
+                hdr, "SQ", 
+                "SN", hdr->target_name[i],
+                "LN", "0",
+                NULL) == -1
+            ) {
+                std::cerr << "[Error] failed when attempting to convert the length "
+                          << "of contig " << hdr->target_name[i] << ", which doesn't appear in "
+                          << "the ChainMap, to zero.\n";
+                exit(1);
+            }
+        }
+    }
+    // For new contigs that don't appear in the original header, we append them;
+    // for existing contigs, we update the lengths.
+    for (auto& x: length_map) {
+        std::string l = std::to_string(x.second);
+        int sam_hdr_return = 1;
+        if (sam_hdr_name2tid(hdr, x.first.data()) < 0) {
+            sam_hdr_return = sam_hdr_add_line(
+                hdr, "SQ", 
+                "SN", x.first.data(),
+                "LN", l.data(),
+                NULL
+            );
+        } else {
+            sam_hdr_return = sam_hdr_update_line(
+                hdr, "SQ", 
+                "SN", x.first.data(),
+                "LN", l.data(),
+                NULL
+            );
+        }
+        if (sam_hdr_return < 0) {
+            std::cerr << "[Error] failed when converting contig length for "
+                      << x.first << ": " << x.second << "\n";
+            exit(1);
+        }
+    }
+    return hdr;
 }
 
 }

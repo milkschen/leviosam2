@@ -2,7 +2,7 @@
 #include <map>
 #include <stdio.h>
 #include <thread>
-#include <tuple>
+// #include <tuple>
 #include <vector>
 #include <zlib.h>
 #include <getopt.h>
@@ -204,39 +204,23 @@ void lift_run(lift_opts args) {
 
     samFile* sam_fp = (args.sam_fname == "")?
         sam_open("-", "r") : sam_open(args.sam_fname.data(), "r");
-    bam_hdr_t* hdr = sam_hdr_read(sam_fp);
-
-    // the "ref" lengths are all stored in the levio structure. How do we loop over it?
-    std::vector<std::string> contig_names;
-    std::vector<size_t> contig_reflens;
-    if (args.chain_fname == "") {
-        std::tie(contig_names, contig_reflens) = lift_map.get_s1_lens();
-    }
-
     std::string out_mode = (args.out_format == "sam")? "w" : "wb";
     samFile* out_sam_fp = (args.outpre == "-" || args.outpre == "")?
         sam_open("-", out_mode.data()) :
         sam_open((args.outpre + "." + args.out_format).data(), out_mode.data());
 
-    // Write SAM headers. We update contig lengths if needed.
-    sam_hdr_add_pg(hdr, "leviosam", "VN", VERSION, "CL", args.cmd.data(), NULL);
-    for (auto i = 0; i < hdr->n_targets; i++) {
-        auto contig_itr = std::find(contig_names.begin(), contig_names.end(), hdr->target_name[i]);
-        // If a contig is in contig_names, look up the associated length.
-        if (contig_itr != contig_names.end()) {
-            auto len_str = std::to_string(contig_reflens[contig_itr - contig_names.begin()]);
-            if (sam_hdr_update_line(
-                    hdr, "SQ",
-                    "SN", contig_names[contig_itr - contig_names.begin()].data(),
-                    "LN", len_str.data(), NULL) < 0) {
-                std::cerr << "[Error] failed when converting contig length for "
-                          << hdr->target_name[i] << "\n";
-                exit(1);
-            }
-        }
+    bam_hdr_t* hdr;
+    if (args.chain_fname == "" || args.chainmap_fname == "") {
+        hdr = chain_map.bam_hdr_from_chainmap(sam_fp);
+    } else if (args.lift_fname != "" || args.vcf_fname != "") {
+        hdr = lift_map.bam_hdr_from_liftmap(sam_fp);
+    } else {
+        fprintf(stderr, "Not enough parameters specified to build/load lift-over\n");
+        print_lift_help_msg();
+        exit(1);
     }
+    sam_hdr_add_pg(hdr, "leviosam", "VN", VERSION, "CL", args.cmd.data(), NULL);
     auto write_hdr = sam_hdr_write(out_sam_fp, hdr);
-
 
     std::map<std::string, std::string> ref_dict;
     if (args.md_flag) {
@@ -248,9 +232,6 @@ void lift_run(lift_opts args) {
         ref_dict = load_fasta(args.ref_name);
     }
 
-    // Store chromosomes found in SAM but not in the VCF.
-    // We use a vector to avoid printing out the same warning msg multiple times.
-    // std::vector<std::string> unrecorded_contigs;
     const int num_threads = args.threads;
     const int chunk_size = args.chunk_size;
     std::vector<std::thread> threads;
@@ -263,7 +244,6 @@ void lift_run(lift_opts args) {
                     &lift_map,
                     &mutex_fread, &mutex_fwrite,
                     sam_fp, out_sam_fp, hdr, chunk_size,
-                    // &unrecorded_contigs, 
                     ref_dict, args.md_flag));
         } else {
             threads.push_back(
@@ -272,7 +252,6 @@ void lift_run(lift_opts args) {
                     &chain_map,
                     &mutex_fread, &mutex_fwrite,
                     sam_fp, out_sam_fp, hdr, chunk_size,
-                    // &unrecorded_contigs, 
                     ref_dict, args.md_flag));
         }
     }
@@ -291,6 +270,23 @@ std::string make_cmd(int argc, char** argv) {
         cmd += std::string(argv[i]) + " ";
     }
     return cmd;
+}
+
+/* This is a wrapper for the constructor of LiftMap
+ */
+lift::LiftMap lift::lift_from_vcf(
+    std::string fname, std::string sample, 
+    std::string haplotype, 
+    NameMap names, LengthMap lengths
+) {
+    if (fname == "" && sample == "") {
+        fprintf(stderr, "vcf file name and sample name are required!! \n");
+        print_serialize_help_msg();
+        exit(1);
+    }
+    vcfFile* fp = bcf_open(fname.data(), "r");
+    bcf_hdr_t* hdr = bcf_hdr_read(fp);
+    return lift::LiftMap(fp, hdr, sample, haplotype, names, lengths);
 }
 
 
@@ -360,7 +356,6 @@ int main(int argc, char** argv) {
         {"vcf", required_argument, 0, 'v'},
         {"md", required_argument, 0, 'm'},
         // {"md", no_argument, 0, 'm'},
-        // {"nm", required_argument, 0, 'x'},
         {"sam", required_argument, 0, 'a'},
         {"chain", required_argument, 0, 'c'},
         {"chainmap", required_argument, 0, 'C'},

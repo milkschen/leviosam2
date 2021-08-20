@@ -2,6 +2,7 @@
 #define CHAIN_HPP
 
 #include <iostream>
+#include <unordered_map>
 #include <regex>
 #include <sdsl/bit_vectors.hpp>
 #include <sdsl/util.hpp>
@@ -30,8 +31,8 @@ class Interval {
 
 using BitVectorMap = std::unordered_map<std::string, sdsl::bit_vector>;
 using SdVectorMap = std::unordered_map<std::string, sdsl::sd_vector<>>;
+using SdRank1Map = std::unordered_map<std::string, sdsl::sd_vector<>::rank_1_type>;
 using IntervalMap = std::unordered_map<std::string, std::vector<Interval>>;
-
 
 class ChainMap {
     public:
@@ -50,15 +51,12 @@ class ChainMap {
         bool interval_map_sanity_check();
         int get_start_rank(std::string contig, int pos);
         int get_end_rank(std::string contig, int pos);
-        bool update_interval_indexes(const std::string contig, const int32_t pos,
-                                     int32_t &sidx, int32_t &eidx);
-
-        // void show_interval_info(std::string contig, int pos);
+        bool update_interval_indexes(
+            const std::string contig, const int32_t pos,
+            int32_t &sidx, int32_t &eidx
+        );
 
         std::string lift_contig(std::string contig, size_t pos);
-        // std::string lift_contig(
-        //     std::string contig, int start_sidx, int end_intvl_idx);
-
         void push_cigar(
             std::vector<uint32_t> &cigar, uint32_t len, uint16_t op,
             const bool no_reduct);
@@ -75,24 +73,26 @@ class ChainMap {
         size_t lift_pos(std::string contig, size_t pos);
         int32_t get_num_clipped(
             const int32_t pos, const bool leftmost,
-            const std::string &contig, int32_t &sidx, int32_t &eidx);
+            const std::string &contig, int32_t &sidx, int32_t &eidx
+        );
         bool lift_segment(
             bam1_t* aln, bam_hdr_t* hdr,
-            bool first_seg, std::string &dest_contig);
+            bool first_seg, std::string &dest_contig
+        );
         void lift_aln(
             bam1_t* aln,
             bam_hdr_t* hdr,
-            std::string &dest_contig);
-            // bool md_flag,
-            // std::string &ref_name,
-            // std::map<std::string, std::string>* ref_dict);
-
+            std::string &dest_contig
+        );
 
         void parse_chain_line(
             std::string line, std::string &source, std::string &target,
             int32_t &source_len, int32_t &source_offset,
             int32_t &target_offset, bool &strand,
-            BitVectorMap &start_bv_map, BitVectorMap &end_bv_map);
+            BitVectorMap &start_bv_map, BitVectorMap &end_bv_map
+        );
+
+        bam_hdr_t* bam_hdr_from_chainmap(samFile* sam_fp);
 
         size_t serialize(std::ofstream& out);
         void load(std::ifstream& in);
@@ -106,14 +106,16 @@ class ChainMap {
         IntervalMap interval_map;
         SdVectorMap start_map;
         SdVectorMap end_map;
-        std::unordered_map<std::string, sdsl::sd_vector<>::rank_1_type> start_rs1_map;
-        std::unordered_map<std::string, sdsl::sd_vector<>::rank_1_type> end_rs1_map;
-        
+        SdRank1Map start_rs1_map;
+        SdRank1Map end_rs1_map;
+        std::unordered_map<std::string, int32_t> length_map;
+
         // Debug functions
         void debug_print_interval_queries(
             const bool first_seg, const bool leftmost,
             const std::string contig, const int32_t pos,
-            const int32_t sidx, const int32_t eidx);
+            const int32_t sidx, const int32_t eidx
+        );
 };
 
 };

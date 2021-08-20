@@ -722,6 +722,34 @@ class LiftMap {
         return std::make_pair(names, lengths);
     }
 
+    /* Prepare SAM headers using the LiftMap structure
+     * Contig lengths are updated if needed.
+     */
+    bam_hdr_t* bam_hdr_from_liftmap(samFile* sam_fp) {
+        bam_hdr_t* hdr = sam_hdr_read(sam_fp);
+        // the "ref" lengths are all stored in the LiftMap structure
+        std::vector<std::string> contig_names;
+        std::vector<size_t> contig_reflens;
+        std::tie(contig_names, contig_reflens) = get_s1_lens();
+        for (auto i = 0; i < hdr->n_targets; i++) {
+            auto contig_itr = std::find(contig_names.begin(), contig_names.end(), hdr->target_name[i]);
+            // If a contig is in contig_names, look up the associated length.
+            if (contig_itr != contig_names.end()) {
+                auto len_str = std::to_string(contig_reflens[contig_itr - contig_names.begin()]);
+                if (sam_hdr_update_line(
+                    hdr, "SQ",
+                    "SN", contig_names[contig_itr - contig_names.begin()].data(),
+                    "LN", len_str.data(), NULL) < 0
+                ) {
+                    std::cerr << "[Error] failed when converting contig length for "
+                            << hdr->target_name[i] << "\n";
+                    exit(1);
+                }
+            }
+        }
+        return hdr;
+    }
+
     private:
 
     std::vector<Lift> lmap;
@@ -750,16 +778,7 @@ LiftMap lift_from_vcf(
     std::string fname, std::string sample, 
     std::string haplotype, 
     NameMap names, LengthMap lengths
-) {
-    if (fname == "" && sample == "") {
-        fprintf(stderr, "vcf file name and sample name are required!! \n");
-        print_serialize_help_msg();
-        exit(1);
-    }
-    vcfFile* fp = bcf_open(fname.data(), "r");
-    bcf_hdr_t* hdr = bcf_hdr_read(fp);
-    return LiftMap(fp, hdr, sample, haplotype, names, lengths);
-}
+);
 
 };
 
