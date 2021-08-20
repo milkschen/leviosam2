@@ -20,8 +20,17 @@ def parse_args():
         help='Path to the ouput report. ['': print to sys.stdout]'
     )
     parser.add_argument(
-        '-c', '--num_err_printed', default=20, type=int,
-        help='Number of printed errors. Set to -1 to print all. [20]'
+        '-c', '--num_err_printed', default=10, type=int,
+        help='Number of printed errors. Set to -1 to print all. [10]'
+    )
+    parser.add_argument(
+        '-cp', '--categories_printed', default='pos_idy',
+        help=('Caterogies that erroneous records are printed. '
+              'Options: "pos", "idy", "pos_idy", "cigar", "tlen". '
+              'Set to "none" to turn this off. '
+              'Split by commas, e.g. `--categories_printed pos, idy`. '
+              '["pos_idy"]'
+        )
     )
     parser.add_argument(
         '-p', '--allowed_posdiff', default=1, type=int,
@@ -38,7 +47,7 @@ def parse_args():
         help='Min MAPQ to consider. Alignments with lower MAPQ are considered as invalid. [0]'
     )
     parser.add_argument(
-        '--max_posdiff_reported', default=sys.maxsize, type=int,
+        '-mr', '--max_posdiff_reported', default=sys.maxsize, type=int,
         help=(
             'Only report records within this value of positional difference. '
             'Set to a negative value to turn off. [sys.maxsize]')
@@ -350,7 +359,7 @@ class CompareSamSummary():
                 cnt += 1
         return
 
-    def report(self) -> None:
+    def report(self, cat_printed: list=[]) -> None:
         if self.fn_out == '':
             f_out = sys.stdout
         else:
@@ -365,15 +374,15 @@ class CompareSamSummary():
         print(f'{num_pos_match / len(self.posdiff):.6f} '
               f'({num_pos_match}/{len(self.posdiff)})',
               file=f_out)
-        if self.num_err_printed > 1:
+        if self.num_err_printed > 1 and 'pos' in cat_printed:
             self._print_records(f_out, by='pos')
 
         print('## Identity', file=f_out)
         num_idy = sum([i >= self.identity_cutoff for i in self.identity])
         print(f'{num_idy / len(self.identity):.6f} ({num_idy}/{len(self.identity)})',
               file=f_out)
-        # if self.num_err_printed > 1:
-        #     self._print_records(f_out, by='idy')
+        if self.num_err_printed > 1 and 'idy' in cat_printed:
+            self._print_records(f_out, by='idy')
         print('## Average Identity', file=f_out)
         avg_idy = sum([i for i in self.identity]) / len(self.identity)
         print(f'{avg_idy:.6f}', file=f_out)
@@ -382,7 +391,7 @@ class CompareSamSummary():
         num_pos_idy = sum([d >= self.identity_cutoff or (self.posdiff[i] >= 0 and self.posdiff[i] < self.allowed_posdiff) for i, d in enumerate(self.identity)])
         print(f'{num_pos_idy / len(self.identity):.6f} ({num_pos_idy}/{len(self.identity)})',
               file=f_out)
-        if self.num_err_printed > 1:
+        if self.num_err_printed > 1 and 'pos_idy' in cat_printed:
             self._print_records(f_out, by='pos_idy')
 
         print('## MAPQ', file=f_out)
@@ -392,7 +401,7 @@ class CompareSamSummary():
         print('## CIGAR', file=f_out)
         print((f'{self.cigar_diff.count(True) / len(self.cigar_diff):.6f} '
                f'({self.cigar_diff.count(True)}/{len(self.cigar_diff)})'), file=f_out)
-        if self.num_err_printed > 1:
+        if self.num_err_printed > 1 and 'cigar' in cat_printed:
             self._print_records(f_out, by='cigar')
         
         print('## TLEN', file=f_out)
@@ -400,7 +409,7 @@ class CompareSamSummary():
         print(f'{num_tlen_match / len(self.tlendiff):.6f} '
               f'({num_tlen_match}/{len(self.tlendiff)})',
               file=f_out)
-        if self.num_err_printed > 1:
+        if self.num_err_printed > 1 and 'tlen' in cat_printed:
             self._print_records(f_out, by='tlen')
 
         print('## Unaligned', file=f_out)
@@ -446,7 +455,13 @@ def compare_sam(args):
         if dict_baseline.get(name):
             summary.update(query=first_seg, baseline=dict_baseline[name][0])
             summary.update(query=second_seg, baseline=dict_baseline[name][1])
-    summary.report()
+    if args.categories_printed == 'none':
+        cat_printed = []
+    else:
+        cat_printed = args.categories_printed.split(',')
+        for c in cat_printed:
+            assert c in ['pos', 'idy', 'pos_idy', 'cigar', 'tlen']
+    summary.report(cat_printed)
 
 
 if __name__ == '__main__':
