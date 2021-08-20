@@ -281,7 +281,7 @@ void ChainMap::parse_chain_line(
             source_offset = stoi(vec[5]);
             target_offset = (strand)? stoi(vec[10]) : target_len - stoi(vec[10]);
             length_map.insert(
-                std::pair<std::string, int32_t>(source, source_len));
+                std::pair<std::string, int32_t>(source, target_len));
             init_bitvectors(source, source_len, start_bv_map, end_bv_map);
         } else if (vec[0] != "") {
             int32_t s_int_start = source_offset;
