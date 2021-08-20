@@ -480,6 +480,123 @@ void ChainMap::push_cigar(
 }
 
 
+/* Lift one CIGAR run
+ */
+void ChainMap::lift_cigar_core_one_run(
+    bam1_t* aln,
+    std::vector<uint32_t> &new_cigar,
+    std::queue<std::tuple<int32_t, int32_t>> &break_points,
+    uint32_t cigar_op_len,
+    unsigned int cigar_op,
+    const uint32_t qlen,
+    int &tmp_gap,
+    int &query_offset
+) {
+    bam1_core_t* c = &(aln->core);
+    if (bam_cigar_type(cigar_op) & 1) {
+        // Resolve tmp gap bases
+        if (tmp_gap > 0) {
+            if (tmp_gap < cigar_op_len) {
+                cigar_op_len -= tmp_gap;
+                tmp_gap = 0;
+            } else {
+                tmp_gap -= cigar_op_len;
+                return;
+            }
+        }
+        auto next_bp = std::get<0>(break_points.front());
+        auto next_q_offset = query_offset + cigar_op_len;
+        if (verbose >= VERBOSE_DEV) {
+            std::cerr << "next_bp =" << next_bp << ", next_q_offset =" << next_q_offset << "\n";
+            std::cerr << "original CIGAR = " << cigar_op_len << bam_cigar_opchr(cigar_op) << "\n";
+            if (next_q_offset <= next_bp)
+                std::cerr << "have not reach next_bp: " << cigar_op_len << bam_cigar_opchr(cigar_op) << "\n";
+        }
+        // Have not reached the next breakpoint
+        if (next_q_offset <= next_bp){
+            push_cigar(new_cigar, cigar_op_len, cigar_op, false);
+            query_offset += cigar_op_len;
+        // Split one CIGAR chunk into two parts and insert lift-over bases there
+        } else {
+            int second_half_len = cigar_op_len;
+            while (next_q_offset > next_bp && next_bp >= query_offset) {
+                auto first_half_len = next_bp - query_offset;
+                if (first_half_len > 0) {
+                    push_cigar(new_cigar, first_half_len, cigar_op, false);
+                    second_half_len -= first_half_len;
+                    query_offset += first_half_len;
+                }
+                if (verbose >= VERBOSE_DEV) {
+                    std::cerr << "first half: " << first_half_len << bam_cigar_opchr(cigar_op) << "\n";
+                    std::cerr << "query offset = " << query_offset << "\n";
+                }
+                int32_t diff = std::get<1>(break_points.front());
+                // `diff` could be zero when there's a postive-sized poorly 
+                // aligned chunk but that will not affect CIGAR updates
+                //
+                // Unmatched bases in the dest reference
+                // (Dest has an insertion w.r.t. source)
+                // E.g.
+                // read:   TTTT----CCCCCCCGGGG
+                // source: TTTT----CCCCCCCGGGG
+                // dest:   TTTTAAAACCCCCCCGGGG
+                // bp = 4, diff = 4
+                // 15M -> 4M4D11M
+                if (diff > 0) { // D
+                    push_cigar(new_cigar, diff, BAM_CDEL, false);
+                // Unmatched bases in the source reference
+                // (Dest has an deletion w.r.t source)
+                // E.g.
+                // read:   TTTTAAAACCCCCCC
+                // source: TTTTAAAACCCCCCC
+                // dest:   TTTT----CCCCCCC
+                // bp = 4, diff = -4
+                // 15M -> 4M4I7M
+                } else if (diff < 0) { // I
+                    // If updating `diff` bases makes the CIGAR longer than QUERY,
+                    // truncate `diff` to fit the sequence length.
+                    if (query_offset - diff > qlen) {
+                        diff = query_offset - qlen;
+                    }
+                    push_cigar(new_cigar, -diff, BAM_CINS, false);
+                    second_half_len += diff;
+                    query_offset -= diff;
+                }
+                if (verbose >= VERBOSE_DEBUG) {
+                    if (diff > 0)
+                        std::cerr << "  update liftover CDEL: " << diff << bam_cigar_opchr(BAM_CDEL) << "\n";
+                    else if (diff < 0)
+                        std::cerr << "  update liftover CINS: " << -diff << bam_cigar_opchr(BAM_CINS) << "\n";
+                }
+
+                // Popping an empty queue results in undefined behaviors
+                if (break_points.size() == 0){
+                    break;
+                } else {
+                    break_points.pop();
+                    next_bp = std::get<0>(break_points.front());
+                }
+            }
+            if (second_half_len < 0) {
+                tmp_gap = -second_half_len;
+            } else if (second_half_len > 0) {
+                push_cigar(new_cigar, second_half_len, cigar_op, false);
+                query_offset += second_half_len;
+                if (verbose >= VERBOSE_DEV) {
+                    std::cerr << second_half_len << bam_cigar_opchr(cigar_op) << "\n";
+                }
+            }
+        }
+        if (verbose >= VERBOSE_DEV) {
+            std::cerr << "query_offset -> " << query_offset << "\n";
+        }
+    // If CIGAR op doesn't consume QUERY, just copy it to `new_cigar`
+    } else {
+        push_cigar(new_cigar, cigar_op_len, cigar_op, false);
+    }
+}
+
+
 /* Core CIGAR lifting function
  *
  * Return a pointer of uint32_t in the htslib CIGAR format.
@@ -500,7 +617,7 @@ std::vector<uint32_t> ChainMap::lift_cigar_core(
         return new_cigar;
     }
 
-    bool TMP_DEBUG = (verbose >= VERBOSE_DEV);
+    // bool TMP_DEBUG = (verbose >= VERBOSE_DEV);
     if (verbose >= VERBOSE_INFO) {
         std::cerr << "  Num_clipped = " << num_clipped << "\n";
         std::cerr << "    start " << start_sidx << ", pend " << end_sidx << "\n";
@@ -574,114 +691,11 @@ std::vector<uint32_t> ChainMap::lift_cigar_core(
                 // push_cigar(new_cigar, cigar_op_len, cigar_op, true);
                 continue;
             }
-
-            if (bam_cigar_type(cigar_op) & 1) {
-                // Resolve tmp gap bases
-                if (tmp_gap > 0) {
-                    if (tmp_gap < cigar_op_len) {
-                        cigar_op_len -= tmp_gap;
-                        tmp_gap = 0;
-                    } else {
-                        tmp_gap -= cigar_op_len;
-                        continue;
-                    }
-                }
-                auto next_bp = std::get<0>(break_points.front());
-                auto next_q_offset = query_offset + cigar_op_len;
-                if (TMP_DEBUG) {
-                    std::cerr << "next_bp =" << next_bp << ", next_q_offset =" << next_q_offset << "\n";
-                    std::cerr << "original CIGAR = " << cigar_op_len << bam_cigar_opchr(cigar_op) << "\n";
-                    if (next_q_offset <= next_bp)
-                        std::cerr << "have not reach next_bp: " << cigar_op_len << bam_cigar_opchr(cigar_op) << "\n";
-                }
-                // Have not reached the next breakpoint
-                if (next_q_offset <= next_bp){
-                    push_cigar(new_cigar, cigar_op_len, cigar_op, false);
-                    query_offset += cigar_op_len;
-                // Split one CIGAR chunk into two parts and insert lift-over bases there
-                } else {
-                    int second_half_len = cigar_op_len;
-                    while (next_q_offset > next_bp && next_bp >= query_offset) {
-                        auto first_half_len = next_bp - query_offset;
-                        if (first_half_len > 0) {
-                            push_cigar(new_cigar, first_half_len, cigar_op, false);
-                            second_half_len -= first_half_len;
-                            query_offset += first_half_len;
-                        }
-                        if (TMP_DEBUG) {
-                            std::cerr << "first half: " << first_half_len << bam_cigar_opchr(cigar_op) << "\n";
-                            std::cerr << "query offset = " << query_offset << "\n";
-                        }
-                        int32_t diff = std::get<1>(break_points.front());
-                        // `diff` could be zero when there's a postive-sized poorly 
-                        // aligned chunk but that will not affect CIGAR updates
-                        //
-                        // Unmatched bases in the dest reference
-                        // (Dest has an insertion w.r.t. source)
-                        // E.g.
-                        // read:   TTTT----CCCCCCCGGGG
-                        // source: TTTT----CCCCCCCGGGG
-                        // dest:   TTTTAAAACCCCCCCGGGG
-                        // bp = 4, diff = 4
-                        // 15M -> 4M4D11M
-                        if (diff > 0) { // D
-                            push_cigar(new_cigar, diff, BAM_CDEL, false);
-                        // Unmatched bases in the source reference
-                        // (Dest has an deletion w.r.t source)
-                        // E.g.
-                        // read:   TTTTAAAACCCCCCC
-                        // source: TTTTAAAACCCCCCC
-                        // dest:   TTTT----CCCCCCC
-                        // bp = 4, diff = -4
-                        // 15M -> 4M4I7M
-                        } else if (diff < 0) { // I
-                            // If updating `diff` bases makes the CIGAR longer than QUERY,
-                            // truncate `diff` to fit the sequence length.
-                            if (query_offset - diff > qlen) {
-                                diff = query_offset - qlen;
-                            }
-                            if (diff > 0){
-                                std::cerr << "Error: illegal CIGAR update\n";
-                                std::vector<uint32_t> tmp_cigar(cigar, cigar + c->n_cigar);
-                                return tmp_cigar;
-                            } else {
-                                push_cigar(new_cigar, -diff, BAM_CINS, false);
-                                second_half_len += diff;
-                                query_offset -= diff;
-                            }
-                        }
-                        if (verbose >= VERBOSE_DEBUG) {
-                            if (diff > 0)
-                                std::cerr << "  update liftover CDEL: " << diff << bam_cigar_opchr(BAM_CDEL) << "\n";
-                            else if (diff < 0)
-                                std::cerr << "  update liftover CINS: " << -diff << bam_cigar_opchr(BAM_CINS) << "\n";
-                        }
-
-                        // Popping an empty queue results in undefined behaviors
-                        if (break_points.size() == 0){
-                            break;
-                        } else {
-                            break_points.pop();
-                            next_bp = std::get<0>(break_points.front());
-                        }
-                    }
-                    if (second_half_len < 0) {
-                        tmp_gap = -second_half_len;
-                    } else if (second_half_len > 0) {
-                        push_cigar(new_cigar, second_half_len, cigar_op, false);
-                        query_offset += second_half_len;
-                        if (TMP_DEBUG) {
-                            std::cerr << second_half_len << bam_cigar_opchr(cigar_op) << "\n";
-                        }
-                    }
-                }
-                if (TMP_DEBUG) {
-                    std::cerr << "query_offset -> " << query_offset << "\n";
-                }
-            // If CIGAR op doesn't consume QUERY, just copy it to `new_cigar`
-            } else {
-                push_cigar(new_cigar, cigar_op_len, cigar_op, false);
-            }
+            // Lift one cigar run
+            lift_cigar_core_one_run(
+                aln, new_cigar, break_points, cigar_op_len, cigar_op,
+                qlen, tmp_gap, query_offset
+            );
             continue;
         }
     }
@@ -839,7 +853,7 @@ bool ChainMap::lift_segment(
             first_seg, leftmost, source_contig, pos_end, end_sidx, end_eidx);
     }
 
-    // TODO: trim from the right
+    // low-priority TODO: trim from the right
     int num_sclip_end = 0;
     leftmost = false;
     if (first_seg) {
@@ -849,7 +863,7 @@ bool ChainMap::lift_segment(
             return false;
         }
         if (num_sclip_end > 0 && verbose > 1) {
-            std::cerr << "num soft-clipped bases (end) = " << num_sclip_end << "\n";
+            std::cerr << bam_get_qname(aln) << " - num soft-clipped bases (end) = " << num_sclip_end << "\n";
         }
     }
     // END_TODO
@@ -899,8 +913,6 @@ bool ChainMap::lift_segment(
             c->flag ^= BAM_FMREVERSE;
         }
     }
-    // hts_pos_t bam_cigar2qlen(int n_cigar, const uint32_t *cigar);
-
     return true;
 }
 
@@ -926,11 +938,13 @@ void ChainMap::lift_aln(
 
     // Paired
     if (c->flag & BAM_FPAIRED) {
-        std::string mdest_contig;
-        bool r2_liftable = lift_segment(aln, hdr, false, mdest_contig);
+        std::string null_mdest_contig;
+        bool r2_liftable = lift_segment(aln, hdr, false, null_mdest_contig);
         if (!r2_liftable)
             update_flag_unmap(c, false);
 
+        // We currently don't use the "unliftable" category - 
+        // an unliftable read is considered as unmapped.
         // R1 unmapped
         if (c->flag & BAM_FUNMAP) {
             if (c->flag & BAM_FMUNMAP) {
@@ -944,13 +958,13 @@ void ChainMap::lift_aln(
                 c->mtid = -1;
             } else if (r2_liftable) {
                 lift_status = LIFT_R1_UM_R2_L;
-                // TODO: copy R2 to R1
+                // Copy R2 to R1
                 c->pos = c->mpos;
                 c->tid = c->mtid;
                 lo = "UM_L";
             } else {
                 lift_status = LIFT_R1_UM_R2_UL;
-                // Neither lifted - do nothing
+                // Neither is lifted
                 // c->qual = 255;
                 lo = "UM_UL";
             }
@@ -958,7 +972,7 @@ void ChainMap::lift_aln(
         } else if (r1_liftable) {
             if (c->flag & BAM_FMUNMAP) {
                 lift_status = LIFT_R1_L_R2_UM;
-                // TODO: Copy r1 to r2
+                // Copy r1 to r2
                 c->mpos = c->pos;
                 c->mtid = c->tid;
                 lo = "L_UM";
@@ -967,7 +981,7 @@ void ChainMap::lift_aln(
                 lo = "L_L";
             } else {
                 lift_status = LIFT_R1_L_R2_UL;
-                // TODO: Copy r1 to r2
+                // Copy R1 to R2
                 c->mpos = c->pos;
                 c->mtid = c->tid;
                 lo = "L_UL";
@@ -977,18 +991,18 @@ void ChainMap::lift_aln(
             c->qual = 255;
             if (c->flag & BAM_FMUNMAP) {
                 lift_status = LIFT_R1_UL_R2_UM;
-                // Neither lifted - do nothing
+                // Neither is lifted
                 lo = "UL_UM";
             } else if (r2_liftable) {
                 lift_status = LIFT_R1_UL_R2_L;
-                // #TODO Copy R2 to R1 ??
+                // Copy R2 to R1
                 c->pos = c->mpos;
                 c->tid = c->mtid;
                 // c->qual = 255;
                 lo = "UL_L";
             } else {
                 lift_status = LIFT_R1_UL_R2_UL;
-                // Neither lifted - do nothing
+                // Neither is lifted
                 // c->qual = 255;
                 lo = "UL_UL";
             }

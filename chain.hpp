@@ -99,6 +99,16 @@ class ChainMap {
 
     private:
         void init_rs();
+        void lift_cigar_core_one_run(
+            bam1_t* aln,
+            std::vector<uint32_t> &new_cigar,
+            std::queue<std::tuple<int32_t, int32_t>> &break_points,
+            uint32_t cigar_op_len,
+            unsigned int cigar_op,
+            const uint32_t qlen,
+            int &tmp_gap,
+            int &query_offset
+        );
         void update_flag_unmap(bam1_core_t* c, const bool first_seg);
 
         const int verbose;
