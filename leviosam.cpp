@@ -1,8 +1,5 @@
-#include <cstdio>
-#include <map>
+// #include <map>
 #include <stdio.h>
-#include <thread>
-// #include <tuple>
 #include <vector>
 #include <zlib.h>
 #include <getopt.h>
@@ -84,7 +81,8 @@ void read_and_lift(
     bam_hdr_t* hdr,
     int chunk_size,
     const std::map<std::string, std::string> &ref_dict,
-    int md_flag
+    int md_flag,
+    LevioSamUtils::WriteToFastq* w2fq
 ){
     std::string current_contig;
     std::vector<bam1_t*> aln_vec;
@@ -130,7 +128,7 @@ void read_and_lift(
                 LevioSamUtils::remove_mn_md_tag(aln_vec[i]);
             }
         }
-        {
+        if (w2fq->split_mode == "") {
             // write to file, thread corruption protected by lock_guard
             std::lock_guard<std::mutex> g(*mutex_fwrite);
             // std::thread::id this_id = std::this_thread::get_id();
@@ -139,6 +137,19 @@ void read_and_lift(
                 if (flag_write < 0){
                     std::cerr << "[Error] Failed to write record " << bam_get_qname(aln_vec[i]) << "\n";
                     exit(1);
+                }
+            }
+        } else if (w2fq->split_mode == "mapq") {
+            for (int i = 0; i < num_actual_reads; i++) {
+                if (aln_vec[i]->core.qual >= w2fq->mapq_cutoff) {
+                    std::lock_guard<std::mutex> g(*mutex_fwrite);
+                    if (sam_write1(out_sam_fp, hdr, aln_vec[i]) < 0) {
+                        std::cerr << "[Error] Failed to write record " << bam_get_qname(aln_vec[i]) << "\n";
+                        exit(1);
+                    }
+                } else {
+                    std::lock_guard<std::mutex> g(w2fq->mutex_fwrite_fq);
+                    LevioSamUtils::write_fq_from_bam(aln_vec[i], w2fq);
                 }
             }
         }
@@ -226,40 +237,49 @@ void lift_run(lift_opts args) {
     if (args.md_flag) {
         // load
         if (args.ref_name == "") {
-            std::cerr << "error: -m/--md -f <fasta> to be provided as well\n";
+            std::cerr << "Error: -m/--md -f <fasta> to be provided as well\n";
             exit(1);
         }
         ref_dict = load_fasta(args.ref_name);
     }
 
-    const int num_threads = args.threads;
-    const int chunk_size = args.chunk_size;
+    LevioSamUtils::WriteToFastq w2fq;
+    if (args.split_mode == "mapq") {
+        std::cerr << "Alignments with MAPQ lower than "
+                  << args.mapq_cutoff << " will not be lifted, but "
+                  << "wrote to separate FASTQ files instead.\n";
+        w2fq.init(args.outpre, args.split_mode, args.mapq_cutoff);
+    }
+
+    // const int num_threads = args.threads;
+    // const int chunk_size = args.chunk_size;
     std::vector<std::thread> threads;
     std::mutex mutex_fread, mutex_fwrite;
-    for (int j = 0; j < num_threads; j++){
+    for (int j = 0; j < args.threads; j++){
         if (args.chain_fname == "" && args.chainmap_fname == "") {
             threads.push_back(
                 std::thread(
                     read_and_lift<lift::LiftMap>,
                     &lift_map,
                     &mutex_fread, &mutex_fwrite,
-                    sam_fp, out_sam_fp, hdr, chunk_size,
-                    ref_dict, args.md_flag));
+                    sam_fp, out_sam_fp, hdr, args.chunk_size,
+                    ref_dict, args.md_flag, &w2fq));
         } else {
             threads.push_back(
                 std::thread(
                     read_and_lift<chain::ChainMap>,
                     &chain_map,
                     &mutex_fread, &mutex_fwrite,
-                    sam_fp, out_sam_fp, hdr, chunk_size,
-                    ref_dict, args.md_flag));
+                    sam_fp, out_sam_fp, hdr, args.chunk_size,
+                    ref_dict, args.md_flag, &w2fq));
         }
     }
-    for (int j = 0; j < num_threads; j++){
+    for (int j = 0; j < args.threads; j++){
         if(threads[j].joinable())
             threads[j].join();
     }
     threads.clear();
+    sam_close(sam_fp);
     sam_close(out_sam_fp);
 }
 
@@ -332,6 +352,7 @@ void print_lift_help_msg(){
     fprintf(stderr, "         -m        add MD and NM to output alignment records (requires -f option)\n");
     fprintf(stderr, "         -f string Fasta reference that corresponds to input SAM/BAM (for use w/ -m option)\n");
     fprintf(stderr, "         -S string Split the aligned reads with an indicator. Options: mapq, none. [none]\n");
+    fprintf(stderr, "         -M int    MAPQ cutoff for the `-S mapq` mode [10]\n");
     fprintf(stderr, "         The options for serialize can also be used here, if -v/-c is set.\n");
     fprintf(stderr, "\n");
 }
@@ -367,12 +388,13 @@ int main(int argc, char** argv) {
         {"prefix", required_argument, 0, 'p'},
         {"sample", required_argument, 0, 's'},
         {"split_mode", required_argument, 0, 'S'},
+        // {"split_fq_output", required_argument, 0, 'Q'},
         {"threads", required_argument, 0, 't'},
         {"chunk_size", required_argument, 0, 'T'},
         {"verbose", required_argument, 0, 'V'},
     };
     int long_index = 0;
-    while((c = getopt_long(argc, argv, "hmv:a:c:C:f:g:G:k:l:n:O:p:s:S:t:T:V:", long_options, &long_index)) != -1) {
+    while((c = getopt_long(argc, argv, "hmv:a:c:C:f:g:G:k:l:M:n:O:p:s:S:t:T:V:", long_options, &long_index)) != -1) {
         switch (c) {
             case 'v':
                 args.vcf_fname = optarg;
@@ -409,6 +431,9 @@ int main(int argc, char** argv) {
             case 'l':
                 args.lift_fname = optarg;
                 break;
+            case 'M':
+                args.mapq_cutoff = atoi(optarg);
+                break;
             case 'n':
                 args.name_map = parse_name_map(optarg);
                 break;
@@ -418,6 +443,9 @@ int main(int argc, char** argv) {
             case 'p':
                 args.outpre = optarg;
                 break;
+            // case 'Q':
+            //     args.split_fq_output = optarg;
+            //     break;
             case 's':
                 args.sample = optarg;
                 break;
@@ -440,16 +468,22 @@ int main(int argc, char** argv) {
     }
 
     if (argc - optind < 1) {
-        fprintf(stderr, "no argument provided\n");
+        fprintf(stderr, "No argument provided\n");
         print_main_help_msg();
         exit(1);
     }
     if (args.haplotype != "0" && args.haplotype != "1"){
-        fprintf(stderr, "invalid haplotype %s\n", args.haplotype.c_str());
+        fprintf(stderr, "Invalid haplotype %s\n", args.haplotype.c_str());
         exit(1);
     }
     if (args.out_format != "sam" && args.out_format != "bam") {
         fprintf(stderr, "Not supported extension format %s\n", args.out_format.c_str());
+        exit(1);
+    }
+
+    if (args.split_mode != "mapq" && args.split_mode != "none") {
+        std::cerr << "Error: invalid -S (--split_mode) argument (" 
+                  << args.split_mode << "). Options: mapq, none.\n";
         exit(1);
     }
 

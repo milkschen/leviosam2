@@ -22,7 +22,7 @@
 #include "leviosam_utils.hpp"
 
 
-#define VERSION "0.4"
+#define VERSION "0.5-dev"
 // const char* VERSION("0.4");
 
 #define VERBOSE_CLEAN 0
@@ -62,7 +62,9 @@ struct lift_opts {
     LengthMap length_map;
     int md_flag = 0;
     std::string ref_name = "";
+    int mapq_cutoff = 10;
 };
+
 
 #define LIFT_R_L            0   // unpaired, liftable
 #define LIFT_R_UL           1   // unpaired, un-liftable

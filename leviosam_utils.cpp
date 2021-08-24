@@ -1,6 +1,19 @@
 #include "leviosam_utils.hpp"
 
-void LevioSamUtils::update_cigar(
+namespace LevioSamUtils {
+
+void WriteToFastq::init(
+    const std::string outpre, const std::string sm, const int mc
+) {
+    out_fqS.open(outpre + "-deferred-S.fq");
+    out_fq1.open(outpre + "-deferred-R1.fq");
+    out_fq2.open(outpre + "-deferred-R2.fq");
+    split_mode = sm;
+    mapq_cutoff = mc;
+}
+
+
+void update_cigar(
     bam1_t* aln, std::vector<uint32_t> &new_cigar
 ) {
     uint32_t* cigar = bam_get_cigar(aln);
@@ -55,7 +68,7 @@ void LevioSamUtils::update_cigar(
     // }
 }
 
-void LevioSamUtils::debug_print_cigar(
+void debug_print_cigar(
     uint32_t* cigar, size_t n_cigar
 ) {
     for (int i = 0; i < n_cigar; i++){
@@ -66,7 +79,7 @@ void LevioSamUtils::debug_print_cigar(
     std::cerr << "\n";
 }
 
-void LevioSamUtils::remove_mn_md_tag(bam1_t* aln) {
+void remove_mn_md_tag(bam1_t* aln) {
     uint8_t* ptr = NULL;
     if ((ptr = bam_aux_get(aln, "MD")) != NULL) {
         bam_aux_del(aln, ptr);
@@ -75,3 +88,56 @@ void LevioSamUtils::remove_mn_md_tag(bam1_t* aln) {
         bam_aux_del(aln, bam_aux_get(aln, "NM"));
     }
 }
+
+
+/* Return the read, reverse complemented if necessary
+   Adapted from: https://github.com/samtools/samtools/blob/develop/bam_fastq.c 
+*/
+static std::string get_read(const bam1_t *rec){
+    int len = rec->core.l_qseq + 1;
+    char *seq = (char *)bam_get_seq(rec);
+    std::string read = "";
+
+    for (int n = 0; n < rec->core.l_qseq; n++) {
+        if (rec->core.flag & BAM_FREVERSE)
+            read.append(1, seq_nt16_str[seq_comp_table[bam_seqi(seq, n)]]);
+        else
+            read.append(1, seq_nt16_str[bam_seqi(seq, n)]);
+    }
+    if (rec->core.flag & BAM_FREVERSE)
+        std::reverse(read.begin(), read.end());
+    return read;
+}
+
+
+/* Write a bam1_t object to a FASTQ record.
+ */
+void write_fq_from_bam_core(bam1_t* aln, std::ofstream& out_fq){
+    out_fq << "@" << bam_get_qname(aln) << "\n";
+    out_fq << get_read(aln) << "\n+\n";
+    std::string qual_seq("");
+    uint8_t* qual = bam_get_qual(aln);
+    if (qual[0] == 255) qual_seq = "*";
+    else {
+        for (auto i = 0; i < aln->core.l_qseq; ++i) {
+            qual_seq += (char) (qual[i] + 33);
+        }
+    }
+    if (aln->core.flag & BAM_FREVERSE)
+        std::reverse(qual_seq.begin(), qual_seq.end());
+    out_fq << qual_seq << "\n";
+}
+
+void write_fq_from_bam(bam1_t* aln, WriteToFastq* w2fq) {
+    if ((aln->core.flag & 1) == 0) {
+        write_fq_from_bam_core(aln, w2fq->out_fqS);
+    } else if (aln->core.flag & 64) {
+        write_fq_from_bam_core(aln, w2fq->out_fq1);
+    } else if (aln->core.flag & 128) {
+        write_fq_from_bam_core(aln, w2fq->out_fq2);
+    } else {
+        write_fq_from_bam_core(aln, w2fq->out_fqS);
+    }
+}
+
+};
