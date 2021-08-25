@@ -1,3 +1,4 @@
+// #include <thread>
 #include "leviosam_utils.hpp"
 
 namespace LevioSamUtils {
@@ -10,6 +11,8 @@ void WriteToFastq::init(
     out_fq2.open(outpre + "-deferred-R2.fq");
     split_mode = sm;
     mapq_cutoff = mc;
+    r1_db.clear();
+    r2_db.clear();
 }
 
 
@@ -110,8 +113,7 @@ static std::string get_read(const bam1_t *rec){
 }
 
 
-/* Write a bam1_t object to a FASTQ record.
- */
+/* Write a bam1_t object to a FASTQ record. */
 void write_fq_from_bam_core(bam1_t* aln, std::ofstream& out_fq){
     out_fq << "@" << bam_get_qname(aln) << "\n";
     out_fq << get_read(aln) << "\n+\n";
@@ -128,16 +130,96 @@ void write_fq_from_bam_core(bam1_t* aln, std::ofstream& out_fq){
     out_fq << qual_seq << "\n";
 }
 
-void write_fq_from_bam(bam1_t* aln, WriteToFastq* w2fq) {
-    if ((aln->core.flag & 1) == 0) {
-        write_fq_from_bam_core(aln, w2fq->out_fqS);
-    } else if (aln->core.flag & 64) {
-        write_fq_from_bam_core(aln, w2fq->out_fq1);
-    } else if (aln->core.flag & 128) {
-        write_fq_from_bam_core(aln, w2fq->out_fq2);
+
+/* BAM2FASTQ, with a heuristic algorithm to handle paired-end reads
+ * 
+ * We don't require the assumption that the dataset is sorted
+ * by name, and thus read pairs might not occur in an interleaved
+ * format.
+ * 
+ * We use two unordered_maps to store unmatched R1 and R2 reads.
+ * When a segment comes in, we check if the mate is in the map.
+ * If so, write both segments to file and mark the mate as 
+ * "written"; if not, add the segment to the associated map.
+ */
+void write_fq_from_bam(bam1_t* aln, WriteToFastq* wfq) {
+    if ((aln->core.flag & 256) || // Secondary alignment - no SEQ field
+        (aln->core.flag & 512) || // not passing filters
+        (aln->core.flag & 1024) || // PCR or optinal duplicate
+        (aln->core.flag & 2048)) { // supplementary alignment
+        return;
+    } 
+    std::string n (bam_get_qname(aln));
+    if (!(aln->core.flag & 1)) { // e.g. single-end
+        write_fq_from_bam_core(aln, wfq->out_fqS);
+    } else if (aln->core.flag & 64) { // First segment
+        auto find_r2 = wfq->r2_db.find(n);
+        if (find_r2 != wfq->r2_db.end()) {
+            auto w = find_r2->second.write(wfq->out_fq2, n);
+            if (w > 0)
+                write_fq_from_bam_core(aln, wfq->out_fq1);
+        } else {
+            wfq->r1_db.emplace(std::make_pair(n, FastqRecord(aln)));
+            // std::cerr << "first+1: " << wfq->r1_db.size() << " " << n << "\n";
+        }
+    } else if (aln->core.flag & 128) { // Second segment
+        auto find_r1 = wfq->r1_db.find(n);
+        if (find_r1 != wfq->r1_db.end()) {
+            auto w = find_r1->second.write(wfq->out_fq1, n);
+            if (w > 0)
+                write_fq_from_bam_core(aln, wfq->out_fq2);
+        } else {
+            wfq->r2_db.emplace(std::make_pair(n, FastqRecord(aln)));
+            // std::cerr << "second+1: " << wfq->r2_db.size() << " " << n << "\n";
+        }
     } else {
-        write_fq_from_bam_core(aln, w2fq->out_fqS);
+        std::cerr << "Error: issues with read " << n << "\n";
+        exit(1);
     }
+
+    if (wfq->r1_db.size() >= 10000) {
+        std::cerr << "Clearing R1db (" << wfq->r1_db.size() << ") and R2db (" << wfq->r2_db.size() << ")\n";
+        for (auto i: wfq->r1_db) {
+            auto n1 = i.first;
+            n1 += "/1";
+            i.second.write(wfq->out_fqS, n1);
+        }
+        for (auto i: wfq->r2_db) {
+            auto n2 = i.first;
+            n2 += "/2";
+            i.second.write(wfq->out_fqS, n2);
+        }
+        wfq->r1_db.clear();
+        wfq->r2_db.clear();
+    }
+}
+
+/* Construct a FastqRecord object */
+FastqRecord::FastqRecord(bam1_t* aln) {
+    flag = aln->core.flag;
+    seq_str = get_read(aln);
+    std::string qual_seq("");
+    uint8_t* qual = bam_get_qual(aln);
+    if (qual[0] == 255) qual_seq = "*";
+    else {
+        for (auto i = 0; i < aln->core.l_qseq; ++i) {
+            qual_seq += (char) (qual[i] + 33);
+        }
+    }
+    if (aln->core.flag & BAM_FREVERSE)
+        std::reverse(qual_seq.begin(), qual_seq.end());
+    qual_str = qual_seq;
+}
+
+/* Write a FastqRecord object to a FASTQ record */
+int FastqRecord::write(std::ofstream& out_fq, std::string name) {
+    if (written)
+        return -1;
+    out_fq << "@" << name << "\n";
+    out_fq << seq_str << "\n+\n";
+    out_fq << qual_str << "\n";
+    written = true;
+    return 1;
 }
 
 };

@@ -82,7 +82,7 @@ void read_and_lift(
     int chunk_size,
     const std::map<std::string, std::string> &ref_dict,
     int md_flag,
-    LevioSamUtils::WriteToFastq* w2fq
+    LevioSamUtils::WriteToFastq* wfq
 ){
     std::string current_contig;
     std::vector<bam1_t*> aln_vec;
@@ -128,7 +128,7 @@ void read_and_lift(
                 LevioSamUtils::remove_mn_md_tag(aln_vec[i]);
             }
         }
-        if (w2fq->split_mode == "") {
+        if (wfq->split_mode == "") {
             // write to file, thread corruption protected by lock_guard
             std::lock_guard<std::mutex> g(*mutex_fwrite);
             // std::thread::id this_id = std::this_thread::get_id();
@@ -139,17 +139,17 @@ void read_and_lift(
                     exit(1);
                 }
             }
-        } else if (w2fq->split_mode == "mapq") {
+        } else if (wfq->split_mode == "mapq") {
             for (int i = 0; i < num_actual_reads; i++) {
-                if (aln_vec[i]->core.qual >= w2fq->mapq_cutoff) {
+                if (aln_vec[i]->core.qual >= wfq->mapq_cutoff) {
                     std::lock_guard<std::mutex> g(*mutex_fwrite);
                     if (sam_write1(out_sam_fp, hdr, aln_vec[i]) < 0) {
                         std::cerr << "[Error] Failed to write record " << bam_get_qname(aln_vec[i]) << "\n";
                         exit(1);
                     }
                 } else {
-                    std::lock_guard<std::mutex> g(w2fq->mutex_fwrite_fq);
-                    LevioSamUtils::write_fq_from_bam(aln_vec[i], w2fq);
+                    std::lock_guard<std::mutex> g(wfq->mutex_fwrite_fq);
+                    LevioSamUtils::write_fq_from_bam(aln_vec[i], wfq);
                 }
             }
         }
@@ -243,12 +243,12 @@ void lift_run(lift_opts args) {
         ref_dict = load_fasta(args.ref_name);
     }
 
-    LevioSamUtils::WriteToFastq w2fq;
+    LevioSamUtils::WriteToFastq wfq;
     if (args.split_mode == "mapq") {
         std::cerr << "Alignments with MAPQ lower than "
                   << args.mapq_cutoff << " will not be lifted, but "
                   << "wrote to separate FASTQ files instead.\n";
-        w2fq.init(args.outpre, args.split_mode, args.mapq_cutoff);
+        wfq.init(args.outpre, args.split_mode, args.mapq_cutoff);
     }
 
     // const int num_threads = args.threads;
@@ -263,7 +263,7 @@ void lift_run(lift_opts args) {
                     &lift_map,
                     &mutex_fread, &mutex_fwrite,
                     sam_fp, out_sam_fp, hdr, args.chunk_size,
-                    ref_dict, args.md_flag, &w2fq));
+                    ref_dict, args.md_flag, &wfq));
         } else {
             threads.push_back(
                 std::thread(
@@ -271,7 +271,7 @@ void lift_run(lift_opts args) {
                     &chain_map,
                     &mutex_fread, &mutex_fwrite,
                     sam_fp, out_sam_fp, hdr, args.chunk_size,
-                    ref_dict, args.md_flag, &w2fq));
+                    ref_dict, args.md_flag, &wfq));
         }
     }
     for (int j = 0; j < args.threads; j++){
@@ -279,6 +279,27 @@ void lift_run(lift_opts args) {
             threads[j].join();
     }
     threads.clear();
+    // Write singleton reads
+    if (args.split_mode == "mapq") {
+        if (wfq.r1_db.size() > 0) {
+            int c1 = 0;
+            for (auto i1: wfq.r1_db) {
+                auto n1 = i1.first;
+                n1 += "/1";
+                if (i1.second.write(wfq.out_fqS, n1))
+                    c1 ++;
+            }
+            std::cerr << "#R1 singleton: " << c1 << "\n";
+            int c2 = 0;
+            for (auto i2: wfq.r2_db) {
+                auto n2 = i2.first;
+                n2 += "/2";
+                if (i2.second.write(wfq.out_fqS, n2))
+                    c2 ++;
+            }
+            std::cerr << "#R2 singleton: " << c2 << "\n";
+        }
+    }
     sam_close(sam_fp);
     sam_close(out_sam_fp);
 }
