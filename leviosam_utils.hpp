@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <fstream>
+#include <mutex>
 #include <htslib/sam.h>
 #include <unordered_map>
 #include <vector>

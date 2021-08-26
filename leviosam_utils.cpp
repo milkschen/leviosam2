@@ -1,4 +1,4 @@
-// #include <thread>
+#include <algorithm>
 #include "leviosam_utils.hpp"
 
 namespace LevioSamUtils {
