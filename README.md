@@ -3,6 +3,7 @@
 Use a VCF file containing alternative haplotype information to lift SAM/BAM alignments
 to the reference sequence
 
+_levioSAM now supports using a chain file as the lift-over map - please visit [the wiki page](https://github.com/alshai/levioSAM/wiki/Lift-over-using-a-chain-map) for more info._
 
 ## Supported Features:
 
