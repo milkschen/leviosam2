@@ -1,3 +1,13 @@
+/*
+ * liftover.hpp
+ *
+ * classes and routines for translating (lifting over) coordinates between
+ * two aligned sequences
+ * Author: Taher Mun, Nae-Chyun Chen, Ben Langmead
+ * Johns Hopkins Dept. of Computer Science
+ *
+ * Created: July 2019
+ */
 #ifndef LIFTOVER_HPP
 #define LIFTOVER_HPP
 
@@ -8,21 +18,17 @@
 #include <htslib/sam.h>
 #include <sdsl/bit_vectors.hpp>
 #include <sdsl/util.hpp>
+#include "chain.hpp"
+#include "leviosam_utils.hpp"
 
-// #include "chain.hpp"
 
-/*
- * liftover.hpp
- *
- * classes and routines for translating (lifting over) coordinates between
- * two aligned sequences
- * Author: Taher Mun
- * Johns Hopkins Dept. of Computer Science
- *
- * Created: July 2019
- */
+#define VERSION "0.5-dev"
+// const char* VERSION("0.4");
 
-const char* VERSION("0.4");
+#define VERBOSE_CLEAN 0
+#define VERBOSE_INFO  1
+#define VERBOSE_DEBUG 2
+#define VERBOSE_DEV   3
 
 using NameMap = std::vector<std::pair<std::string,std::string>>;
 using LengthMap = std::unordered_map<std::string,size_t>;
@@ -32,7 +38,126 @@ static inline void die(std::string msg) {
     exit(1);
 }
 
+extern "C" {
+    int bam_fillmd1(bam1_t *b, const char *ref, int flag, int quiet_mode);
+}
+
+struct lift_opts {
+    std::string vcf_fname = "";
+    std::string chain_fname = "";
+    std::string chainmap_fname = "";
+    std::string sample = "";
+    std::string outpre = "";
+    std::string out_format = "sam";
+    std::string lift_fname = "";
+    std::string sam_fname = "";
+    std::string cmd = "";
+    std::string haplotype = "0";
+    std::string split_mode = "none";
+    int allowed_cigar_changes = 10;
+    int threads = 1;
+    int chunk_size = 256;
+    int verbose = 0;
+    NameMap name_map;
+    LengthMap length_map;
+    int md_flag = 0;
+    std::string ref_name = "";
+    int mapq_cutoff = 10;
+};
+
+
+#define LIFT_R_L            0   // unpaired, liftable
+#define LIFT_R_UL           1   // unpaired, un-liftable
+#define LIFT_R_UM           2   // unpaired, unmapped
+#define LIFT_R1_L_R2_L      3   // paired, R1 liftable, R2 liftable
+#define LIFT_R1_L_R2_UL     4   // paired, R1 liftable, R2 un-liftable
+#define LIFT_R1_L_R2_UM     5   // paired, R1 liftable, R2 unmapped
+#define LIFT_R1_UL_R2_L     6   // paired, R1 un-liftable, R2 liftable
+#define LIFT_R1_UL_R2_UL    7   // paired, R1 un-liftable, R2 un-liftable
+#define LIFT_R1_UL_R2_UM    8   // paired, R1 un-liftable, R2 unmapped
+#define LIFT_R1_UM_R2_L     9   // paired, R1 unmapped, R2 liftable
+#define LIFT_R1_UM_R2_UL    10  // paired, R1 unmapped, R2 un-liftable
+#define LIFT_R1_UM_R2_UM    11  // paired, R1 unmapped, R2 unmapped
+
+void print_main_help_msg();
+void print_lift_help_msg();
+void print_serialize_help_msg();
+
 namespace lift {
+// Serialization
+class Name2IdxMap: public std::unordered_map<std::string,int> {
+    public:
+    size_t serialize(std::ofstream& out) {
+        size_t size = 0;
+        size_t map_size = this->size();
+        out.write(reinterpret_cast<char*>(&map_size), sizeof(map_size));
+        for (auto s: *this) {
+            size_t str_size = s.first.size();
+            out.write(reinterpret_cast<char*>(&str_size), sizeof(str_size));
+            out.write(reinterpret_cast<const char*>(s.first.data()), str_size);
+            out.write(reinterpret_cast<char*>(&s.second), sizeof(s.second));
+            size += sizeof(str_size) + str_size + sizeof(s.second);
+        }
+        return size;
+    }
+
+    void load(std::ifstream& in) {
+        size_t map_size;
+        in.read(reinterpret_cast<char*>(&map_size), sizeof(map_size));
+        for (auto i = 0; i < map_size; ++i) {
+            size_t str_size;
+            in.read(reinterpret_cast<char*>(&str_size), sizeof(str_size));
+            std::vector<char> buf(str_size);
+            in.read(reinterpret_cast<char*>(buf.data()), str_size);
+            key_type key(buf.begin(), buf.end());
+            mapped_type value;
+            in.read(reinterpret_cast<char*>(&value), sizeof(value));
+            // fprintf(stderr, "%s\t%d\n", key.data(), value);
+            (*this)[key] = value;
+        }
+    }
+};
+
+
+class Name2NameMap : public std::unordered_map<std::string,std::string> {
+    public:
+    size_t serialize(std::ofstream& out) {
+        size_t size = 0;
+        size_t map_size = this->size();
+        out.write(reinterpret_cast<char*>(&map_size), sizeof(map_size));
+        for (auto s: *this) {
+            size_t str_size = s.first.size();
+            out.write(reinterpret_cast<char*>(&str_size), sizeof(str_size));
+            out.write(reinterpret_cast<const char*>(s.first.data()), str_size);
+            size += sizeof(str_size) + str_size;
+            str_size = s.second.size();
+            out.write(reinterpret_cast<char*>(&str_size), sizeof(str_size));
+            out.write(reinterpret_cast<const char*>(s.second.data()), str_size);
+            size += sizeof(str_size) + str_size;
+        }
+        return size;
+    }
+
+    void load(std::ifstream& in) {
+        size_t map_size;
+        in.read(reinterpret_cast<char*>(&map_size), sizeof(map_size));
+        for (auto i = 0; i < map_size; ++i) {
+            size_t str_size;
+            in.read(reinterpret_cast<char*>(&str_size), sizeof(str_size));
+            std::vector<char> buf(str_size);
+            in.read(reinterpret_cast<char*>(buf.data()), str_size);
+            key_type key(buf.begin(), buf.end());
+            in.read(reinterpret_cast<char*>(&str_size), sizeof(str_size));
+            buf.clear();
+            buf.resize(str_size);
+            in.read(reinterpret_cast<char*>(buf.data()), str_size);
+            mapped_type value(buf.begin(), buf.end());
+            (*this)[key] = value;
+        }
+    }
+};
+
+
 // liftover data structure for a single sequence
 class Lift {
 
@@ -80,7 +205,7 @@ class Lift {
     }
 
     // translate coordinate in s2-space to s1-space
-    size_t s2_to_s1(size_t p) const {
+    size_t lift_pos(size_t p) const { // s2_to_s1
         return ins_rs0(del_sls0(p+1));
     }
 
@@ -99,7 +224,7 @@ class Lift {
      * Output:
      *   A vector, each element is an unit32_t corresponding to htslib CIGAR value
      */
-    std::vector<uint32_t> cigar_s2_to_s1_core(bam1_t* b){
+    std::vector<uint32_t> lift_cigar_core(bam1_t* b){
         auto x = del_sls0(b->core.pos + 1);
         int y = 0; // read2alt cigar pointer
         uint32_t* cigar = bam_get_cigar(b);
@@ -187,7 +312,6 @@ class Lift {
         return new_cigar_ops;
     }
 
-
     /* Convert a CIGAR string in an s2 alignment to the corresponding CIGAR string in the s1 alignment
      *
      * Input: bam1_t alignment record against s2 sequence
@@ -197,10 +321,10 @@ class Lift {
      *   bam1_t->core.n_cigar specifies numbers of operators in a CIGAR;
      *   bam_get_cigar(bam1_t) points to the occurrences.
      */
-    void cigar_s2_to_s1(bam1_t* b) {
+    void lift_cigar(bam1_t* b) {
         uint32_t* cigar = bam_get_cigar(b);
         // Get lifted CIGAR.
-        auto new_cigar_ops = cigar_s2_to_s1_core(b);
+        auto new_cigar_ops = lift_cigar_core(b);
         // Prepare to update CIGAR in the bam1_t struct.
         std::vector<int> cigar_op_len;
         std::vector<char> cigar_op;
@@ -220,54 +344,8 @@ class Lift {
         for (int i = 0; i < cigar_op_len.size(); i++){
             new_cigar.push_back(bam_cigar_gen(cigar_op_len[i], cigar_op[i]));
         }
-        // Adjust data position when n_cigar is changed by levioSAM. n_cigar could either be
-        // increased or decreased.
-        //
-        // Adapted from samtools/sam.c
-        // https://github.com/samtools/htslib/blob/2264113e5df1946210828e45d29c605915bd3733/sam.c#L515
-        if (b->core.n_cigar != cigar_op_len.size()){
-            auto cigar_st = (uint8_t*)bam_get_cigar(b) - b->data;
-            auto fake_bytes = b->core.n_cigar * 4;
-            b->core.n_cigar = (uint32_t)cigar_op_len.size();
-            auto n_cigar4 = b->core.n_cigar * 4;
-            auto orig_len = b->l_data;
-            if (n_cigar4 > fake_bytes){
-                // Check if we need to update `b->m_data`.
-                //
-                // Adapted from htslib/sam_internal.h
-                // https://github.com/samtools/htslib/blob/31f0a76d338c9bf3a6893b71dd437ef5fcaaea0e/sam_internal.h#L48
-                auto new_m_data = (size_t) b->l_data + n_cigar4 - fake_bytes;
-                kroundup32(new_m_data);
-                if (new_m_data > b->m_data){
-                    auto new_data = static_cast<uint8_t *>(realloc(b->data, new_m_data));
-                    if (!new_data){
-                        std::cerr << "[Error] Failed to expand a bam1_t struct for " << bam_get_qname(b) << "\n";
-                        std::cerr << "This is likely due to out of memory\n";
-                        exit(1);
-                    }
-                    b->data = new_data;
-                    b->m_data = new_m_data;
-                    cigar = bam_get_cigar(b);
-                }
-            }
-            // Update memory usage of data.
-            b->l_data = b->l_data - fake_bytes + n_cigar4;
-            // Move data to the correct place.
-            memmove(b->data + cigar_st + n_cigar4,
-                    b->data + cigar_st + fake_bytes,
-                    orig_len - (cigar_st + fake_bytes));
-            // If new n_cigar is greater, copy the real CIGAR to the right place.
-            // Skipped this if new n_cigar is smaller than the original value.
-            if (n_cigar4 > fake_bytes){
-                memcpy(b->data + cigar_st,
-                       b->data + (n_cigar4 - fake_bytes) + 8,
-                       n_cigar4);
-            }
-            b->core.n_cigar = cigar_op_len.size();
-        }
-        for (int i = 0; i < b->core.n_cigar; i++){
-            *(cigar + i) = new_cigar[i];
-        }
+
+        LevioSamUtils::update_cigar(b, new_cigar);
     }
 
     // returns size of s1 sequence
@@ -280,7 +358,7 @@ class Lift {
     //     return del[del.size() - 1] ? del_rs0(del.size() - 1) : del_rs0(del.size() - 1) + 1;
     // }
 
-    // saves to stream
+    // Save to stream
     size_t serialize(std::ofstream& out) const {
         size_t size = 0;
         size += ins.serialize(out);
@@ -289,7 +367,7 @@ class Lift {
         return size;
     }
 
-    // load from stream
+    // Load from stream
     void load(std::istream& in) {
         ins.load(in);
         del.load(in);
@@ -328,6 +406,8 @@ class LiftMap {
 
     LiftMap() {}
 
+    ~LiftMap() {}
+
     LiftMap(std::ifstream& in) {
         this->load(in);
     }
@@ -356,19 +436,13 @@ class LiftMap {
         return *this;
     }
 
-    //LiftMap(chain::ChainFile* fp) {
-    //    // , bcf_hdr_t* hdr,
-    //    //     std::vector<std::pair<std::string,std::string>> nm = {},
-    //    //     std::unordered_map<std::string,size_t> ls = {}) {
-    //    std::cout << "liftmap with a chain file\n";
-    //}
-
     /* creates a liftover from specified sample in VCF file.
      * input: vcfFile, bcf_hdr_t* of input VCF (via htslib)
      *        sample name of desired individual within the VCF
      * assumes that the vcfFile is sorted!
      */
-    LiftMap(vcfFile* fp, bcf_hdr_t* hdr, std::string sample_name, std::string haplotype,
+    LiftMap(vcfFile* fp, bcf_hdr_t* hdr,
+            std::string sample_name, std::string haplotype,
             std::vector<std::pair<std::string,std::string>> nm = {},
             std::unordered_map<std::string,size_t> ls = {}) {
         bool get_names = 1;
@@ -461,7 +535,7 @@ class LiftMap {
                     int overlap = 0;
                     if ( rec->pos < tppos || !trim_beg || var_len==0 || prev_is_ins ) overlap = 1;
                     if (overlap) {
-                        if (verbose) fprintf(stderr, "Skipping variant %s:%d\n", bcf_seqname(hdr, rec), rec->pos + 1);
+                        if (verbose) fprintf(stderr, "Skipping variant %s:%lld\n", bcf_seqname(hdr, rec), rec->pos + 1);
                         continue;
                     }
                 }
@@ -507,29 +581,27 @@ class LiftMap {
     // input: sequence name, position within s2 sequence
     // output: position within s1 sequence
     // if liftover is not defined, then returns the original position
-    size_t s2_to_s1(
+    size_t lift_pos( // s2_to_s1
         std::string n,
-        size_t i,
-        std::vector<std::string>* chroms_not_found,
-        std::mutex* mutex
+        size_t i
     ) {
         auto it = s2_map.find(n);
         if (it != s2_map.end()) {
-            return lmap[it->second].s2_to_s1(i);
-        } else {
-            std::lock_guard<std::mutex> g(*mutex);
-            for (auto it : *chroms_not_found)
-                if (it == n) return i;
-            chroms_not_found->push_back(n);
-            fprintf(stderr, "Warning: chromosome %s not found in liftmap! \n", n.c_str());
-            return i;
-        }
+            return lmap[it->second].lift_pos(i);
+        } else return i;
+        // } else {
+        //     std::lock_guard<std::mutex> g(*mutex);
+        //     for (auto it : *unrecorded_contigs)
+        //         if (it == n) return i;
+        //     unrecorded_contigs->push_back(n);
+        //     fprintf(stderr, "Warning: chromosome %s not found in liftmap! \n", n.c_str());
+        //     return i;
+        // }
     }
 
-    std::string get_other_name(std::string n) {
-        if (name_map.find(n) != name_map.end()) {
+    std::string lift_contig(std::string n, size_t pos) { // get_other_name()
+        if (name_map.find(n) != name_map.end())
             return name_map[n];
-        }
         // return original name if mapping is not available
         else
             return n;
@@ -545,12 +617,73 @@ class LiftMap {
      *
      * If liftover is not defined, do not update the bam1_t struct.
      */
-    void cigar_s2_to_s1(const std::string& n, bam1_t* b) {
+    void lift_cigar(const std::string& n, bam1_t* b) {
         auto it = s2_map.find(n);
         if (it != s2_map.end()) {
-            lmap[it->second].cigar_s2_to_s1(b);
+            lmap[it->second].lift_cigar(b);
         }
         // If not found, no update.
+    }
+
+    // Note that a mapped read is always liftable 
+    // under the VcfMap framework.
+    void lift_aln(
+        bam1_t* aln,
+        bam_hdr_t* hdr,
+        std::string &dest_contig
+    ) {
+        bam1_core_t c = aln->core;
+        size_t pos;
+        std::string source_contig;
+        size_t lift_status;
+
+        // Paired
+        if (c.flag & BAM_FPAIRED) {
+            // R1 unmapped
+            if (c.flag & BAM_FUNMAP) {
+                if (c.flag & BAM_FMUNMAP) {
+                    lift_status = LIFT_R1_UM_R2_UM;
+                } else {
+                    source_contig = hdr->target_name[c.mtid];
+                    dest_contig = this->lift_contig(source_contig, c.mpos);
+                    pos = this->lift_pos(source_contig, c.mpos);
+                    aln->core.pos = pos;
+                    lift_status = LIFT_R1_UM_R2_L;
+                }
+            // R1 mapped
+            } else {
+                source_contig = hdr->target_name[c.tid];
+                dest_contig = this->lift_contig(source_contig, c.pos);
+                pos = this->lift_pos(source_contig, c.pos);
+                this->lift_cigar(source_contig, aln);
+                aln->core.pos = pos;
+                if (c.flag & BAM_FMUNMAP) {
+                    aln->core.mpos = aln->core.pos;
+                    lift_status = LIFT_R1_L_R2_UM;
+                } else {
+                    std::string msource_contig(hdr->target_name[c.mtid]);
+                    std::string mdest_contig(this->lift_contig(msource_contig, c.mpos));
+                    c.mtid = sam_hdr_name2tid(hdr, mdest_contig.c_str());
+                    size_t mpos = this->lift_pos(msource_contig, c.mpos);
+                    aln->core.mpos = mpos;
+                    int isize = (c.isize == 0)? 0 : c.isize + (mpos - c.mpos) - (pos - c.pos);
+                    aln->core.isize = isize;
+                    lift_status = LIFT_R1_L_R2_L;
+                }
+            }
+        // Unpaired
+        } else {
+            if (c.flag & BAM_FUNMAP) {
+                lift_status = LIFT_R_UM;
+            } else {
+                source_contig = hdr->target_name[c.tid];
+                dest_contig = this->lift_contig(source_contig, c.pos);
+                pos = this->lift_pos(source_contig, c.pos);
+                this->lift_cigar(source_contig, aln);
+                aln->core.pos = pos;
+                lift_status = LIFT_R_L;
+            }
+        }
     }
 
     // saves to stream
@@ -591,79 +724,38 @@ class LiftMap {
         return std::make_pair(names, lengths);
     }
 
+    /* Prepare SAM headers using the LiftMap structure
+     * Contig lengths are updated if needed.
+     */
+    bam_hdr_t* bam_hdr_from_liftmap(samFile* sam_fp) {
+        bam_hdr_t* hdr = sam_hdr_read(sam_fp);
+        // the "ref" lengths are all stored in the LiftMap structure
+        std::vector<std::string> contig_names;
+        std::vector<size_t> contig_reflens;
+        std::tie(contig_names, contig_reflens) = get_s1_lens();
+        for (auto i = 0; i < hdr->n_targets; i++) {
+            auto contig_itr = std::find(contig_names.begin(), contig_names.end(), hdr->target_name[i]);
+            // If a contig is in contig_names, look up the associated length.
+            if (contig_itr != contig_names.end()) {
+                auto len_str = std::to_string(contig_reflens[contig_itr - contig_names.begin()]);
+                if (sam_hdr_update_line(
+                    hdr, "SQ",
+                    "SN", contig_names[contig_itr - contig_names.begin()].data(),
+                    "LN", len_str.data(), NULL) < 0
+                ) {
+                    std::cerr << "[Error] failed when converting contig length for "
+                            << hdr->target_name[i] << "\n";
+                    exit(1);
+                }
+            }
+        }
+        return hdr;
+    }
+
     private:
 
     std::vector<Lift> lmap;
-    /* I have to write these so I can serialize stuff */
-    class Name2IdxMap: public std::unordered_map<std::string,int> {
-        public:
-        size_t serialize(std::ofstream& out) {
-            size_t size = 0;
-            size_t map_size = this->size();
-            out.write(reinterpret_cast<char*>(&map_size), sizeof(map_size));
-            for (auto s: *this) {
-                size_t str_size = s.first.size();
-                out.write(reinterpret_cast<char*>(&str_size), sizeof(str_size));
-                out.write(reinterpret_cast<const char*>(s.first.data()), str_size);
-                out.write(reinterpret_cast<char*>(&s.second), sizeof(s.second));
-                size += sizeof(str_size) + str_size + sizeof(s.second);
-            }
-            return size;
-        }
 
-        void load(std::ifstream& in) {
-            size_t map_size;
-            in.read(reinterpret_cast<char*>(&map_size), sizeof(map_size));
-            for (auto i = 0; i < map_size; ++i) {
-                size_t str_size;
-                in.read(reinterpret_cast<char*>(&str_size), sizeof(str_size));
-                std::vector<char> buf(str_size);
-                in.read(reinterpret_cast<char*>(buf.data()), str_size);
-                key_type key(buf.begin(), buf.end());
-                mapped_type value;
-                in.read(reinterpret_cast<char*>(&value), sizeof(value));
-                // fprintf(stderr, "%s\t%d\n", key.data(), value);
-                (*this)[key] = value;
-            }
-        }
-    };
-    class Name2NameMap : public std::unordered_map<std::string,std::string> {
-        public:
-        size_t serialize(std::ofstream& out) {
-            size_t size = 0;
-            size_t map_size = this->size();
-            out.write(reinterpret_cast<char*>(&map_size), sizeof(map_size));
-            for (auto s: *this) {
-                size_t str_size = s.first.size();
-                out.write(reinterpret_cast<char*>(&str_size), sizeof(str_size));
-                out.write(reinterpret_cast<const char*>(s.first.data()), str_size);
-                size += sizeof(str_size) + str_size;
-                str_size = s.second.size();
-                out.write(reinterpret_cast<char*>(&str_size), sizeof(str_size));
-                out.write(reinterpret_cast<const char*>(s.second.data()), str_size);
-                size += sizeof(str_size) + str_size;
-            }
-            return size;
-        }
-
-        void load(std::ifstream& in) {
-            size_t map_size;
-            in.read(reinterpret_cast<char*>(&map_size), sizeof(map_size));
-            for (auto i = 0; i < map_size; ++i) {
-                size_t str_size;
-                in.read(reinterpret_cast<char*>(&str_size), sizeof(str_size));
-                std::vector<char> buf(str_size);
-                in.read(reinterpret_cast<char*>(buf.data()), str_size);
-                key_type key(buf.begin(), buf.end());
-                in.read(reinterpret_cast<char*>(&str_size), sizeof(str_size));
-                buf.clear();
-                buf.resize(str_size);
-                in.read(reinterpret_cast<char*>(buf.data()), str_size);
-                mapped_type value(buf.begin(), buf.end());
-                (*this)[key] = value;
-            }
-        }
-    };
 
     Name2NameMap name_map;
     Name2IdxMap s1_map;
@@ -682,16 +774,15 @@ class LiftMap {
         }
     }
 };
+
+
+LiftMap lift_from_vcf(
+    std::string fname, std::string sample, 
+    std::string haplotype, 
+    NameMap names, LengthMap lengths
+);
+
 };
 
-lift::LiftMap lift_from_vcf(std::string fname, 
-                            std::string sample, 
-                            std::string haplotype, 
-                            NameMap names, LengthMap lengths);
-
-
-void print_main_help_msg();
-void print_lift_help_msg();
-void print_serialize_help_msg();
 
 #endif

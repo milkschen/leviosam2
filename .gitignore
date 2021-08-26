@@ -1,3 +1,6 @@
 leviosam
 *.o
 .DS_Store
+*.swp
+gtest
+test_*.*am

@@ -5,9 +5,9 @@ LIB=-lsdsl -lhts -lz
 CFLAGS=-g -Wall -O2
 CLIB=-lz -lhts
 
-OBJS = leviosam.o bam_aux.o bam_md.o
+OBJS = leviosam.o chain.o leviosam_utils.o bam_aux.o bam_md.o
 CDEPS= bam.h
-DEPS = leviosam.hpp
+DEPS = leviosam.hpp chain.hpp
 
 all: $(MAIN)
 
@@ -20,8 +20,10 @@ all: $(MAIN)
 $(MAIN): $(OBJS)
 	    $(CXX) -o $@ $^ $(LIB) $(CXX_FLAGS)
 
-gtest: leviosam_test.cpp leviosam.hpp
-	    $(CXX) -o $@ $< $(LIB) $(CXX_FLAGS) -lgtest_main -lgtest
+gtest: leviosam_test.o chain.o leviosam_utils.o
+	    $(CXX) -o $@ $^ $(LIB) $(CXX_FLAGS) -lgtest_main -lgtest
+#gtest: leviosam_test.o chain.o
+	    # $(CXX) -o $@ $< $(LIB) $(CXX_FLAGS) -lgtest_main -lgtest
 
 clean:
-	    rm *.o $(MAIN)
+	    rm *.gch *.o $(MAIN)
