@@ -149,7 +149,8 @@ void read_and_lift(
                     }
                 } else {
                     std::lock_guard<std::mutex> g(wfq->mutex_fwrite_fq);
-                    LevioSamUtils::write_fq_from_bam(aln_vec[i], wfq);
+                    wfq->write_low_mapq_bam(aln_vec[i], hdr);
+                    // wfq->write_fq_from_bam(aln_vec[i]);
                 }
             }
         }
@@ -245,10 +246,16 @@ void lift_run(lift_opts args) {
 
     LevioSamUtils::WriteToFastq wfq;
     if (args.split_mode == "mapq") {
-        std::cerr << "Alignments with MAPQ lower than "
+        std::cerr << "Alignments with MAPQ < "
                   << args.mapq_cutoff << " will not be lifted, but "
-                  << "wrote to separate FASTQ files instead.\n";
-        wfq.init(args.outpre, args.split_mode, args.mapq_cutoff);
+                  << "wrote to a separate " << args.out_format << " file instead.\n";
+        // std::cerr << "Alignments with MAPQ lower than "
+        //           << args.mapq_cutoff << " will not be lifted, but "
+        //           << "wrote to separate FASTQ files instead.\n";
+        wfq.init(
+            args.outpre, args.split_mode,
+            args.mapq_cutoff, args.out_format);
+        auto write_hdr = sam_hdr_write(wfq.out_fp, hdr);
     }
 
     // const int num_threads = args.threads;
