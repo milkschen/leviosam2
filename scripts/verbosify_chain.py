@@ -63,7 +63,7 @@ def verbosify_chain(fn_chain, fn_out=None):
                 msg = f'\t\t\t{source}:{s_start}-{s_start+l}=>{dest}:{d_start}-{d_start+l}'
             else:
                 msg = f'\t\t\t{source}:{s_start}-{s_start+l}=>{dest}:{d_start}-{d_start-l}'
-            print(line + msg, file=fo)
+            print(line + msg + '\n', file=fo)
 
 
 
