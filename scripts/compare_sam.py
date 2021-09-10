@@ -1,5 +1,10 @@
-"""Compares two SAM/BAM files and report a summary.
-"""
+'''
+Compares two SAM/BAM files and report a summary.
+
+Nae-Chyun Chen
+Johns Hopkins University
+2021
+'''
 import argparse
 import pysam
 import re
