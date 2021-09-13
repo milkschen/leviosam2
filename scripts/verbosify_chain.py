@@ -32,13 +32,49 @@ def parse_args():
     return args
 
 
+def reverse_complement(seq):
+    d = {'A': 'T', 'a': 'T', 'C': 'G', 'c': 'G',
+         'G': 'C', 'g': 'G', 'T': 'A', 't': 'A',
+         'N': 'N'}
+    rc = ''
+    for s in seq:
+        if s in d:
+            rc += d[s]
+        else:
+            print(f'Base "{s}" is not a known nucleotide and is converted to N',
+                  file=sys.stderr)
+            rc += 'N'
+    return rc[::-1]
+
+
 def compute_hamming_dist(
+    forward,
     ref1, contig1, start1, end1,
     ref2, contig2, start2, end2
 ):
-    s1 = ref1[contig1][start1: end1]
-    s2 = ref2[contig2][start2: end2]
-    assert (len(s1) == len(s2))
+    if contig1 in ref1:
+        s1 = ref1[contig1][start1: end1]
+    else:
+        print(f'Warning : {contig1} not in ref1', file=sys.stderr)
+        return 0
+    if contig2 in ref2:
+        s2 = ref2[contig2][start2: end2]
+    else:
+        print(f'Warning : {contig2} not in ref2', file=sys.stderr)
+        return 0
+    
+    if not forward:
+        s2 = reverse_complement(s2)
+
+    try:
+        assert (len(s1) == len(s2))
+    except:
+        print('Error: lengths do not match', file=sys.stderr)
+        print(len(s1), len(s2), file=sys.stderr)
+        print(contig1, start1, end1, file=sys.stderr)
+        print(contig2, start2, end2, file=sys.stderr)
+        exit(1)
+
     if len(s1) == 0:
         return 0
     idy = 0
@@ -95,31 +131,34 @@ def verbosify_chain(args):
             dd = int(fields[2])
             if strand == '+':
                 msg = f'\t{source}:{s_start}-{s_start+l}=>{dest}:{d_start}-{d_start+l} ({d_start-s_start})'
-                if check_hdist:
-                    print(msg)
-                    hd = compute_hamming_dist(
-                        ref1, source, s_start, s_start+l,
-                        ref2, dest, d_start, d_start+l)
-                    msg += f'\t{hd}'
-                print(line + msg, file=fo)
+            else:
+                msg = f'\t{source}:{s_start}-{s_start+l}=>{dest}:{d_start}-{d_start-l} ({d_start-s_start})'
+            if check_hdist:
+                hd = compute_hamming_dist(
+                    (strand == '+'),
+                    ref1, source, s_start, s_start+l,
+                    ref2, dest, d_start, d_start+l)
+                msg += f'\t{hd}'
+            print(line + msg, file=fo)
+            if strand == '+':
                 s_start += (l + ds)
                 d_start += (l + dd)
             else:
-                msg = f'\t{source}:{s_start}-{s_start+l}=>{dest}:{d_start}-{d_start-l} ({d_start-s_start})'
-                print(line + msg, file=fo)
                 s_start += (l + ds)
                 d_start -= (l + dd)
         elif len(fields) == 1 and fields[0] != '':
             l = int(fields[0])
             if strand == '+':
                 msg = f'\t\t\t{source}:{s_start}-{s_start+l}=>{dest}:{d_start}-{d_start+l}'
-                if check_hdist:
-                    hd = compute_hamming_dist(
-                        ref1, source, s_start, s_start+l,
-                        ref2, dest, d_start, d_start+l)
-                    msg += f'\t{hd}'
             else:
                 msg = f'\t\t\t{source}:{s_start}-{s_start+l}=>{dest}:{d_start}-{d_start-l}'
+            if check_hdist:
+                hd = compute_hamming_dist(
+                    (strand == '+'),
+                    ref1, source, s_start, s_start+l,
+                    ref2, dest, d_start, d_start+l)
+                msg += f'\t{hd}'
+
             print(line + msg + '\n', file=fo)
 
 
