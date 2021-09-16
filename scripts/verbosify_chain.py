@@ -59,20 +59,19 @@ def compute_hamming_dist(
         return 0
     if contig2 in ref2:
         s2 = ref2[contig2][start2: end2]
+        if not forward:
+            s2 = reverse_complement(s2)
     else:
         print(f'Warning : {contig2} not in ref2', file=sys.stderr)
         return 0
-    
-    if not forward:
-        s2 = reverse_complement(s2)
 
     try:
         assert (len(s1) == len(s2))
     except:
         print('Error: lengths do not match', file=sys.stderr)
         print(len(s1), len(s2), file=sys.stderr)
-        print(contig1, start1, end1, file=sys.stderr)
-        print(contig2, start2, end2, file=sys.stderr)
+        print(f'{contig1}:{start1}-{end1}', file=sys.stderr)
+        print(f'{contig2}:{start2}-{end2}', file=sys.stderr)
         exit(1)
 
     if len(s1) == 0:
@@ -134,10 +133,16 @@ def verbosify_chain(args):
             else:
                 msg = f'\t{source}:{s_start}-{s_start+l}=>{dest}:{d_start}-{d_start-l} ({d_start-s_start})'
             if check_hdist:
-                hd = compute_hamming_dist(
-                    (strand == '+'),
-                    ref1, source, s_start, s_start+l,
-                    ref2, dest, d_start, d_start+l)
+                if strand == '+':
+                    hd = compute_hamming_dist(
+                        True,
+                        ref1, source, s_start, s_start+l,
+                        ref2, dest, d_start, d_start+l)
+                else:
+                    hd = compute_hamming_dist(
+                        False,
+                        ref1, source, s_start, s_start+l,
+                        ref2, dest, d_start-l, d_start)
                 msg += f'\t{hd}'
             print(line + msg, file=fo)
             if strand == '+':
@@ -153,10 +158,16 @@ def verbosify_chain(args):
             else:
                 msg = f'\t\t\t{source}:{s_start}-{s_start+l}=>{dest}:{d_start}-{d_start-l}'
             if check_hdist:
-                hd = compute_hamming_dist(
-                    (strand == '+'),
-                    ref1, source, s_start, s_start+l,
-                    ref2, dest, d_start, d_start+l)
+                if strand == '+':
+                    hd = compute_hamming_dist(
+                        True,
+                        ref1, source, s_start, s_start+l,
+                        ref2, dest, d_start, d_start+l)
+                else:
+                    hd = compute_hamming_dist(
+                        False,
+                        ref1, source, s_start, s_start+l,
+                        ref2, dest, d_start-l, d_start)
                 msg += f'\t{hd}'
 
             print(line + msg + '\n', file=fo)
