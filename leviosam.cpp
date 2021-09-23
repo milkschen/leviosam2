@@ -133,8 +133,7 @@ void read_and_lift(
             std::lock_guard<std::mutex> g(*mutex_fwrite);
             // std::thread::id this_id = std::this_thread::get_id();
             for (int i = 0; i < num_actual_reads; i++){
-                auto flag_write = sam_write1(out_sam_fp, hdr, aln_vec[i]);
-                if (flag_write < 0){
+                if (sam_write1(out_sam_fp, hdr, aln_vec[i]) < 0) {
                     std::cerr << "[Error] Failed to write record " << bam_get_qname(aln_vec[i]) << "\n";
                     exit(1);
                 }
@@ -287,26 +286,26 @@ void lift_run(lift_opts args) {
     }
     threads.clear();
     // Write singleton reads
-    if (args.split_mode == "mapq") {
-        if (wfq.r1_db.size() > 0) {
-            int c1 = 0;
-            for (auto i1: wfq.r1_db) {
-                auto n1 = i1.first;
-                n1 += "/1";
-                if (i1.second.write(wfq.out_fqS, n1))
-                    c1 ++;
-            }
-            std::cerr << "#R1 singleton: " << c1 << "\n";
-            int c2 = 0;
-            for (auto i2: wfq.r2_db) {
-                auto n2 = i2.first;
-                n2 += "/2";
-                if (i2.second.write(wfq.out_fqS, n2))
-                    c2 ++;
-            }
-            std::cerr << "#R2 singleton: " << c2 << "\n";
-        }
-    }
+    // if (args.split_mode == "mapq") {
+    //     if (wfq.r1_db.size() > 0) {
+    //         int c1 = 0;
+    //         for (auto i1: wfq.r1_db) {
+    //             auto n1 = i1.first;
+    //             n1 += "/1";
+    //             if (i1.second.write(wfq.out_fqS, n1))
+    //                 c1 ++;
+    //         }
+    //         std::cerr << "#R1 singleton: " << c1 << "\n";
+    //         int c2 = 0;
+    //         for (auto i2: wfq.r2_db) {
+    //             auto n2 = i2.first;
+    //             n2 += "/2";
+    //             if (i2.second.write(wfq.out_fqS, n2))
+    //                 c2 ++;
+    //         }
+    //         std::cerr << "#R2 singleton: " << c2 << "\n";
+    //     }
+    // }
     sam_close(sam_fp);
     sam_close(out_sam_fp);
 }
