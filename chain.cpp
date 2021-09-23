@@ -798,7 +798,6 @@ bool ChainMap::lift_segment(
     bool first_seg, std::string &dest_contig
 ) {
     bam1_core_t* c = &(aln->core);
-
     // If unmapped, the segment is not liftable.
     // If the aligned REF is not in the map, set the segment to be unliftable.
     if (first_seg) {
@@ -836,6 +835,9 @@ bool ChainMap::lift_segment(
         c->tid = sam_hdr_name2tid(hdr, dest_contig.c_str());
     else
         c->mtid = sam_hdr_name2tid(hdr, dest_contig.c_str());
+
+    if (c->tid < 0 || c->mtid < 0)
+        return false;
     
     // Estimate ending pos of the mate
     // If it's the first segment, we can calculate the query length wrt the REF;
@@ -913,6 +915,10 @@ bool ChainMap::lift_segment(
             c->flag ^= BAM_FMREVERSE;
         }
     }
+    // There can be cases where a position is lifted to a negative value, in which we set the
+    // read to unmapped.
+    if (c->pos < 0 || c->mpos < 0)
+        return false;
     return true;
 }
 
@@ -927,12 +933,16 @@ void ChainMap::lift_aln(
 
     if (verbose > 1) {
         std::cerr << "\n" << bam_get_qname(aln) << " (" << c->flag << ")\n";
+        std::cerr << aln->core.tid << "\n";
+        if (aln->core.tid >= 0)
+            std::cerr << hdr->target_name[aln->core.tid] << "\n";
     }
 
     bool r1_liftable = lift_segment(aln, hdr, true, dest_contig);
     if (!r1_liftable) {
         update_flag_unmap(c, true);
     }
+
     size_t lift_status;
     std::string lo;
 
