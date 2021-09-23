@@ -21,6 +21,10 @@ def parse_args():
         help='Path to the output verbose chain file. [empty string]'
     )
     parser.add_argument(
+        '-s', '--summary', default='',
+        help='Path to the output summary. Leave empty for no output. [empty string]'
+    )
+    parser.add_argument(
         '-f1', '--ref1', default='',
         help='Path to the source reference (optional).'
     )
@@ -45,6 +49,19 @@ def reverse_complement(seq):
                   file=sys.stderr)
             rc += 'N'
     return rc[::-1]
+
+
+'''
+Read a FASTA file as a dict if a file name is given. If not, return None.
+'''
+def read_fasta(ref_fn):
+    ref = None
+    if ref_fn != '':
+        f = pysam.FastaFile(ref_fn)
+        ref = {}
+        for r in f.references:
+            ref[r] = f[r]
+    return ref
 
 
 def compute_hamming_dist(
@@ -84,6 +101,16 @@ def compute_hamming_dist(
     return idy
 
 
+def write_to_summary(fs_fn, fs, strand, l, hd, source, s_start, dest, d_start):
+    if fs_fn:
+        if strand == '+':
+            print((f'{l}\t{hd}\t{source}\t{s_start}\t{s_start+l}\t+'
+                   f'\t{dest}\t{d_start}\t{d_start+l}'), file=fs)
+        else:
+            print((f'{l}\t{hd}\t{source}\t{s_start}\t{s_start+l}\t+'
+                   f'\t{dest}\t{d_start-l}\t{d_start}'), file=fs)
+
+
 def verbosify_chain(args):
     f = open(args.chain, 'r')
     if args.out == '':
@@ -91,20 +118,26 @@ def verbosify_chain(args):
     else:
         fo = open(args.out, 'w')
 
-    ref1 = None
-    if args.ref1 != '':
-        f1 = pysam.FastaFile(args.ref1)
-        ref1 = {}
-        for r in f1.references:
-            ref1[r] = f1[r]
-    ref2 = None
-    if args.ref2 != '':
-        f2 = pysam.FastaFile(args.ref2)
-        ref2 = {}
-        for r in f2.references:
-            ref2[r] = f2[r]
+    ref1 = read_fasta(args.ref1)
+    ref2 = read_fasta(args.ref2)
+    # ref1 = None
+    # if args.ref1 != '':
+    #     f1 = pysam.FastaFile(args.ref1)
+    #     ref1 = {}
+    #     for r in f1.references:
+    #         ref1[r] = f1[r]
+    # ref2 = None
+    # if args.ref2 != '':
+    #     f2 = pysam.FastaFile(args.ref2)
+    #     ref2 = {}
+    #     for r in f2.references:
+    #         ref2[r] = f2[r]
     check_hdist = True if ref1 != None else False
+    if args.summary:
+        assert check_hdist == True
+        fs = open(args.summary, 'w')
 
+    total_bases = 0
     for line in f:
         if not line:
             continue
@@ -126,24 +159,25 @@ def verbosify_chain(args):
                 d_end = dest_len - int(fields[11])
         elif len(fields) == 3:
             l = int(fields[0])
+            total_bases += l
             ds = int(fields[1])
             dd = int(fields[2])
             if strand == '+':
                 msg = f'\t{source}:{s_start}-{s_start+l}=>{dest}:{d_start}-{d_start+l} ({d_start-s_start})'
-            else:
-                msg = f'\t{source}:{s_start}-{s_start+l}=>{dest}:{d_start}-{d_start-l} ({d_start-s_start})'
-            if check_hdist:
-                if strand == '+':
+                if check_hdist:
                     hd = compute_hamming_dist(
                         True,
                         ref1, source, s_start, s_start+l,
                         ref2, dest, d_start, d_start+l)
-                else:
+                    msg += f'\t{hd}'
+            else:
+                msg = f'\t{source}:{s_start}-{s_start+l}=>{dest}:{d_start}-{d_start-l} ({d_start-s_start})'
+                if check_hdist:
                     hd = compute_hamming_dist(
                         False,
                         ref1, source, s_start, s_start+l,
                         ref2, dest, d_start-l, d_start)
-                msg += f'\t{hd}'
+                    msg += f'\t{hd}'
             print(line + msg, file=fo)
             if strand == '+':
                 s_start += (l + ds)
@@ -151,27 +185,30 @@ def verbosify_chain(args):
             else:
                 s_start += (l + ds)
                 d_start -= (l + dd)
+            write_to_summary(args.summary, fs, strand, l, hd, source, s_start, dest, d_start)
         elif len(fields) == 1 and fields[0] != '':
             l = int(fields[0])
+            total_bases += l
             if strand == '+':
                 msg = f'\t\t\t{source}:{s_start}-{s_start+l}=>{dest}:{d_start}-{d_start+l}'
-            else:
-                msg = f'\t\t\t{source}:{s_start}-{s_start+l}=>{dest}:{d_start}-{d_start-l}'
-            if check_hdist:
-                if strand == '+':
+                if check_hdist:
                     hd = compute_hamming_dist(
                         True,
                         ref1, source, s_start, s_start+l,
                         ref2, dest, d_start, d_start+l)
-                else:
+                    msg += f'\t{hd}'
+            else:
+                msg = f'\t\t\t{source}:{s_start}-{s_start+l}=>{dest}:{d_start}-{d_start-l}'
+                if check_hdist:
                     hd = compute_hamming_dist(
                         False,
                         ref1, source, s_start, s_start+l,
                         ref2, dest, d_start-l, d_start)
-                msg += f'\t{hd}'
-
+                    msg += f'\t{hd}'
+            write_to_summary(args.summary, fs, strand, l, hd, source, s_start, dest, d_start)
             print(line + msg + '\n', file=fo)
 
+    print(f'Total number of gapless aligned bases = {total_bases}', file=sys.stderr)
 
 
 if __name__ == '__main__':
