@@ -7,20 +7,30 @@ void WriteToFastq::init(
     const std::string outpre, const std::string sm,
     const int mc, const std::string of
 ) {
-    out_fqS.open(outpre + "-deferred-S.fq");
-    out_fq1.open(outpre + "-deferred-R1.fq");
-    out_fq2.open(outpre + "-deferred-R2.fq");
+    // out_fqS.open(outpre + "-deferred-S.fq");
+    // out_fq1.open(outpre + "-deferred-R1.fq");
+    // out_fq2.open(outpre + "-deferred-R2.fq");
     split_mode = sm;
     mapq_cutoff = mc;
     r1_db.clear();
     r2_db.clear();
 
     std::string out_mode = (of == "sam")? "w" : "wb";
+    write_deferred = true;
     out_fp = sam_open(
         (outpre + "-deferred." + of).data(),
         out_mode.data()
     );
 }
+
+
+WriteToFastq::~WriteToFastq() {
+    // out_fqS.close();
+    // out_fq1.close();
+    // out_fq2.close();
+    if (write_deferred)
+        sam_close(out_fp);
+};
 
 
 void update_cigar(

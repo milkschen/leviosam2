@@ -30,13 +30,10 @@ public:
 
 class WriteToFastq {
 public:
-    WriteToFastq() {};
-    ~WriteToFastq() {
-        out_fqS.close();
-        out_fq1.close();
-        out_fq2.close();
-        sam_close(out_fp);
+    WriteToFastq() {
+        write_deferred = false;
     };
+    ~WriteToFastq();
 
     void init(
         const std::string outpre, const std::string sm,
@@ -55,6 +52,7 @@ public:
     int mapq_cutoff;
     std::unordered_map<std::string, FastqRecord> r1_db;
     std::unordered_map<std::string, FastqRecord> r2_db;
+    bool write_deferred;
 };
 
 void update_cigar(bam1_t* aln, std::vector<uint32_t> &new_cigar);
