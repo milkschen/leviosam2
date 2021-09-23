@@ -1,7 +1,12 @@
 '''
 Collect computational performance from a collection of GNU time reports.
 
-Usage: python collect_perf.py -a bt2_all.time_log -l lift.time_log -l aln.time_log
+Usage: 
+```
+python collect_perf.py -a bt2_all.time_log -l lift.time_log -l collate.time_log 
+-l to_fastq.time_log -l aln_paired.time_log -l aln_unpaired.time_log 
+-l merge.time_log -l sort_all.time_log
+```
 
 Nae-Chyun Chen
 Johns Hopkins University
