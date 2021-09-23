@@ -120,24 +120,14 @@ def verbosify_chain(args):
 
     ref1 = read_fasta(args.ref1)
     ref2 = read_fasta(args.ref2)
-    # ref1 = None
-    # if args.ref1 != '':
-    #     f1 = pysam.FastaFile(args.ref1)
-    #     ref1 = {}
-    #     for r in f1.references:
-    #         ref1[r] = f1[r]
-    # ref2 = None
-    # if args.ref2 != '':
-    #     f2 = pysam.FastaFile(args.ref2)
-    #     ref2 = {}
-    #     for r in f2.references:
-    #         ref2[r] = f2[r]
+
     check_hdist = True if ref1 != None else False
     if args.summary:
         assert check_hdist == True
         fs = open(args.summary, 'w')
 
     total_bases = 0
+    total_bases_idy = 0
     for line in f:
         if not line:
             continue
@@ -186,6 +176,8 @@ def verbosify_chain(args):
                 s_start += (l + ds)
                 d_start -= (l + dd)
             write_to_summary(args.summary, fs, strand, l, hd, source, s_start, dest, d_start)
+            if check_hdist:
+                total_bases_idy += (l * hd)
         elif len(fields) == 1 and fields[0] != '':
             l = int(fields[0])
             total_bases += l
@@ -206,9 +198,12 @@ def verbosify_chain(args):
                         ref2, dest, d_start-l, d_start)
                     msg += f'\t{hd}'
             write_to_summary(args.summary, fs, strand, l, hd, source, s_start, dest, d_start)
+            if check_hdist:
+                total_bases_idy += (l * hd)
             print(line + msg + '\n', file=fo)
 
     print(f'Total number of gapless aligned bases = {total_bases}', file=sys.stderr)
+    print(f'Total number of gapless matched bases = {total_bases_idy}', file=sys.stderr)
 
 
 if __name__ == '__main__':
