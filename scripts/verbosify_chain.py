@@ -60,7 +60,7 @@ def read_fasta(ref_fn):
         f = pysam.FastaFile(ref_fn)
         ref = {}
         for r in f.references:
-            ref[r] = f[r]
+            ref[r] = f[r].upper()
     return ref
 
 
