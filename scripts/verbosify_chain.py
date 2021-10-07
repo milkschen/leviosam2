@@ -1,11 +1,12 @@
 '''
-Add info for a chain file to facilitate debugging.
+Add info for a chain file to facilitate debugging
 
 Nae-Chyun Chen
 Johns Hopkins University
 2021
 '''
 import argparse
+import leviosam_utils
 import pysam
 import re
 import sys
@@ -55,17 +56,17 @@ def reverse_complement(seq):
     return rc[::-1]
 
 
-'''
-Read a FASTA file as a dict if a file name is given. If not, return None.
-'''
-def read_fasta(ref_fn):
-    ref = None
-    if ref_fn != '':
-        f = pysam.FastaFile(ref_fn)
-        ref = {}
-        for r in f.references:
-            ref[r] = f[r].upper()
-    return ref
+# '''
+# Read a FASTA file as a dict if a file name is given. If not, return None.
+# '''
+# def read_fasta(ref_fn):
+#     ref = None
+#     if ref_fn != '':
+#         f = pysam.FastaFile(ref_fn)
+#         ref = {}
+#         for r in f.references:
+#             ref[r] = f[r].upper()
+#     return ref
 
 
 def compute_hamming_dist(
@@ -125,10 +126,11 @@ def verbosify_chain(args):
         f_sbed = open(args.bed_prefix + '-source.bed', 'w')
         f_dbed = open(args.bed_prefix + '-dest.bed', 'w')
 
-    ref1 = read_fasta(args.ref1)
-    ref2 = read_fasta(args.ref2)
+    ref1 = leviosam_utils.read_fasta(args.ref1)
+    ref2 = leviosam_utils.read_fasta(args.ref2)
 
-    check_hdist = True if ref1 != None else False
+    check_hdist = True if (ref1 != {} and ref2 != {}) else False
+    # check_hdist = True if ref1 != None else False
     if not check_hdist:
         hd = None
     if args.summary:
