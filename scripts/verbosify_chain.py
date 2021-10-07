@@ -21,6 +21,10 @@ def parse_args():
         help='Path to the output verbose chain file. [empty string]'
     )
     parser.add_argument(
+        '-b', '--bed_prefix', default='',
+        help='Prefix to the BED files that include all the chain segments. [empty string]'
+    )
+    parser.add_argument(
         '-s', '--summary', default='',
         help='Path to the output summary. Leave empty for no output. [empty string]'
     )
@@ -117,14 +121,21 @@ def verbosify_chain(args):
         fo = sys.stderr
     else:
         fo = open(args.out, 'w')
+    if args.bed_prefix != '':
+        f_sbed = open(args.bed_prefix + '-source.bed', 'w')
+        f_dbed = open(args.bed_prefix + '-dest.bed', 'w')
 
     ref1 = read_fasta(args.ref1)
     ref2 = read_fasta(args.ref2)
 
     check_hdist = True if ref1 != None else False
+    if not check_hdist:
+        hd = None
     if args.summary:
         assert check_hdist == True
         fs = open(args.summary, 'w')
+    else:
+        fs = None
 
     total_bases = 0
     total_bases_idy = 0
@@ -154,6 +165,9 @@ def verbosify_chain(args):
             dd = int(fields[2])
             if strand == '+':
                 msg = f'\t{source}:{s_start}-{s_start+l}=>{dest}:{d_start}-{d_start+l} ({d_start-s_start})'
+                if args.bed_prefix != '':
+                    f_sbed.write(f'{source}\t{s_start}\t{s_start+l}\n')
+                    f_dbed.write(f'{dest}\t{d_start}\t{d_start+l}\n')
                 if check_hdist:
                     hd = compute_hamming_dist(
                         True,
@@ -162,6 +176,9 @@ def verbosify_chain(args):
                     msg += f'\t{hd}'
             else:
                 msg = f'\t{source}:{s_start}-{s_start+l}=>{dest}:{d_start}-{d_start-l} ({d_start-s_start})'
+                if args.bed_prefix != '':
+                    f_sbed.write(f'{source}\t{s_start}\t{s_start+l}\n')
+                    f_dbed.write(f'{dest}\t{d_start-l}\t{d_start}\n')
                 if check_hdist:
                     hd = compute_hamming_dist(
                         False,
@@ -183,6 +200,9 @@ def verbosify_chain(args):
             total_bases += l
             if strand == '+':
                 msg = f'\t\t\t{source}:{s_start}-{s_start+l}=>{dest}:{d_start}-{d_start+l}'
+                if args.bed_prefix != '':
+                    f_sbed.write(f'{source}\t{s_start}\t{s_start+l}\n')
+                    f_dbed.write(f'{dest}\t{d_start}\t{d_start+l}\n')
                 if check_hdist:
                     hd = compute_hamming_dist(
                         True,
@@ -191,6 +211,9 @@ def verbosify_chain(args):
                     msg += f'\t{hd}'
             else:
                 msg = f'\t\t\t{source}:{s_start}-{s_start+l}=>{dest}:{d_start}-{d_start-l}'
+                if args.bed_prefix != '':
+                    f_sbed.write(f'{source}\t{s_start}\t{s_start+l}\n')
+                    f_dbed.write(f'{dest}\t{d_start-l}\t{d_start}\n')
                 if check_hdist:
                     hd = compute_hamming_dist(
                         False,
