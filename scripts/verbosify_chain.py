@@ -109,10 +109,10 @@ def compute_hamming_dist(
 def write_to_summary(fs_fn, fs, strand, l, hd, source, s_start, dest, d_start):
     if fs_fn:
         if strand == '+':
-            print((f'{l}\t{hd}\t{source}\t{s_start}\t{s_start+l}\t+'
+            print((f'{l}\t{hd:.6f}\t{source}\t{s_start}\t{s_start+l}\t+'
                    f'\t{dest}\t{d_start}\t{d_start+l}'), file=fs)
         else:
-            print((f'{l}\t{hd}\t{source}\t{s_start}\t{s_start+l}\t+'
+            print((f'{l}\t{hd:.6f}\t{source}\t{s_start}\t{s_start+l}\t+'
                    f'\t{dest}\t{d_start-l}\t{d_start}'), file=fs)
 
 
@@ -136,6 +136,8 @@ def verbosify_chain(args):
     if args.summary:
         assert check_hdist == True
         fs = open(args.summary, 'w')
+        # Write header
+        print(f'SIZE\tHDIST\tSOURCE\tS_START\tS_END\tSTRAND\tDEST\tD_START\tD_END', file=fs)
     else:
         fs = None
 
