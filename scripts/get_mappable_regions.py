@@ -1,11 +1,12 @@
 '''
-Reads a mappability BED file and returns highly-mappable regions.
+Reads a mappability BED file and returns highly-mappable regions
 
 Nae-Chyun Chen
 Johns Hopkins University
 2021
 '''
 import argparse
+import typing
 import pysam
 import sys
 
@@ -31,6 +32,19 @@ def parse_args():
     return args
 
 
+def print_to_bed(
+    chrom: chr, high_map_start: int, low_map_start: int, fo: typing.TextIO
+) -> None:
+    if high_map_start < low_map_start:
+        print(f'{chrom}\t{high_map_start}\t{low_map_start}', file=fo)
+
+
+def is_mappable(fields: list, min_mappability: float) -> bool:
+    if fields[3] == 'inf' or float(fields[3]) < min_mappability:
+        return False
+    return True
+
+
 def get_mappable_regions(args):
     fb = open(args.input_bed, 'r')
     if args.out == '':
@@ -40,23 +54,32 @@ def get_mappable_regions(args):
 
     chrom = ''
     high_map_start = 0
-    high_map_end = 0
+    low_map_start = 0
+    state = None
     for line in fb:
         line = line.split()
-        # Reset if sees a new chromosome
+        # Reset when seeing a new chromosome
         if line[0] != chrom:
             chrom = line[0]
             high_map_start = 0
-            high_map_end = 0
-        if line[3] == 'inf' or float(line[3]) >= args.min_mappability:
-            high_map_end = int(line[1]) + args.kmer_size
-        else:
-            low_map_start = int(line[1])
-            if high_map_start < low_map_start:
-                print(f'{chrom}\t{high_map_start}\t{low_map_start}', file=fo)
-                # print(f'{chrom}\t{high_map_start}\t{high_map_end}', file=fo)
-            high_map_start = low_map_start + args.kmer_size
+            low_map_start = 0
+            state = None
 
+        if not is_mappable(line, args.min_mappability):
+            # mappable to unmappable
+            if state != 'unmappable':
+                low_map_start = int(line[1])
+                print_to_bed(chrom, high_map_start, low_map_start, fo)
+                state = 'unmappable'
+            high_map_start = low_map_start + args.kmer_size
+        else:
+            if state != 'mappable':
+                if int(line[1]) > high_map_start:
+                    high_map_start = int(line[1])
+                state = 'mappable'
+
+    if state == 'mappable':
+        print_to_bed(chrom, high_map_start, int(line[1])+args.kmer_size, fo)
 
 
 if __name__ == '__main__':
