@@ -43,7 +43,7 @@ def extract_seq_from_bed(args):
         end = int(line[2])
         # Note that FASTA coords are usually represented in 1-based;
         # other systems here are 0-based
-        print(f'>{contig}:{start+1}-{end+1}', file=fo)
+        print(f'>{contig}:{start+1}-{end}', file=fo)
         print(f'{ref[contig][start:end]}', file=fo)
 
 
