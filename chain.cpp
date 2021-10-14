@@ -905,13 +905,34 @@ bool ChainMap::lift_segment(
             c->pos = c->pos + offset;
         else {
             c->pos = -pos_end + offset + start_sintvl.source_start + start_sintvl.source_end;
+            
+            // Update FLAG if in a reversed chain
             c->flag ^= BAM_FREVERSE;
+
+            // Update SEQ and QUAL if in a reversed chain
+            uint8_t *seq = bam_get_seq(aln);
+            uint8_t *qual = bam_get_qual(aln);
+            std::vector<int> read_nt16;
+            std::vector<uint8_t> qual_tmp;
+            for (int n = 0; n < c->l_qseq; n++) {
+                read_nt16.push_back(seq_comp_table[bam_seqi(seq, n)]);
+                qual_tmp.push_back(qual[n]);
+            }
+            // Make sure the length of the reversed seq is concordant with the original seq
+            if (read_nt16.size() != c->l_qseq) {
+                return false;
+            }
+            for (int n = 0; n < c->l_qseq; n++) {
+                bam_set_seqi(seq, n, read_nt16[c->l_qseq - n - 1]);
+                qual[n] = qual_tmp[c->l_qseq - n - 1];
+            }
         }
     } else {
         if (strand)
             c->mpos = c->mpos + offset;
         else {
             c->mpos = -pos_end + offset + start_sintvl.source_start + start_sintvl.source_end;
+            // Update FLAG if in a reversed chain
             c->flag ^= BAM_FMREVERSE;
         }
     }
@@ -928,6 +949,7 @@ void ChainMap::lift_aln(
     bam1_t* aln, bam_hdr_t* hdr, std::string &dest_contig
 ) {
     bam1_core_t* c = &(aln->core);
+    uint16_t flag = c->flag;
     size_t pos = c->pos;
     size_t mpos = c->mpos;
 
@@ -1025,7 +1047,14 @@ void ChainMap::lift_aln(
         { 
             c->isize = 0;
         } else {
-            c->isize = c->isize + (mpos - c->mpos) - (pos - c->pos);
+            // std::cerr << "isize=" << c->isize << ", mpos=" << mpos << "->" << c->mpos;
+            // std::cerr << ", pos=" << pos << "->" << c->pos << "\n";
+            // std::cerr << "flag=" << flag << ", ->" << c->flag << "\n";
+            if (flag == c->flag)
+                c->isize = c->isize + (mpos - pos) - (c->mpos - c->pos);
+                // c->isize = c->isize + (mpos - c->mpos) - (pos - c->pos);
+            else
+                c->isize = -(c->isize + (mpos - pos) + (c->mpos - c->pos));
         }
 
     // Unpaired
