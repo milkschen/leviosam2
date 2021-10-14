@@ -1,5 +1,5 @@
 '''
-Convert a FAI file to a BED file.
+Convert a FAI file to a BED file
 
 Nae-Chyun Chen
 Johns Hopkins University
