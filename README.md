@@ -1,4 +1,4 @@
-# levioSAM: efficient liftint over alignments
+# levioSAM: efficient lift-over of alignments
 
 LevioSAM uses a VCF or a chain file to lift over alignments efficiently.
 
