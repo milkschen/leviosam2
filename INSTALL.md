@@ -33,7 +33,13 @@ Make sure the following prerequisite libraries are installed on your system.
 - [htslib v1.10+](https://github.com/samtools/htslib)
 - [sdsl-lite v2.1.1+](https://github.com/simongog/sdsl-lite/)
 
-An easy way to install these dependencies is to use your OS's existing package system:
+Both libraries are available through coda:
+```
+conda install -c conda-forge sdsl-lite
+conda install -c bioconda htslib
+```
+
+Another easy way to install these dependencies is to use your OS's existing package system:
 ```
 apt-get install libhts-dev libsdsl-dev # Debian/Ubuntu
 brew tap brewsci/bio; brew install htslib sdsl-lite # MacOS
