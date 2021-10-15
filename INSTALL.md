@@ -74,6 +74,7 @@ Update `LD_LIBRARY_PATH` and `CPLUS_INCLUDE_PATH` paths after installing sdsl-li
 
 ```
 export LD_LIBRARY_PATH=<path/to/lib>:$LD_LIBRARY_PATH
+export LIBRARY_PATH=<path/to/lib>:$LIBRARY_PATH
 export C_INCLUDE_PATH=<path/to/include>:$C_INCLUDE_PATH
 export CPLUS_INCLUDE_PATH=<path/to/include>:$CPLUS_INCLUDE_PATH
 make
