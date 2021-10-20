@@ -433,6 +433,9 @@ def read_sam_as_dict(fn: str) -> dict:
     dict_reads = {}
     f = pysam.AlignmentFile(fn, 'r')
     for read in f:
+        if read.is_secondary or read.is_supplementary:
+            continue
+
         if not read.is_paired:
             segment_idx = 0
         else:
