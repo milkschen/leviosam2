@@ -4,16 +4,33 @@
 namespace LevioSamUtils {
 
 void WriteToFastq::init(
-    const std::string outpre, const std::string sm, const int mc
+    const std::string outpre, const std::string sm,
+    const int mc, const std::string of
 ) {
-    out_fqS.open(outpre + "-deferred-S.fq");
-    out_fq1.open(outpre + "-deferred-R1.fq");
-    out_fq2.open(outpre + "-deferred-R2.fq");
+    // out_fqS.open(outpre + "-deferred-S.fq");
+    // out_fq1.open(outpre + "-deferred-R1.fq");
+    // out_fq2.open(outpre + "-deferred-R2.fq");
     split_mode = sm;
     mapq_cutoff = mc;
     r1_db.clear();
     r2_db.clear();
+
+    std::string out_mode = (of == "sam")? "w" : "wb";
+    write_deferred = true;
+    out_fp = sam_open(
+        (outpre + "-deferred." + of).data(),
+        out_mode.data()
+    );
 }
+
+
+WriteToFastq::~WriteToFastq() {
+    // out_fqS.close();
+    // out_fq1.close();
+    // out_fq2.close();
+    if (write_deferred)
+        sam_close(out_fp);
+};
 
 
 void update_cigar(
@@ -130,6 +147,22 @@ void write_fq_from_bam_core(bam1_t* aln, std::ofstream& out_fq){
     out_fq << qual_seq << "\n";
 }
 
+void WriteToFastq::write_low_mapq_bam(
+    bam1_t* aln, bam_hdr_t* hdr
+) {
+    if ((aln->core.flag & 256) || // Secondary alignment - no SEQ field
+        (aln->core.flag & 512) || // not passing filters
+        (aln->core.flag & 1024) || // PCR or optinal duplicate
+        (aln->core.flag & 2048)) { // supplementary alignment
+        return;
+    }
+    int ret = sam_write1(out_fp, hdr, aln);
+    if (ret < 0) {
+        std::cerr << "[Error] Failed to write record " << bam_get_qname(aln) << "\n";
+        exit(1);
+    }
+}
+
 
 /* BAM2FASTQ, with a heuristic algorithm to handle paired-end reads
  * 
@@ -142,7 +175,7 @@ void write_fq_from_bam_core(bam1_t* aln, std::ofstream& out_fq){
  * If so, write both segments to file and mark the mate as 
  * "written"; if not, add the segment to the associated map.
  */
-void write_fq_from_bam(bam1_t* aln, WriteToFastq* wfq) {
+void WriteToFastq::write_fq_from_bam(bam1_t* aln) {
     if ((aln->core.flag & 256) || // Secondary alignment - no SEQ field
         (aln->core.flag & 512) || // not passing filters
         (aln->core.flag & 1024) || // PCR or optinal duplicate
@@ -151,46 +184,46 @@ void write_fq_from_bam(bam1_t* aln, WriteToFastq* wfq) {
     } 
     std::string n (bam_get_qname(aln));
     if (!(aln->core.flag & 1)) { // e.g. single-end
-        write_fq_from_bam_core(aln, wfq->out_fqS);
+        write_fq_from_bam_core(aln, out_fqS);
     } else if (aln->core.flag & 64) { // First segment
-        auto find_r2 = wfq->r2_db.find(n);
-        if (find_r2 != wfq->r2_db.end()) {
-            auto w = find_r2->second.write(wfq->out_fq2, n);
+        auto find_r2 = r2_db.find(n);
+        if (find_r2 != r2_db.end()) {
+            auto w = find_r2->second.write(out_fq2, n);
             if (w > 0)
-                write_fq_from_bam_core(aln, wfq->out_fq1);
+                write_fq_from_bam_core(aln, out_fq1);
         } else {
-            wfq->r1_db.emplace(std::make_pair(n, FastqRecord(aln)));
-            // std::cerr << "first+1: " << wfq->r1_db.size() << " " << n << "\n";
+            r1_db.emplace(std::make_pair(n, FastqRecord(aln)));
+            // std::cerr << "first+1: " << r1_db.size() << " " << n << "\n";
         }
     } else if (aln->core.flag & 128) { // Second segment
-        auto find_r1 = wfq->r1_db.find(n);
-        if (find_r1 != wfq->r1_db.end()) {
-            auto w = find_r1->second.write(wfq->out_fq1, n);
+        auto find_r1 = r1_db.find(n);
+        if (find_r1 != r1_db.end()) {
+            auto w = find_r1->second.write(out_fq1, n);
             if (w > 0)
-                write_fq_from_bam_core(aln, wfq->out_fq2);
+                write_fq_from_bam_core(aln, out_fq2);
         } else {
-            wfq->r2_db.emplace(std::make_pair(n, FastqRecord(aln)));
-            // std::cerr << "second+1: " << wfq->r2_db.size() << " " << n << "\n";
+            r2_db.emplace(std::make_pair(n, FastqRecord(aln)));
+            // std::cerr << "second+1: " << r2_db.size() << " " << n << "\n";
         }
     } else {
         std::cerr << "Error: issues with read " << n << "\n";
         exit(1);
     }
 
-    if (wfq->r1_db.size() >= 10000) {
-        std::cerr << "Clearing R1db (" << wfq->r1_db.size() << ") and R2db (" << wfq->r2_db.size() << ")\n";
-        for (auto i: wfq->r1_db) {
+    if (r1_db.size() >= 10000) {
+        std::cerr << "Clearing R1db (" << r1_db.size() << ") and R2db (" << r2_db.size() << ")\n";
+        for (auto i: r1_db) {
             auto n1 = i.first;
             n1 += "/1";
-            i.second.write(wfq->out_fqS, n1);
+            i.second.write(out_fqS, n1);
         }
-        for (auto i: wfq->r2_db) {
+        for (auto i: r2_db) {
             auto n2 = i.first;
             n2 += "/2";
-            i.second.write(wfq->out_fqS, n2);
+            i.second.write(out_fqS, n2);
         }
-        wfq->r1_db.clear();
-        wfq->r2_db.clear();
+        r1_db.clear();
+        r2_db.clear();
     }
 }
 

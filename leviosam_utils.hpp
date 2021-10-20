@@ -31,26 +31,29 @@ public:
 
 class WriteToFastq {
 public:
-    WriteToFastq() {};
-    ~WriteToFastq() {
-        out_fqS.close();
-        out_fq1.close();
-        out_fq2.close();
+    WriteToFastq() {
+        write_deferred = false;
     };
+    ~WriteToFastq();
 
     void init(
         const std::string outpre, const std::string sm,
-        const int mc
+        const int mc, const std::string of
     );
+
+    void write_fq_from_bam(bam1_t* aln);
+    void write_low_mapq_bam(bam1_t* aln, bam_hdr_t* hdr);
 
     std::ofstream out_fqS;
     std::ofstream out_fq1;
     std::ofstream out_fq2;
+    samFile* out_fp;
     std::string split_mode = "";
     std::mutex mutex_fwrite_fq;
     int mapq_cutoff;
     std::unordered_map<std::string, FastqRecord> r1_db;
     std::unordered_map<std::string, FastqRecord> r2_db;
+    bool write_deferred;
 };
 
 void update_cigar(bam1_t* aln, std::vector<uint32_t> &new_cigar);
@@ -58,7 +61,6 @@ void debug_print_cigar(uint32_t* cigar, size_t n_cigar);
 void remove_mn_md_tag(bam1_t* aln);
 static std::string get_read(const bam1_t *rec);
 void write_fq_from_bam_core(bam1_t* aln, std::ofstream& out_fq);
-void write_fq_from_bam(bam1_t* aln, WriteToFastq* wfq);
 }
 
 #endif

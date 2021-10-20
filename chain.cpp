@@ -798,7 +798,6 @@ bool ChainMap::lift_segment(
     bool first_seg, std::string &dest_contig
 ) {
     bam1_core_t* c = &(aln->core);
-
     // If unmapped, the segment is not liftable.
     // If the aligned REF is not in the map, set the segment to be unliftable.
     if (first_seg) {
@@ -836,6 +835,9 @@ bool ChainMap::lift_segment(
         c->tid = sam_hdr_name2tid(hdr, dest_contig.c_str());
     else
         c->mtid = sam_hdr_name2tid(hdr, dest_contig.c_str());
+
+    if (c->tid < 0 || c->mtid < 0)
+        return false;
     
     // Estimate ending pos of the mate
     // If it's the first segment, we can calculate the query length wrt the REF;
@@ -903,16 +905,41 @@ bool ChainMap::lift_segment(
             c->pos = c->pos + offset;
         else {
             c->pos = -pos_end + offset + start_sintvl.source_start + start_sintvl.source_end;
+            
+            // Update FLAG if in a reversed chain
             c->flag ^= BAM_FREVERSE;
+
+            // Update SEQ and QUAL if in a reversed chain
+            uint8_t *seq = bam_get_seq(aln);
+            uint8_t *qual = bam_get_qual(aln);
+            std::vector<int> read_nt16;
+            std::vector<uint8_t> qual_tmp;
+            for (int n = 0; n < c->l_qseq; n++) {
+                read_nt16.push_back(seq_comp_table[bam_seqi(seq, n)]);
+                qual_tmp.push_back(qual[n]);
+            }
+            // Make sure the length of the reversed seq is concordant with the original seq
+            if (read_nt16.size() != c->l_qseq) {
+                return false;
+            }
+            for (int n = 0; n < c->l_qseq; n++) {
+                bam_set_seqi(seq, n, read_nt16[c->l_qseq - n - 1]);
+                qual[n] = qual_tmp[c->l_qseq - n - 1];
+            }
         }
     } else {
         if (strand)
             c->mpos = c->mpos + offset;
         else {
             c->mpos = -pos_end + offset + start_sintvl.source_start + start_sintvl.source_end;
+            // Update FLAG if in a reversed chain
             c->flag ^= BAM_FMREVERSE;
         }
     }
+    // There can be cases where a position is lifted to a negative value, in which we set the
+    // read to unmapped.
+    if (c->pos < 0 || c->mpos < 0)
+        return false;
     return true;
 }
 
@@ -922,17 +949,22 @@ void ChainMap::lift_aln(
     bam1_t* aln, bam_hdr_t* hdr, std::string &dest_contig
 ) {
     bam1_core_t* c = &(aln->core);
+    uint16_t flag = c->flag;
     size_t pos = c->pos;
     size_t mpos = c->mpos;
 
     if (verbose > 1) {
         std::cerr << "\n" << bam_get_qname(aln) << " (" << c->flag << ")\n";
+        std::cerr << aln->core.tid << "\n";
+        if (aln->core.tid >= 0)
+            std::cerr << hdr->target_name[aln->core.tid] << "\n";
     }
 
     bool r1_liftable = lift_segment(aln, hdr, true, dest_contig);
     if (!r1_liftable) {
         update_flag_unmap(c, true);
     }
+
     size_t lift_status;
     std::string lo;
 
@@ -1015,7 +1047,14 @@ void ChainMap::lift_aln(
         { 
             c->isize = 0;
         } else {
-            c->isize = c->isize + (mpos - c->mpos) - (pos - c->pos);
+            // std::cerr << "isize=" << c->isize << ", mpos=" << mpos << "->" << c->mpos;
+            // std::cerr << ", pos=" << pos << "->" << c->pos << "\n";
+            // std::cerr << "flag=" << flag << ", ->" << c->flag << "\n";
+            if (flag == c->flag)
+                c->isize = c->isize + (mpos - pos) - (c->mpos - c->pos);
+                // c->isize = c->isize + (mpos - c->mpos) - (pos - c->pos);
+            else
+                c->isize = -(c->isize + (mpos - pos) + (c->mpos - c->pos));
         }
 
     // Unpaired

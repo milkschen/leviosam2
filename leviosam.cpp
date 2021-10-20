@@ -133,8 +133,7 @@ void read_and_lift(
             std::lock_guard<std::mutex> g(*mutex_fwrite);
             // std::thread::id this_id = std::this_thread::get_id();
             for (int i = 0; i < num_actual_reads; i++){
-                auto flag_write = sam_write1(out_sam_fp, hdr, aln_vec[i]);
-                if (flag_write < 0){
+                if (sam_write1(out_sam_fp, hdr, aln_vec[i]) < 0) {
                     std::cerr << "[Error] Failed to write record " << bam_get_qname(aln_vec[i]) << "\n";
                     exit(1);
                 }
@@ -149,7 +148,8 @@ void read_and_lift(
                     }
                 } else {
                     std::lock_guard<std::mutex> g(wfq->mutex_fwrite_fq);
-                    LevioSamUtils::write_fq_from_bam(aln_vec[i], wfq);
+                    wfq->write_low_mapq_bam(aln_vec[i], hdr);
+                    // wfq->write_fq_from_bam(aln_vec[i]);
                 }
             }
         }
@@ -245,10 +245,16 @@ void lift_run(lift_opts args) {
 
     LevioSamUtils::WriteToFastq wfq;
     if (args.split_mode == "mapq") {
-        std::cerr << "Alignments with MAPQ lower than "
+        std::cerr << "Alignments with MAPQ < "
                   << args.mapq_cutoff << " will not be lifted, but "
-                  << "wrote to separate FASTQ files instead.\n";
-        wfq.init(args.outpre, args.split_mode, args.mapq_cutoff);
+                  << "wrote to a separate " << args.out_format << " file instead.\n";
+        // std::cerr << "Alignments with MAPQ lower than "
+        //           << args.mapq_cutoff << " will not be lifted, but "
+        //           << "wrote to separate FASTQ files instead.\n";
+        wfq.init(
+            args.outpre, args.split_mode,
+            args.mapq_cutoff, args.out_format);
+        auto write_hdr = sam_hdr_write(wfq.out_fp, hdr);
     }
 
     // const int num_threads = args.threads;
@@ -280,26 +286,26 @@ void lift_run(lift_opts args) {
     }
     threads.clear();
     // Write singleton reads
-    if (args.split_mode == "mapq") {
-        if (wfq.r1_db.size() > 0) {
-            int c1 = 0;
-            for (auto i1: wfq.r1_db) {
-                auto n1 = i1.first;
-                n1 += "/1";
-                if (i1.second.write(wfq.out_fqS, n1))
-                    c1 ++;
-            }
-            std::cerr << "#R1 singleton: " << c1 << "\n";
-            int c2 = 0;
-            for (auto i2: wfq.r2_db) {
-                auto n2 = i2.first;
-                n2 += "/2";
-                if (i2.second.write(wfq.out_fqS, n2))
-                    c2 ++;
-            }
-            std::cerr << "#R2 singleton: " << c2 << "\n";
-        }
-    }
+    // if (args.split_mode == "mapq") {
+    //     if (wfq.r1_db.size() > 0) {
+    //         int c1 = 0;
+    //         for (auto i1: wfq.r1_db) {
+    //             auto n1 = i1.first;
+    //             n1 += "/1";
+    //             if (i1.second.write(wfq.out_fqS, n1))
+    //                 c1 ++;
+    //         }
+    //         std::cerr << "#R1 singleton: " << c1 << "\n";
+    //         int c2 = 0;
+    //         for (auto i2: wfq.r2_db) {
+    //             auto n2 = i2.first;
+    //             n2 += "/2";
+    //             if (i2.second.write(wfq.out_fqS, n2))
+    //                 c2 ++;
+    //         }
+    //         std::cerr << "#R2 singleton: " << c2 << "\n";
+    //     }
+    // }
     sam_close(sam_fp);
     sam_close(out_sam_fp);
 }

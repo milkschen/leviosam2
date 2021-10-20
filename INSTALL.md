@@ -33,7 +33,13 @@ Make sure the following prerequisite libraries are installed on your system.
 - [htslib v1.10+](https://github.com/samtools/htslib)
 - [sdsl-lite v2.1.1+](https://github.com/simongog/sdsl-lite/)
 
-An easy way to install these dependencies is to use your OS's existing package system:
+Both libraries are available through coda:
+```
+conda install -c conda-forge sdsl-lite
+conda install -c bioconda htslib
+```
+
+Another easy way to install these dependencies is to use your OS's existing package system:
 ```
 apt-get install libhts-dev libsdsl-dev # Debian/Ubuntu
 brew tap brewsci/bio; brew install htslib sdsl-lite # MacOS
@@ -74,6 +80,7 @@ Update `LD_LIBRARY_PATH` and `CPLUS_INCLUDE_PATH` paths after installing sdsl-li
 
 ```
 export LD_LIBRARY_PATH=<path/to/lib>:$LD_LIBRARY_PATH
+export LIBRARY_PATH=<path/to/lib>:$LIBRARY_PATH
 export C_INCLUDE_PATH=<path/to/include>:$C_INCLUDE_PATH
 export CPLUS_INCLUDE_PATH=<path/to/include>:$CPLUS_INCLUDE_PATH
 make
