@@ -22,7 +22,7 @@
 #include "leviosam_utils.hpp"
 
 
-#define VERSION "0.5-dev"
+#define VERSION "0.5.0"
 // const char* VERSION("0.4");
 
 #define VERBOSE_CLEAN 0
