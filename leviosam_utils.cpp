@@ -1,17 +1,24 @@
 #include <algorithm>
+#include <regex>
 #include "leviosam_utils.hpp"
 
 namespace LevioSamUtils {
 
 void WriteToFastq::init(
     const std::string outpre, const std::string sm,
-    const int mc, const std::string of
+    const int mapq, const int isize,
+    const float clipped_frac, const int aln_score,
+    const std::string of
 ) {
     // out_fqS.open(outpre + "-deferred-S.fq");
     // out_fq1.open(outpre + "-deferred-R1.fq");
     // out_fq2.open(outpre + "-deferred-R2.fq");
     split_mode = sm;
-    mapq_cutoff = mc;
+    min_mapq = mapq;
+    max_isize = isize;
+    max_clipped_frac = clipped_frac;
+    min_aln_score = aln_score;
+
     r1_db.clear();
     r2_db.clear();
 
@@ -253,6 +260,19 @@ int FastqRecord::write(std::ofstream& out_fq, std::string name) {
     out_fq << qual_str << "\n";
     written = true;
     return 1;
+}
+
+/* Split a string on a delimiter
+ * From: https://stackoverflow.com/a/64886763
+ */
+std::vector<std::string> split_str(
+    const std::string str, const std::string regex_str
+) {
+    std::regex regexz(regex_str);
+    std::vector<std::string> list(
+        std::sregex_token_iterator(str.begin(), str.end(), regexz, -1),
+        std::sregex_token_iterator());
+    return list;
 }
 
 };

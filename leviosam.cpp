@@ -71,6 +71,41 @@ void serialize_run(lift_opts args) {
 }
 
 
+/* Returns true if to commit an alignment
+ */
+bool commit_alignment(
+    const bam1_t* const aln,
+    const LevioSamUtils::WriteToFastq* const wfq
+){
+    const bam1_core_t* c = &(aln->core);
+    // if (wfq->split_mode == "mapq") {
+    //     if (c->qual >= wfq->min_mapq)
+    //         return true;
+    //     else
+    //         return false;
+    // }
+    std::vector<std::string> split_modes = LevioSamUtils::split_str(wfq->split_mode, ",");
+    if (find(split_modes.begin(), split_modes.end(), "mapq") != split_modes.end()){
+        if (c->qual < wfq->min_mapq)
+            return false;
+    }
+    if (find(split_modes.begin(), split_modes.end(), "isize") != split_modes.end()){
+        if (c->isize == 0 || c->isize > wfq->max_isize || c->isize < -wfq->max_isize)
+            return false;
+    }
+    if (find(split_modes.begin(), split_modes.end(), "clipped_frac") != split_modes.end()){
+        auto rlen = bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln));
+        if (1 - (rlen / c->l_qseq) > wfq->max_clipped_frac)
+            return false;
+    }
+    if (find(split_modes.begin(), split_modes.end(), "aln_score") != split_modes.end()){
+        if (bam_aux2i(bam_aux_get(aln, "AS")) < wfq->min_aln_score)
+            return false;
+    }
+    return true;
+}
+
+
 template <class T>
 void read_and_lift(
     T* lift_map,
@@ -128,31 +163,46 @@ void read_and_lift(
                 LevioSamUtils::remove_mn_md_tag(aln_vec[i]);
             }
         }
-        if (wfq->split_mode == "") {
+        for (int i = 0; i < num_actual_reads; i++) {
             // write to file, thread corruption protected by lock_guard
-            std::lock_guard<std::mutex> g(*mutex_fwrite);
-            // std::thread::id this_id = std::this_thread::get_id();
-            for (int i = 0; i < num_actual_reads; i++){
+            std::lock_guard<std::mutex> g_commited(*mutex_fwrite);
+            // If a read is committed
+            if (commit_alignment(aln_vec[i], wfq) == true) {
                 if (sam_write1(out_sam_fp, hdr, aln_vec[i]) < 0) {
-                    std::cerr << "[Error] Failed to write record " << bam_get_qname(aln_vec[i]) << "\n";
+                    std::cerr << "[Error] Failed to write record " << 
+                        bam_get_qname(aln_vec[i]) << "\n";
                     exit(1);
                 }
-            }
-        } else if (wfq->split_mode == "mapq") {
-            for (int i = 0; i < num_actual_reads; i++) {
-                if (aln_vec[i]->core.qual >= wfq->mapq_cutoff) {
-                    std::lock_guard<std::mutex> g(*mutex_fwrite);
-                    if (sam_write1(out_sam_fp, hdr, aln_vec[i]) < 0) {
-                        std::cerr << "[Error] Failed to write record " << bam_get_qname(aln_vec[i]) << "\n";
-                        exit(1);
-                    }
-                } else {
-                    std::lock_guard<std::mutex> g(wfq->mutex_fwrite_fq);
-                    wfq->write_low_mapq_bam(aln_vec[i], hdr);
-                    // wfq->write_fq_from_bam(aln_vec[i]);
-                }
+            } else {
+                std::lock_guard<std::mutex> g_deferred(wfq->mutex_fwrite_fq);
+                wfq->write_low_mapq_bam(aln_vec[i], hdr);
             }
         }
+        // if (wfq->split_mode == "") {
+        //     // write to file, thread corruption protected by lock_guard
+        //     std::lock_guard<std::mutex> g(*mutex_fwrite);
+        //     // std::thread::id this_id = std::this_thread::get_id();
+        //     for (int i = 0; i < num_actual_reads; i++){
+        //         if (sam_write1(out_sam_fp, hdr, aln_vec[i]) < 0) {
+        //             std::cerr << "[Error] Failed to write record " << bam_get_qname(aln_vec[i]) << "\n";
+        //             exit(1);
+        //         }
+        //     }
+        // } else if (wfq->split_mode == "mapq") {
+        //     for (int i = 0; i < num_actual_reads; i++) {
+        //         if (aln_vec[i]->core.qual >= wfq->min_mapq) {
+        //             std::lock_guard<std::mutex> g(*mutex_fwrite);
+        //             if (sam_write1(out_sam_fp, hdr, aln_vec[i]) < 0) {
+        //                 std::cerr << "[Error] Failed to write record " << bam_get_qname(aln_vec[i]) << "\n";
+        //                 exit(1);
+        //             }
+        //         } else {
+        //             std::lock_guard<std::mutex> g(wfq->mutex_fwrite_fq);
+        //             wfq->write_low_mapq_bam(aln_vec[i], hdr);
+        //             // wfq->write_fq_from_bam(aln_vec[i]);
+        //         }
+        //     }
+        // }
     }
     for (int i = 0; i < chunk_size; i++){
         bam_destroy1(aln_vec[i]);
@@ -244,18 +294,41 @@ void lift_run(lift_opts args) {
     }
 
     LevioSamUtils::WriteToFastq wfq;
-    if (args.split_mode == "mapq") {
-        std::cerr << "Alignments with MAPQ < "
-                  << args.mapq_cutoff << " will not be lifted, but "
-                  << "wrote to a separate " << args.out_format << " file instead.\n";
-        // std::cerr << "Alignments with MAPQ lower than "
-        //           << args.mapq_cutoff << " will not be lifted, but "
-        //           << "wrote to separate FASTQ files instead.\n";
+    if (args.split_mode != "") {
+        std::vector<std::string> split_modes = LevioSamUtils::split_str(args.split_mode, ",");
+        std::cerr << "Alignments don't pass the below filter are deferred:\n";
+        if (find(split_modes.begin(), split_modes.end(), "mapq") != split_modes.end()){
+            std::cerr << " - MAPQ < " << args.min_mapq << "\n";
+        }
+        if (find(split_modes.begin(), split_modes.end(), "isize") != split_modes.end()){
+            std::cerr << " - TLEN (isize) > " << args.max_isize << "\n";
+            std::cerr << " - TLEN (isize) == 0\n";
+        }
+        if (find(split_modes.begin(), split_modes.end(), "clipped_frac") != split_modes.end()){
+            std::cerr << " - Fraction of clipped bases < " << args.max_clipped_frac << "\n";
+        }
+        if (find(split_modes.begin(), split_modes.end(), "aln_score") != split_modes.end()){
+            std::cerr << " - AS:i < " << args.min_aln_score << "\n";
+        }
         wfq.init(
             args.outpre, args.split_mode,
-            args.mapq_cutoff, args.out_format);
+            args.min_mapq, args.max_isize,
+            args.max_clipped_frac, args.min_aln_score,
+            args.out_format);
         auto write_hdr = sam_hdr_write(wfq.out_fp, hdr);
     }
+    // if (args.split_mode == "mapq") {
+    //     std::cerr << "Alignments with MAPQ < "
+    //               << args.min_mapq << " will not be lifted, but "
+    //               << "wrote to a separate " << args.out_format << " file instead.\n";
+    //     // std::cerr << "Alignments with MAPQ lower than "
+    //     //           << args.min_mapq << " will not be lifted, but "
+    //     //           << "wrote to separate FASTQ files instead.\n";
+    //     wfq.init(
+    //         args.outpre, args.split_mode,
+    //         args.min_mapq, args.out_format);
+    //     auto write_hdr = sam_hdr_write(wfq.out_fp, hdr);
+    // }
 
     // const int num_threads = args.threads;
     // const int chunk_size = args.chunk_size;
@@ -378,8 +451,11 @@ void print_lift_help_msg(){
     fprintf(stderr, "                   Setting a higher <-T> uses slightly more memory but might benefit thread scaling.\n");
     fprintf(stderr, "         -m        add MD and NM to output alignment records (requires -f option)\n");
     fprintf(stderr, "         -f string Fasta reference that corresponds to input SAM/BAM (for use w/ -m option)\n");
-    fprintf(stderr, "         -S string Split the aligned reads with an indicator. Options: mapq, none. [none]\n");
-    fprintf(stderr, "         -M int    MAPQ cutoff for the `-S mapq` mode [10]\n");
+    fprintf(stderr, "         -S string Split the aligned reads with an indicator. Options: mapq, aln_score, isize, clipped_frac. [none]\n");
+    fprintf(stderr, "         -M int    Min MAPQ to commit (under `-S mapq` mode) [10]\n");
+    fprintf(stderr, "         -A int    Min AS:i to commit (under `-S aln_score` mode) [100]\n");
+    fprintf(stderr, "         -Z int    Max TLEN/isize to commit (under `-S isize` mode) [1000]\n");
+    fprintf(stderr, "         -L float  Min fraction of clipped to commit (under `-S aln_score` mode) [100]\n");
     fprintf(stderr, "         The options for serialize can also be used here, if -v/-c is set.\n");
     fprintf(stderr, "\n");
 }
@@ -401,16 +477,19 @@ int main(int argc, char** argv) {
     lift_opts args;
     args.cmd = make_cmd(argc,argv);
     static struct option long_options[] {
-        {"vcf", required_argument, 0, 'v'},
         {"md", required_argument, 0, 'm'},
         // {"md", no_argument, 0, 'm'},
         {"sam", required_argument, 0, 'a'},
+        {"min_aln_score", required_argument, 0, 'A'},
         {"chain", required_argument, 0, 'c'},
         {"chainmap", required_argument, 0, 'C'},
         {"reference", required_argument, 0, 'f'},
         {"haplotype", required_argument, 0, 'g'},
         {"allowed_cigar_changes", required_argument, 0, 'G'},
         {"leviosam", required_argument, 0, 'l'},
+        {"max_clipped_frac", required_argument, 0, 'L'},
+        {"min_mapq", required_argument, 0, 'M'},
+        {"namemap", required_argument, 0, 'n'},
         {"out_format", required_argument, 0, 'O'},
         {"prefix", required_argument, 0, 'p'},
         {"sample", required_argument, 0, 's'},
@@ -418,24 +497,30 @@ int main(int argc, char** argv) {
         // {"split_fq_output", required_argument, 0, 'Q'},
         {"threads", required_argument, 0, 't'},
         {"chunk_size", required_argument, 0, 'T'},
+        {"vcf", required_argument, 0, 'v'},
         {"verbose", required_argument, 0, 'V'},
+        {"max_isize", required_argument, 0, 'Z'}
     };
     int long_index = 0;
-    while((c = getopt_long(argc, argv, "hmv:a:c:C:f:g:G:k:l:M:n:O:p:s:S:t:T:V:", long_options, &long_index)) != -1) {
+    while(
+        (c = getopt_long(
+            argc, argv,
+            "hma:A:c:C:f:g:G:k:l:L:M:n:O:p:s:S:t:T:v:V:Z:",
+            long_options, &long_index)) != -1) {
         switch (c) {
-            case 'v':
-                args.vcf_fname = optarg;
-                break;
-            case 'm':
-                args.md_flag |= 8;
-                args.md_flag |= 16;
-                break;
             case 'h':
                 print_serialize_help_msg();
                 print_lift_help_msg();
                 exit(0);
+            case 'm':
+                args.md_flag |= 8;
+                args.md_flag |= 16;
+                break;
             case 'a':
                 args.sam_fname = optarg;
+                break;
+            case 'A':
+                args.min_aln_score = atoi(optarg);
                 break;
             case 'c':
                 args.chain_fname = optarg;
@@ -458,8 +543,11 @@ int main(int argc, char** argv) {
             case 'l':
                 args.lift_fname = optarg;
                 break;
+            case 'L':
+                args.max_clipped_frac = atof(optarg);
+                break;
             case 'M':
-                args.mapq_cutoff = atoi(optarg);
+                args.min_mapq = atoi(optarg);
                 break;
             case 'n':
                 args.name_map = parse_name_map(optarg);
@@ -488,6 +576,12 @@ int main(int argc, char** argv) {
             case 'V':
                 args.verbose = atoi(optarg);
                 break;
+            case 'v':
+                args.vcf_fname = optarg;
+                break;
+            case 'Z':
+                args.max_isize = atoi(optarg);
+                break;
             default:
                 fprintf(stderr, "ignoring option %c\n", c);
                 exit(1);
@@ -508,10 +602,20 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
-    if (args.split_mode != "mapq" && args.split_mode != "none") {
-        std::cerr << "Error: invalid -S (--split_mode) argument (" 
-                  << args.split_mode << "). Options: mapq, none.\n";
-        exit(1);
+    if (args.split_mode != "") {
+        std::vector<std::string> split_options {"mapq", "clipped_frac", "isize", "aln_score"};
+        std::vector<std::string> sm = LevioSamUtils::split_str(args.split_mode, ",");
+        for (auto& m: sm) {
+            auto cnt = std::count(split_options.begin(), split_options.end(), m);
+            if (cnt != 1) {
+                std::cerr << "Error: " << m << " is not a valid filtering option\n";
+                std::cerr << "Valid options:\n";
+                for (auto& opt: split_options) {
+                    std::cerr << " - " << opt << "\n";
+                }
+                exit(1);
+            }
+        }
     }
 
     if (!strcmp(argv[optind], "lift")) {

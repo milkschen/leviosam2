@@ -62,7 +62,10 @@ struct lift_opts {
     LengthMap length_map;
     int md_flag = 0;
     std::string ref_name = "";
-    int mapq_cutoff = 10;
+    int min_mapq = 10;
+    int max_isize = 1000;
+    float max_clipped_frac = 0.95;
+    int min_aln_score = 100;
 };
 
 

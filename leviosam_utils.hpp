@@ -38,7 +38,9 @@ public:
 
     void init(
         const std::string outpre, const std::string sm,
-        const int mc, const std::string of
+        const int mapq, const int isize,
+        const float clipped_frac, const int aln_score,
+        const std::string of
     );
 
     void write_fq_from_bam(bam1_t* aln);
@@ -50,7 +52,10 @@ public:
     samFile* out_fp;
     std::string split_mode = "";
     std::mutex mutex_fwrite_fq;
-    int mapq_cutoff;
+    int min_mapq;
+    int max_isize;
+    float max_clipped_frac;
+    int min_aln_score;
     std::unordered_map<std::string, FastqRecord> r1_db;
     std::unordered_map<std::string, FastqRecord> r2_db;
     bool write_deferred;
@@ -61,6 +66,9 @@ void debug_print_cigar(uint32_t* cigar, size_t n_cigar);
 void remove_mn_md_tag(bam1_t* aln);
 static std::string get_read(const bam1_t *rec);
 void write_fq_from_bam_core(bam1_t* aln, std::ofstream& out_fq);
+
+std::vector<std::string> split_str(
+    const std::string str, const std::string regex_str);
 }
 
 #endif
