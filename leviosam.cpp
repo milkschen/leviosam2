@@ -45,6 +45,7 @@ LengthMap parse_length_map(const char* fname) {
     return lengths;
 }
 
+
 void serialize_run(lift_opts args) {
     if (args.outpre == "") {
         fprintf(stderr, "no output prefix specified! Use -p \n");
@@ -71,19 +72,13 @@ void serialize_run(lift_opts args) {
 }
 
 
-/* Returns true if to commit an alignment
+/* Returns true if to an alignment can be committed
  */
 bool commit_alignment(
     const bam1_t* const aln,
     const LevioSamUtils::WriteToFastq* const wfq
 ){
     const bam1_core_t* c = &(aln->core);
-    // if (wfq->split_mode == "mapq") {
-    //     if (c->qual >= wfq->min_mapq)
-    //         return true;
-    //     else
-    //         return false;
-    // }
     std::vector<std::string> split_modes = LevioSamUtils::split_str(wfq->split_mode, ",");
     if (find(split_modes.begin(), split_modes.end(), "mapq") != split_modes.end()){
         if (c->qual < wfq->min_mapq)
@@ -164,10 +159,10 @@ void read_and_lift(
             }
         }
         for (int i = 0; i < num_actual_reads; i++) {
-            // write to file, thread corruption protected by lock_guard
-            std::lock_guard<std::mutex> g_commited(*mutex_fwrite);
             // If a read is committed
             if (commit_alignment(aln_vec[i], wfq) == true) {
+                // write to file, thread corruption protected by lock_guard
+                std::lock_guard<std::mutex> g_commited(*mutex_fwrite);
                 if (sam_write1(out_sam_fp, hdr, aln_vec[i]) < 0) {
                     std::cerr << "[Error] Failed to write record " << 
                         bam_get_qname(aln_vec[i]) << "\n";
@@ -178,37 +173,13 @@ void read_and_lift(
                 wfq->write_low_mapq_bam(aln_vec[i], hdr);
             }
         }
-        // if (wfq->split_mode == "") {
-        //     // write to file, thread corruption protected by lock_guard
-        //     std::lock_guard<std::mutex> g(*mutex_fwrite);
-        //     // std::thread::id this_id = std::this_thread::get_id();
-        //     for (int i = 0; i < num_actual_reads; i++){
-        //         if (sam_write1(out_sam_fp, hdr, aln_vec[i]) < 0) {
-        //             std::cerr << "[Error] Failed to write record " << bam_get_qname(aln_vec[i]) << "\n";
-        //             exit(1);
-        //         }
-        //     }
-        // } else if (wfq->split_mode == "mapq") {
-        //     for (int i = 0; i < num_actual_reads; i++) {
-        //         if (aln_vec[i]->core.qual >= wfq->min_mapq) {
-        //             std::lock_guard<std::mutex> g(*mutex_fwrite);
-        //             if (sam_write1(out_sam_fp, hdr, aln_vec[i]) < 0) {
-        //                 std::cerr << "[Error] Failed to write record " << bam_get_qname(aln_vec[i]) << "\n";
-        //                 exit(1);
-        //             }
-        //         } else {
-        //             std::lock_guard<std::mutex> g(wfq->mutex_fwrite_fq);
-        //             wfq->write_low_mapq_bam(aln_vec[i], hdr);
-        //             // wfq->write_fq_from_bam(aln_vec[i]);
-        //         }
-        //     }
-        // }
     }
     for (int i = 0; i < chunk_size; i++){
         bam_destroy1(aln_vec[i]);
     }
     aln_vec.clear();
 }
+
 
 std::map<std::string, std::string> load_fasta(std::string ref_name) {
     std::cerr << "Loading FASTA...";
@@ -224,6 +195,7 @@ std::map<std::string, std::string> load_fasta(std::string ref_name) {
     std::cerr << "done\n";
     return fmap;
 }
+
 
 void lift_run(lift_opts args) {
     std::cerr << "Loading levioSAM index...";
@@ -268,7 +240,9 @@ void lift_run(lift_opts args) {
     std::string out_mode = (args.out_format == "sam")? "w" : "wb";
     samFile* out_sam_fp = (args.outpre == "-" || args.outpre == "")?
         sam_open("-", out_mode.data()) :
-        sam_open((args.outpre + "." + args.out_format).data(), out_mode.data());
+        (args.split_mode == "")? // if split, append "-committed" after `outpre`
+            sam_open((args.outpre + "." + args.out_format).data(), out_mode.data()) :
+            sam_open((args.outpre + "-committed." + args.out_format).data(), out_mode.data());
 
     bam_hdr_t* hdr;
     if (args.chain_fname == "" || args.chainmap_fname == "") {
@@ -298,17 +272,17 @@ void lift_run(lift_opts args) {
         std::vector<std::string> split_modes = LevioSamUtils::split_str(args.split_mode, ",");
         std::cerr << "Alignments don't pass the below filter are deferred:\n";
         if (find(split_modes.begin(), split_modes.end(), "mapq") != split_modes.end()){
-            std::cerr << " - MAPQ < " << args.min_mapq << "\n";
+            std::cerr << " - MAPQ (pre-liftover) < " << args.min_mapq << "\n";
         }
         if (find(split_modes.begin(), split_modes.end(), "isize") != split_modes.end()){
-            std::cerr << " - TLEN (isize) > " << args.max_isize << "\n";
-            std::cerr << " - TLEN (isize) == 0\n";
+            std::cerr << " - TLEN/isize (post-liftover) > " << args.max_isize << "\n";
+            std::cerr << " - TLEN/isize (post-liftover) == 0\n";
         }
         if (find(split_modes.begin(), split_modes.end(), "clipped_frac") != split_modes.end()){
-            std::cerr << " - Fraction of clipped bases < " << args.max_clipped_frac << "\n";
+            std::cerr << " - Fraction of clipped bases (post-liftover) < " << args.max_clipped_frac << "\n";
         }
         if (find(split_modes.begin(), split_modes.end(), "aln_score") != split_modes.end()){
-            std::cerr << " - AS:i < " << args.min_aln_score << "\n";
+            std::cerr << " - AS:i (pre-liftover) < " << args.min_aln_score << "\n";
         }
         wfq.init(
             args.outpre, args.split_mode,
@@ -317,18 +291,6 @@ void lift_run(lift_opts args) {
             args.out_format);
         auto write_hdr = sam_hdr_write(wfq.out_fp, hdr);
     }
-    // if (args.split_mode == "mapq") {
-    //     std::cerr << "Alignments with MAPQ < "
-    //               << args.min_mapq << " will not be lifted, but "
-    //               << "wrote to a separate " << args.out_format << " file instead.\n";
-    //     // std::cerr << "Alignments with MAPQ lower than "
-    //     //           << args.min_mapq << " will not be lifted, but "
-    //     //           << "wrote to separate FASTQ files instead.\n";
-    //     wfq.init(
-    //         args.outpre, args.split_mode,
-    //         args.min_mapq, args.out_format);
-    //     auto write_hdr = sam_hdr_write(wfq.out_fp, hdr);
-    // }
 
     // const int num_threads = args.threads;
     // const int chunk_size = args.chunk_size;
@@ -413,7 +375,8 @@ lift::LiftMap lift::lift_from_vcf(
 void print_serialize_help_msg(){
     fprintf(stderr, "\n");
     fprintf(stderr, "Index a lift-over map using either a VCF or a chain file.\n");
-    fprintf(stderr, "Usage:   leviosam serialize [options] {-v <vcf> | -c <chain>}\n");
+    fprintf(stderr, "Usage:   leviosam serialize [options] {-v <vcf> | -c <chain>}     or\n");
+    fprintf(stderr, "         leviosam index [options] {-v <vcf> | -c <chain>}\n");
     fprintf(stderr, "Options:\n");
     fprintf(stderr, "         VcfMap options:\n");
     fprintf(stderr, "           -v string Index a lift-over map from a VCF file.\n");
@@ -437,6 +400,13 @@ void print_lift_help_msg(){
     fprintf(stderr, "Options:\n");
     fprintf(stderr, "         -a string Path to the SAM/BAM file to be lifted. \n");
     fprintf(stderr, "                   Leave empty or set to \"-\" to read from stdin.\n");
+    fprintf(stderr, "         -t INT    Number of threads used. [1] \n");
+    fprintf(stderr, "         -T INT    Chunk size for each thread. [256] \n");
+    fprintf(stderr, "                   Each thread queries <-T> reads, lifts, and writes.\n");
+    fprintf(stderr, "                   Setting a higher <-T> uses slightly more memory but might benefit thread scaling.\n");
+    fprintf(stderr, "         -m        add MD and NM to output alignment records (requires -f option)\n");
+    fprintf(stderr, "         -f string Fasta reference that corresponds to input SAM/BAM (for use w/ -m option)\n");
+    fprintf(stderr, "\n");
     fprintf(stderr, "         VcfMap options (one of -v or -l must be set to perform lift-over using a VcfMap):\n");
     fprintf(stderr, "           -v string If -l is not specified, can build indexes using a VCF file.\n");
     fprintf(stderr, "           -l string Path to an indexed VcfMap.\n");
@@ -445,17 +415,14 @@ void print_lift_help_msg(){
     fprintf(stderr, "           -C string Path to an indexed ChainMap.\n");
     fprintf(stderr, "           -G INT    Number of allowed CIGAR changes for one alingment. [10]\n");
     fprintf(stderr, "\n");
-    fprintf(stderr, "         -t INT    Number of threads used. [1] \n");
-    fprintf(stderr, "         -T INT    Chunk size for each thread. [256] \n");
-    fprintf(stderr, "                   Each thread queries <-T> reads, lifts, and writes.\n");
-    fprintf(stderr, "                   Setting a higher <-T> uses slightly more memory but might benefit thread scaling.\n");
-    fprintf(stderr, "         -m        add MD and NM to output alignment records (requires -f option)\n");
-    fprintf(stderr, "         -f string Fasta reference that corresponds to input SAM/BAM (for use w/ -m option)\n");
-    fprintf(stderr, "         -S string Split the aligned reads with an indicator. Options: mapq, aln_score, isize, clipped_frac. [none]\n");
-    fprintf(stderr, "         -M int    Min MAPQ to commit (under `-S mapq` mode) [10]\n");
-    fprintf(stderr, "         -A int    Min AS:i to commit (under `-S aln_score` mode) [100]\n");
-    fprintf(stderr, "         -Z int    Max TLEN/isize to commit (under `-S isize` mode) [1000]\n");
-    fprintf(stderr, "         -L float  Min fraction of clipped to commit (under `-S aln_score` mode) [100]\n");
+    fprintf(stderr, "         Commit/defer rule options:\n");
+    fprintf(stderr, "           Example: `-S mapq,aln_score -M 20 -A 20` commits MQ>=20 and AS>=20 alignments.\n");
+    fprintf(stderr, "           -S string Split the aligned reads with an indicator. Options: mapq, aln_score, isize, clipped_frac. [none]\n");
+    fprintf(stderr, "           -M int    Min MAPQ to commit (pre-liftover; must with `-S mapq`). [10]\n");
+    fprintf(stderr, "           -A int    Min AS:i to commit (pre-liftover; must with `-S aln_score`). [100]\n");
+    fprintf(stderr, "           -Z int    Max TLEN/isize to commit (post-liftover; must with `-S isize`). [1000]\n");
+    fprintf(stderr, "           -L float  Min fraction of clipped to commit (post-liftover; must with `-S aln_score`). [0.95]\n");
+    fprintf(stderr, "\n");
     fprintf(stderr, "         The options for serialize can also be used here, if -v/-c is set.\n");
     fprintf(stderr, "\n");
 }
@@ -477,8 +444,8 @@ int main(int argc, char** argv) {
     lift_opts args;
     args.cmd = make_cmd(argc,argv);
     static struct option long_options[] {
-        {"md", required_argument, 0, 'm'},
-        // {"md", no_argument, 0, 'm'},
+        // {"md", required_argument, 0, 'm'},
+        {"md", no_argument, 0, 'm'},
         {"sam", required_argument, 0, 'a'},
         {"min_aln_score", required_argument, 0, 'A'},
         {"chain", required_argument, 0, 'c'},
@@ -509,6 +476,7 @@ int main(int argc, char** argv) {
             long_options, &long_index)) != -1) {
         switch (c) {
             case 'h':
+                print_main_help_msg();
                 print_serialize_help_msg();
                 print_lift_help_msg();
                 exit(0);
