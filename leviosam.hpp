@@ -1,11 +1,14 @@
 /*
  * liftover.hpp
  *
- * classes and routines for translating (lifting over) coordinates between
+ * Classes and routines for translating (lifting over) coordinates between
  * two aligned sequences
- * Author: Taher Mun, Nae-Chyun Chen, Ben Langmead
- * Johns Hopkins Dept. of Computer Science
  *
+ * Authors: Taher Mun, Nae-Chyun Chen, Ben Langmead
+ * Dept. of Computer Science, Johns Hopkins University
+ *
+ * Distributed under the MIT license
+ * https://github.com/alshai/levioSAM
  * Created: July 2019
  */
 #ifndef LIFTOVER_HPP

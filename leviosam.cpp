@@ -1,4 +1,15 @@
-// #include <map>
+/*
+ * liftover.cpp
+ *
+ * Classes and routines for translating (lifting over) coordinates between
+ * two aligned sequences
+ *
+ * Authors: Taher Mun, Nae-Chyun Chen, Ben Langmead
+ * Dept. of Computer Science, Johns Hopkins University
+ *
+ * Distributed under the MIT license
+ * https://github.com/alshai/levioSAM
+ */
 #include <stdio.h>
 #include <vector>
 #include <zlib.h>

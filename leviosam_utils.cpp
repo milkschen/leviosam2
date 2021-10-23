@@ -89,11 +89,8 @@ void update_cigar(
     for (int i = 0; i < aln->core.n_cigar; i++){
         *(cigar + i) = new_cigar[i];
     }
-    // if (verbose > VERBOSE_DEBUG) {
-    //     std::cerr << "* new: ";
-    //     debug_print_cigar(bam_get_cigar(aln), aln->core.n_cigar);
-    // }
 }
+
 
 void debug_print_cigar(
     uint32_t* cigar, size_t n_cigar
@@ -106,6 +103,8 @@ void debug_print_cigar(
     std::cerr << "\n";
 }
 
+
+/* Remove MN:i and MD:z tags from an alignment (bam1_t) object */
 void remove_mn_md_tag(bam1_t* aln) {
     uint8_t* ptr = NULL;
     if ((ptr = bam_aux_get(aln, "MD")) != NULL) {
@@ -137,7 +136,7 @@ static std::string get_read(const bam1_t *rec){
 }
 
 
-/* Write a bam1_t object to a FASTQ record. */
+/* Write an alignment to a FASTQ file */
 void write_fq_from_bam_core(bam1_t* aln, std::ofstream& out_fq){
     out_fq << "@" << bam_get_qname(aln) << "\n";
     out_fq << get_read(aln) << "\n+\n";
@@ -153,6 +152,7 @@ void write_fq_from_bam_core(bam1_t* aln, std::ofstream& out_fq){
         std::reverse(qual_seq.begin(), qual_seq.end());
     out_fq << qual_seq << "\n";
 }
+
 
 void WriteToFastq::write_low_mapq_bam(
     bam1_t* aln, bam_hdr_t* hdr
