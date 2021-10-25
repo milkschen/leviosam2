@@ -1,3 +1,4 @@
+import pysam
 import unittest
 import subprocess
 
@@ -141,6 +142,58 @@ class SamProcessing(unittest.TestCase):
                 self.assertNotIn(
                     'ERROR', stderr.decode(), msg='Check "No errors found"')
                 print('[PASSED] Picard AddOrReplaceReadGroups & ValidateSamFile')
+
+
+class Chain(unittest.TestCase):
+    def compare_aln(self, gold, result):
+        if gold.is_unmapped or result.is_unmapped:
+            return
+        self.assertEqual(gold.reference_start, result.reference_start)
+
+    def read_paired_end(self, fn):
+        f = pysam.AlignmentFile(fn)
+        reads1 = {}
+        reads2 = {}
+        for r in f:
+            if r.is_read1:
+                reads1[r.query_name] = r
+            elif r.is_read2:
+                reads2[r.query_name] = r
+            else:
+                print(f'Invalid record in {fn}. Please check')
+                print(r)
+                exit(1)
+        return reads1, reads2
+
+    def test_paired_endh38_to_h37(self):
+        INPUT_FN = 'testdata/bt2-paired_end-grch38.sam'
+        GOLD_FN = 'testdata/bt2-paired_end-grch37.sam'
+        OUTPUT_PREFIX = 'testdata/bt2-paired_end-grch38_to_grch37'
+        OUTPUT_FN = OUTPUT_PREFIX + '.sam'
+        process = subprocess.Popen(
+            ['./leviosam', 
+            'lift', '-C', 'testdata/hg38ToHg19.over.clft', '-a', INPUT_FN,
+            '-p', OUTPUT_PREFIX],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout, stderr = process.communicate()
+        print(f'Lifted {INPUT_FN}')
+
+        reads_gold1, reads_gold2 = self.read_paired_end(GOLD_FN)
+        reads_lift1, reads_lift2 = self.read_paired_end(OUTPUT_FN)
+
+        for _, (name, v) in enumerate(reads_gold1.items()):
+            result = reads_lift1.get(name)
+            self.assertFalse(result is None)
+            self.compare_aln(v, result)
+        for _, (name, v) in enumerate(reads_gold2.items()):
+            result = reads_lift2.get(name)
+            self.assertFalse(result is None)
+            self.compare_aln(v, result)
+
+        cmd = f'rm {OUTPUT_FN}'
+        process_rm = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True)
+        stdout, stderr = process_rm.communicate()
+        print(f'Cleaned up {OUTPUT_FN}')
 
 
 if __name__ == '__main__':
