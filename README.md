@@ -34,8 +34,8 @@ LevioSAM can perform lift-over using a VCF file as the lift-over map. Please vis
 
 Quick run:
 ```
-levioSAM serialize -v <vcf> -s <sample_name> -p <output_prefix>
-levioSAM lift -a <sam> -l <lft> -p <output_prefix> -O bam
+leviosam serialize -v <vcf> -s <sample_name> -p <output_prefix>
+leviosam lift -a <sam> -l <lft> -p <output_prefix> -O bam
 ```
 The levioSAM VcfMap index will be saved to `<output_prefix>.lft`. The output will be saved to `<output_prefix>.bam`.
 
@@ -49,7 +49,7 @@ We provide more detailed instructions of how to use levioSAM in common variant-a
 
 ## Usage (ChainMap)
 
-_We haven't provided conda/docker installations for the software supporting ChainMap. Please visit [the wiki page](https://github.com/alshai/levioSAM/wiki/Lift-over-using-a-chain-map) for more info._
+_We haven't provided conda/docker installations for the software supporting ChainMap (will come soon!). Please visit [the wiki page](https://github.com/alshai/levioSAM/wiki/Lift-over-using-a-chain-map) for more info regarding installation._
 
 LevioSAM can also perform lift-over using a chain file as the lift-over map. Please visit the [ChainMap Usage Page](https://github.com/alshai/levioSAM/wiki/Lift-over-using-a-chain-map) for detailed instructions.
 

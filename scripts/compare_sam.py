@@ -351,13 +351,15 @@ class CompareSamSummary():
                     f'{query.flag:5d}\t{query.reference_name:6s}\t'
                     f'{query.reference_start+1:10d}\t'
                     f'{query.mapping_quality:3d}\t{query.cigarstring}\t'
-                    f'{query.template_length}')
+                    f'{query.template_length}\tAS:i:{query.get_tag("AS")}')
+                    #f'NM:i:{query.get_tag("NM")}')
                 msg_baseline = (
                     '    '
                     f'{baseline.flag:5d}\t{baseline.reference_name:6s}\t'
                     f'{baseline.reference_start+1:10d}\t'
                     f'{baseline.mapping_quality:3d}\t{baseline.cigarstring}\t'
-                    f'{baseline.template_length}')
+                    f'{baseline.template_length}\tAS:i:{baseline.get_tag("AS")}')
+                    #f'NM:i:{baseline.get_tag("NM")}')`
                 print(f'{query.query_name}', file=f_out)
                 print(f'  p_diff = {self.posdiff[i]:<10d}\t{msg_query}', file=f_out)
                 print(f'  idy    = {self.identity[i]:.4f}\t{msg_baseline}', file=f_out)

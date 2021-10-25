@@ -1,3 +1,13 @@
+/*
+ * chain.cpp
+ *
+ * Building a lift-over map from a chain file and performing lift-over
+ *
+ * Authors: Nae-Chyun Chen and Ben Langmead
+ *
+ * Distributed under the MIT license
+ * https://github.com/alshai/levioSAM
+ */
 #include <cmath>
 #include <iostream>
 #include <queue>
@@ -358,7 +368,7 @@ void ChainMap::update_flag_unmap(bam1_core_t* c, const bool first_seg) {
         c->flag |= BAM_FUNMAP;
         c->flag &= ~BAM_FPROPER_PAIR;
         c->flag &= ~BAM_FREVERSE;
-        c->qual = 0;
+        // c->qual = 0;
     } else {
         c->flag |= BAM_FMUNMAP;
         c->flag &= ~BAM_FPROPER_PAIR;
@@ -985,7 +995,7 @@ void ChainMap::lift_aln(
                 lo = "UM_UM";
                 c->pos = -1;
                 c->tid = -1;
-                c->qual = 0;
+                // c->qual = 0;
                 c->mpos = -1;
                 c->mtid = -1;
             } else if (r2_liftable) {
@@ -1020,7 +1030,7 @@ void ChainMap::lift_aln(
             }
         // R1 mapped, un-liftable
         } else {
-            c->qual = 255;
+            // c->qual = 255;
             if (c->flag & BAM_FMUNMAP) {
                 lift_status = LIFT_R1_UL_R2_UM;
                 // Neither is lifted
@@ -1030,12 +1040,10 @@ void ChainMap::lift_aln(
                 // Copy R2 to R1
                 c->pos = c->mpos;
                 c->tid = c->mtid;
-                // c->qual = 255;
                 lo = "UL_L";
             } else {
                 lift_status = LIFT_R1_UL_R2_UL;
                 // Neither is lifted
-                // c->qual = 255;
                 lo = "UL_UL";
             }
         }

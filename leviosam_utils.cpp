@@ -1,17 +1,24 @@
 #include <algorithm>
+#include <regex>
 #include "leviosam_utils.hpp"
 
 namespace LevioSamUtils {
 
 void WriteToFastq::init(
     const std::string outpre, const std::string sm,
-    const int mc, const std::string of
+    const int mapq, const int isize,
+    const float clipped_frac, const int aln_score,
+    const std::string of
 ) {
     // out_fqS.open(outpre + "-deferred-S.fq");
     // out_fq1.open(outpre + "-deferred-R1.fq");
     // out_fq2.open(outpre + "-deferred-R2.fq");
     split_mode = sm;
-    mapq_cutoff = mc;
+    min_mapq = mapq;
+    max_isize = isize;
+    max_clipped_frac = clipped_frac;
+    min_aln_score = aln_score;
+
     r1_db.clear();
     r2_db.clear();
 
@@ -82,11 +89,8 @@ void update_cigar(
     for (int i = 0; i < aln->core.n_cigar; i++){
         *(cigar + i) = new_cigar[i];
     }
-    // if (verbose > VERBOSE_DEBUG) {
-    //     std::cerr << "* new: ";
-    //     debug_print_cigar(bam_get_cigar(aln), aln->core.n_cigar);
-    // }
 }
+
 
 void debug_print_cigar(
     uint32_t* cigar, size_t n_cigar
@@ -99,6 +103,8 @@ void debug_print_cigar(
     std::cerr << "\n";
 }
 
+
+/* Remove MN:i and MD:z tags from an alignment (bam1_t) object */
 void remove_mn_md_tag(bam1_t* aln) {
     uint8_t* ptr = NULL;
     if ((ptr = bam_aux_get(aln, "MD")) != NULL) {
@@ -130,7 +136,7 @@ static std::string get_read(const bam1_t *rec){
 }
 
 
-/* Write a bam1_t object to a FASTQ record. */
+/* Write an alignment to a FASTQ file */
 void write_fq_from_bam_core(bam1_t* aln, std::ofstream& out_fq){
     out_fq << "@" << bam_get_qname(aln) << "\n";
     out_fq << get_read(aln) << "\n+\n";
@@ -146,6 +152,7 @@ void write_fq_from_bam_core(bam1_t* aln, std::ofstream& out_fq){
         std::reverse(qual_seq.begin(), qual_seq.end());
     out_fq << qual_seq << "\n";
 }
+
 
 void WriteToFastq::write_low_mapq_bam(
     bam1_t* aln, bam_hdr_t* hdr
@@ -253,6 +260,19 @@ int FastqRecord::write(std::ofstream& out_fq, std::string name) {
     out_fq << qual_str << "\n";
     written = true;
     return 1;
+}
+
+/* Split a string on a delimiter
+ * From: https://stackoverflow.com/a/64886763
+ */
+std::vector<std::string> split_str(
+    const std::string str, const std::string regex_str
+) {
+    std::regex regexz(regex_str);
+    std::vector<std::string> list(
+        std::sregex_token_iterator(str.begin(), str.end(), regexz, -1),
+        std::sregex_token_iterator());
+    return list;
 }
 
 };

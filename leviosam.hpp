@@ -1,11 +1,14 @@
 /*
  * liftover.hpp
  *
- * classes and routines for translating (lifting over) coordinates between
+ * Classes and routines for translating (lifting over) coordinates between
  * two aligned sequences
- * Author: Taher Mun, Nae-Chyun Chen, Ben Langmead
- * Johns Hopkins Dept. of Computer Science
  *
+ * Authors: Taher Mun, Nae-Chyun Chen, Ben Langmead
+ * Dept. of Computer Science, Johns Hopkins University
+ *
+ * Distributed under the MIT license
+ * https://github.com/alshai/levioSAM
  * Created: July 2019
  */
 #ifndef LIFTOVER_HPP
@@ -22,7 +25,7 @@
 #include "leviosam_utils.hpp"
 
 
-#define VERSION "0.5-dev"
+#define VERSION "0.5.0"
 // const char* VERSION("0.4");
 
 #define VERBOSE_CLEAN 0
@@ -62,7 +65,10 @@ struct lift_opts {
     LengthMap length_map;
     int md_flag = 0;
     std::string ref_name = "";
-    int mapq_cutoff = 10;
+    int min_mapq = 10;
+    int max_isize = 1000;
+    float max_clipped_frac = 0.95;
+    int min_aln_score = 100;
 };
 
 
