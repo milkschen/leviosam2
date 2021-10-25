@@ -25,8 +25,7 @@
 #include "leviosam_utils.hpp"
 
 
-#define VERSION "0.5.0"
-// const char* VERSION("0.4");
+#define VERSION "0.5.1-dev"
 
 #define VERBOSE_CLEAN 0
 #define VERBOSE_INFO  1
