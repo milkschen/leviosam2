@@ -291,7 +291,7 @@ void ChainMap::parse_chain_line(
             source_offset = stoi(vec[5]);
             target_offset = (strand)? stoi(vec[10]) : target_len - stoi(vec[10]);
             length_map.insert(
-                std::pair<std::string, int32_t>(source, target_len));
+                std::pair<std::string, int32_t>(target, target_len));
             init_bitvectors(source, source_len, start_bv_map, end_bv_map);
         } else if (vec[0] != "") {
             int32_t s_int_start = source_offset;
@@ -307,7 +307,6 @@ void ChainMap::parse_chain_line(
             if (s_int_end >= source_len)
                 end_bv_map[source][source_len-1] = 1;
             else
-                // end_bv_map[source][s_int_end-1] = 1;
                 end_bv_map[source][s_int_end] = 1;
 
             if (verbose > 1)
@@ -1055,12 +1054,8 @@ void ChainMap::lift_aln(
         { 
             c->isize = 0;
         } else {
-            // std::cerr << "isize=" << c->isize << ", mpos=" << mpos << "->" << c->mpos;
-            // std::cerr << ", pos=" << pos << "->" << c->pos << "\n";
-            // std::cerr << "flag=" << flag << ", ->" << c->flag << "\n";
             if (flag == c->flag)
                 c->isize = c->isize + (mpos - pos) - (c->mpos - c->pos);
-                // c->isize = c->isize + (mpos - c->mpos) - (pos - c->pos);
             else
                 c->isize = -(c->isize + (mpos - pos) + (c->mpos - c->pos));
         }
