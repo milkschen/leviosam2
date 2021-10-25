@@ -1,7 +1,12 @@
+
+[![Anaconda-Server Badge](https://anaconda.org/bioconda/leviosam/badges/installer/conda.svg)](https://conda.anaconda.org/bioconda)
+[![Anaconda-Server Badge](https://anaconda.org/bioconda/leviosam/badges/version.svg)](https://anaconda.org/bioconda/leviosam)
+[![Anaconda-Server Badge](https://anaconda.org/bioconda/leviosam/badges/platforms.svg)](https://anaconda.org/bioconda/leviosam)
+[![Anaconda-Server Badge](https://anaconda.org/bioconda/leviosam/badges/downloads.svg)](https://anaconda.org/bioconda/leviosam)
+
 # levioSAM: efficient lift-over of alignments
 
 LevioSAM uses a VCF or a chain file to lift over alignments efficiently.
-
 
 ## Features
 
