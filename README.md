@@ -27,7 +27,7 @@ LevioSAM uses a VCF or a chain file to lift over alignments efficiently.
 The easiest way to install levioSAM is by using [Conda](https://docs.conda.io/en/latest/):
 
 ```
-conda install -c conda-forge -c bioconda leviosam
+conda install -c conda-forge -c bioconda leviosam=0.5.0
 ```
 
 We support a variety of other methods for getting levioSAM to work, including Docker, CMake and Make. See [INSTALL.md](INSTALL.md)
@@ -54,9 +54,9 @@ We provide more detailed instructions of how to use levioSAM in common variant-a
 
 ## Usage (ChainMap)
 
-_We haven't provided conda/docker installations for the software supporting ChainMap (will come soon!). Please visit [the wiki page](https://github.com/alshai/levioSAM/wiki/Lift-over-using-a-chain-map) for more info regarding installation._
+_We haven't provided docker installations for the software supporting ChainMap (will come soon!). Please visit [the wiki page](https://github.com/alshai/levioSAM/wiki/Lift-over-using-a-chain-map) for more info regarding installation._
 
-LevioSAM can also perform lift-over using a chain file as the lift-over map. Please visit the [ChainMap Usage Page](https://github.com/alshai/levioSAM/wiki/Lift-over-using-a-chain-map) for detailed instructions.
+LevioSAM can also perform lift-over using a chain file as the lift-over map since v0.5.0. Please visit the [ChainMap Usage Page](https://github.com/alshai/levioSAM/wiki/Lift-over-using-a-chain-map) for detailed instructions.
 
 Quick run:
 ```
