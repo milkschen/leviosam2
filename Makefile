@@ -9,7 +9,7 @@ OBJS = src/leviosam.o src/chain.o src/leviosam_utils.o src/bam_aux.o src/bam_md.
 CDEPS= src/bam.h
 DEPS = src/leviosam.hpp src/chain.hpp
 
-all: $(MAIN)
+all: $(MAIN) extract_unpaired
 
 .c.o: %.c $(CDEPS)
 	    $(CC) -c -o $@ $< $(CLIB) $(CFLAGS)
