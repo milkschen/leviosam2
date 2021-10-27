@@ -1,5 +1,5 @@
 '''
-Extract the mate of reads in a single-end FASTQ from a BAM file.
+Extract the mate of reads in a single-end FASTQ from a BAM file
 
 This script is designed for the pipeline where
     (a) a BAM file is split by an indicator
@@ -49,10 +49,11 @@ def reverse_complement(seq):
     return rc[::-1]
 
 
-def extract_unpaired_reads(args):
+def extract_unpaired_reads(
+    fn_reads: str, out_prefix: str, fn_input: str):
     dict_reads = {}
     read_name = ''
-    with open(args.reads, 'r') as fr:
+    with open(fn_reads, 'r') as fr:
         for i, line in enumerate(fr):
             line = line.rstrip()
             if i % 4 == 0:
@@ -66,21 +67,22 @@ def extract_unpaired_reads(args):
             elif i % 4 == 3:
                 dict_reads[read_name][1] = line
                 read_name = None
+    print(f'Read {i/4} records from {fn_reads}', file=sys.stderr)
 
-    fn_paired_output = args.out_prefix + '-paired.bam'
-    fn_fq1 = args.out_prefix + '-singleton-R1.fq'
-    fn_fq2 = args.out_prefix + '-singleton-R2.fq'
+    fn_paired_output = out_prefix + '-paired.bam'
+    fn_fq1 = out_prefix + '-singleton-R1.fq'
+    fn_fq2 = out_prefix + '-singleton-R2.fq'
     for fn in [fn_paired_output, fn_fq1, fn_fq2]:
         if os.path.exists(fn):
             print((f'Error: file {fn} exists. '
                    f'Please remove it if you want to proceed'),
                    file=sys.stderr)
             exit(1)
-    fa = pysam.AlignmentFile(args.input, 'r')
+    fa = pysam.AlignmentFile(fn_input, 'r')
     fo_paired = pysam.AlignmentFile(fn_paired_output, 'wb', template=fa)
     fo_fq1 = open(fn_fq1, 'w')
     fo_fq2 = open(fn_fq2, 'w')
-    print(f'Read from {args.input}')
+    print(f'Read from {fn_input}')
     print(f'Write filtered BAM to {fn_paired_output}')
     print(f'Write extracted R1 to {fn_fq1}')
     print(f'Write extracted R2 to {fn_fq2}')
@@ -97,10 +99,10 @@ def extract_unpaired_reads(args):
             #     qual = read.query_qualities
             #     seq = read.query_sequence
             singleton = dict_reads[read.query_name]
-            if read.is_read1:
+            if read.is_read1 and not read.is_secondary and not read.is_supplementary:
                 fo_fq1.write(f'@{read.query_name}\n{seq}\n+\n{qual}\n')
                 fo_fq2.write(f'@{read.query_name}\n{singleton[0]}\n+\n{singleton[1]}\n')
-            elif read.is_read2:
+            elif read.is_read2 and not read.is_secondary and not read.is_supplementary:
                 fo_fq2.write(f'@{read.query_name}\n{seq}\n+\n{qual}\n')
                 fo_fq1.write(f'@{read.query_name}\n{singleton[0]}\n+\n{singleton[1]}\n')
         else:
@@ -109,4 +111,5 @@ def extract_unpaired_reads(args):
 
 if __name__ == '__main__':
     args = parse_args()
-    extract_unpaired_reads(args)
+    extract_unpaired_reads(
+        fn_reads=args.reads, out_prefix=args.out_prefix, fn_input=args.input)
