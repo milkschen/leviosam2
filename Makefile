@@ -20,6 +20,12 @@ all: $(MAIN)
 $(MAIN): $(OBJS)
 	    $(CXX) -o $@ $^ $(LIB) $(CXX_FLAGS)
 
+extract_unpaired.cpp.o: %.cpp $(DEPS) robin_hood.h
+	    $(CXX) -c -o $@ $< $(LIB) $(CXX_FLAGS)
+
+extract_unpaired: src/extract_unpaired.o
+	    $(CXX) -o $@ $^ $(LIB) $(CXX_FLAGS)
+
 gtest: src/leviosam_test.o src/chain.o src/leviosam_utils.o
 	    $(CXX) -o $@ $^ $(LIB) $(CXX_FLAGS) -lgtest_main -lgtest
 #gtest: leviosam_test.o chain.o

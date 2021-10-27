@@ -49,6 +49,11 @@ target_link_libraries(leviosam ${SDSL_LIB})
 target_link_libraries(leviosam pthread)
 target_link_libraries(leviosam z)
 
+add_executable(extract_unpaired src/extract_unpaired.cpp)
+target_link_libraries(extract_unpaired ${HTS_LIB})
+target_link_libraries(extract_unpaired ${SDSL_LIB})
+target_link_libraries(extract_unpaired pthread)
+target_link_libraries(extract_unpaired z)
 
 # Download and unpack googletest at configure time
 configure_file(CMakeLists.txt.in googletest-download/CMakeLists.txt)
