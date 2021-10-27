@@ -179,8 +179,6 @@ void WriteToFastq::write_low_mapq_bam(
  * 
  * We use two unordered_maps to store unmatched R1 and R2 reads.
  * When a segment comes in, we check if the mate is in the map.
- * If so, write both segments to file and mark the mate as 
- * "written"; if not, add the segment to the associated map.
  */
 void WriteToFastq::write_fq_from_bam(bam1_t* aln) {
     if ((aln->core.flag & 256) || // Secondary alignment - no SEQ field
@@ -253,12 +251,9 @@ FastqRecord::FastqRecord(bam1_t* aln) {
 
 /* Write a FastqRecord object to a FASTQ record */
 int FastqRecord::write(std::ofstream& out_fq, std::string name) {
-    if (written)
-        return -1;
     out_fq << "@" << name << "\n";
     out_fq << seq_str << "\n+\n";
     out_fq << qual_str << "\n";
-    written = true;
     return 1;
 }
 
