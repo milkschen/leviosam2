@@ -73,6 +73,11 @@ cmake -DHTS_LIB_DIR=<htslib lib directory> \
       -DSDSL_INC_DIR=<sdsl-lite include dir> \
       ..
 ```
+or
+```
+cmake -D CMAKE_LIBRARY_PATH="/path/to/libsdsl/;/path/to/libhts/" \
+      -D CMAKE_INCLUDE_PATH="/path/to/include/;/path/to/include2/" ..
+```
 
 ### Make
 
