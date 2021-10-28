@@ -331,27 +331,6 @@ void lift_run(lift_opts args) {
             threads[j].join();
     }
     threads.clear();
-    // Write singleton reads
-    // if (args.split_mode == "mapq") {
-    //     if (wfq.r1_db.size() > 0) {
-    //         int c1 = 0;
-    //         for (auto i1: wfq.r1_db) {
-    //             auto n1 = i1.first;
-    //             n1 += "/1";
-    //             if (i1.second.write(wfq.out_fqS, n1))
-    //                 c1 ++;
-    //         }
-    //         std::cerr << "#R1 singleton: " << c1 << "\n";
-    //         int c2 = 0;
-    //         for (auto i2: wfq.r2_db) {
-    //             auto n2 = i2.first;
-    //             n2 += "/2";
-    //             if (i2.second.write(wfq.out_fqS, n2))
-    //                 c2 ++;
-    //         }
-    //         std::cerr << "#R2 singleton: " << c2 << "\n";
-    //     }
-    // }
     sam_close(sam_fp);
     sam_close(out_sam_fp);
 }
@@ -472,7 +451,6 @@ int main(int argc, char** argv) {
         {"prefix", required_argument, 0, 'p'},
         {"sample", required_argument, 0, 's'},
         {"split_mode", required_argument, 0, 'S'},
-        // {"split_fq_output", required_argument, 0, 'Q'},
         {"threads", required_argument, 0, 't'},
         {"chunk_size", required_argument, 0, 'T'},
         {"vcf", required_argument, 0, 'v'},
@@ -537,9 +515,6 @@ int main(int argc, char** argv) {
             case 'p':
                 args.outpre = optarg;
                 break;
-            // case 'Q':
-            //     args.split_fq_output = optarg;
-            //     break;
             case 's':
                 args.sample = optarg;
                 break;
