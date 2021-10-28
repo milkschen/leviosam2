@@ -7,7 +7,7 @@ CLIB=-lz -lhts
 
 OBJS = src/leviosam.o src/chain.o src/leviosam_utils.o src/bam_aux.o src/bam_md.o
 CDEPS= src/bam.h
-DEPS = src/leviosam.hpp src/chain.hpp
+DEPS = src/leviosam.hpp src/chain.hpp src/robin_hood.h
 
 all: $(MAIN) extract_unpaired
 
@@ -20,7 +20,7 @@ all: $(MAIN) extract_unpaired
 $(MAIN): $(OBJS)
 	    $(CXX) -o $@ $^ $(LIB) $(CXX_FLAGS)
 
-extract_unpaired.cpp.o: %.cpp $(DEPS) robin_hood.h
+extract_unpaired.cpp.o: %.cpp $(DEPS)
 	    $(CXX) -c -o $@ $< $(LIB) $(CXX_FLAGS)
 
 extract_unpaired: src/extract_unpaired.o
