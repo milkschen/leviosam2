@@ -47,38 +47,23 @@ void print_help_msg() {
 }
 
 
-// void write_read(
-//     std::ofstream& out_fq,
-//     const std::string n,
-//     const std::pair<std::string, std::string> p) {
-//     out_fq << "@" << n << "\n";
-//     out_fq << p.first << "\n+\n";
-//     out_fq << p.second << "\n";
-// }
-
-
-void extract_unpaired_core(extract_unpaired_opts args, LevioSamUtils::fastq_map &reads) {
-    // Input file
-    samFile* sam_fp = (args.sam_fname == "")?
-        sam_open("-", "r") : sam_open(args.sam_fname.data(), "r");
-    bam_hdr_t* hdr = sam_hdr_read(sam_fp);
-    // Output files
-    std::ofstream out_r1_fp(args.out_r1_fname);
-    std::ofstream out_r2_fp(args.out_r2_fname);
-    samFile* out_sam_fp = sam_open(args.out_committed_sam_fname.data(), "wb");
-
-    sam_hdr_add_pg(hdr, "extract_unpaired", "VN", VERSION, "CL", args.cmd.data(), NULL);
-    auto write_hdr = sam_hdr_write(out_sam_fp, hdr);
-
+void extract_unpaired_core(
+    LevioSamUtils::fastq_map &reads,
+    bam_hdr_t* chdr,
+    bam_hdr_t* dhdr,
+    samFile* csam_fp, samFile* out_csam_fp,
+    samFile* out_dsam_fp,
+    std::ofstream& out_r1_fp, std::ofstream& out_r2_fp
+) {
     bam1_t* aln = bam_init1();
     int cnt = 0;
-    while (sam_read1(sam_fp, hdr, aln) > 0) {
+    while (sam_read1(csam_fp, chdr, aln) > 0) {
         bam1_core_t c = aln->core;
         if ((c.flag & 256) || // Secondary alignment - no SEQ field
             (c.flag & 512) || // not passing filters
             (c.flag & 1024) || // PCR or optinal duplicate
             (c.flag & 2048)) { // supplementary alignment
-            if (sam_write1(out_sam_fp, hdr, aln) < 0) {
+            if (sam_write1(out_csam_fp, chdr, aln) < 0) {
                 std::cerr << "[Error] Failed to write record " << 
                     bam_get_qname(aln) << "\n";
                 exit(1);
@@ -89,16 +74,22 @@ void extract_unpaired_core(extract_unpaired_opts args, LevioSamUtils::fastq_map 
         bool write_to_fastq = false;
         if (search != reads.end()){
             LevioSamUtils::FastqRecord fq = LevioSamUtils::FastqRecord(aln);
+            // Write the paired records to FASTQ
             if (c.flag & 64) { // first segment
                 fq.write(out_r1_fp, qname);
                 search->second.write(out_r2_fp, qname);
-                // write_read(out_r2_fp, search->first, search->second);
             } else if (c.flag & 128) { // second segment
-                // write_read(out_r1_fp, search->first, search->second);
                 search->second.write(out_r1_fp, qname);
                 fq.write(out_r2_fp, qname);
             } else {
                 std::cerr << "Error: Read " << qname << " is not paired-end. Exit.\n";
+                exit(1);
+            }
+            // Also write the records to a BAM file
+            if (sam_write1(out_dsam_fp, dhdr, aln) < 0 ||
+                sam_write1(out_dsam_fp, dhdr, search->second.aln) < 0) {
+                std::cerr << "[Error] Failed to write record " << bam_get_qname(aln) <<
+                    " to the deferred BAM file\n";
                 exit(1);
             }
             reads.erase(search);
@@ -106,32 +97,55 @@ void extract_unpaired_core(extract_unpaired_opts args, LevioSamUtils::fastq_map 
             cnt += 1;
         }
         if (write_to_fastq == false) { // write to BAM
-            if (sam_write1(out_sam_fp, hdr, aln) < 0) {
-                std::cerr << "[Error] Failed to write record " << 
-                    bam_get_qname(aln) << "\n";
+            if (sam_write1(out_csam_fp, chdr, aln) < 0) {
+                std::cerr << "[Error] Failed to write record " << bam_get_qname(aln) << 
+                    " to the committed BAM file\n";
                 exit(1);
             }
         }
     }
     
     std::cerr << "Extract " << cnt << " reads from BAM\n";
-    out_r1_fp.close();
-    out_r2_fp.close();
-    sam_close(sam_fp);
-    sam_close(out_sam_fp);
+    std::cerr << "Num. remaining records in the map = " << reads.size() << " (expected to be 0)\n";
 }
 
 
 void extract_unpaired(extract_unpaired_opts args) {
-    if (args.fq_fname != "") {
-        LevioSamUtils::fastq_map reads = LevioSamUtils::read_unpaired_fq(args.fq_fname);
-        extract_unpaired_core(args, reads);
-    } else if (args.deferred_sam_fname != "") {
-        // std::string deferred_paired_sam_fname = args.outpre + "-deferred.bam";
-        LevioSamUtils::fastq_map reads = LevioSamUtils::read_deferred_bam(
-            args.deferred_sam_fname, args.out_deferred_sam_fname);
-        extract_unpaired_core(args, reads);
+    // Input file
+    samFile* csam_fp = (args.sam_fname == "")?
+        sam_open("-", "r") : sam_open(args.sam_fname.data(), "r");
+    bam_hdr_t* chdr = sam_hdr_read(csam_fp);
+    samFile* dsam_fp = (args.deferred_sam_fname == "")?
+        NULL : sam_open(args.deferred_sam_fname.data(), "r");
+    bam_hdr_t* dhdr = (args.deferred_sam_fname == "")?
+        NULL : sam_hdr_read(dsam_fp);
+    // Output files
+    std::ofstream out_r1_fp(args.out_r1_fname);
+    std::ofstream out_r2_fp(args.out_r2_fname);
+    samFile* out_csam_fp = sam_open(args.out_committed_sam_fname.data(), "wb");
+    samFile* out_dsam_fp = sam_open(args.out_deferred_sam_fname.data(), "wb");
+
+    sam_hdr_add_pg(chdr, "extract_unpaired", "VN", VERSION, "CL", args.cmd.data(), NULL);
+    sam_hdr_add_pg(dhdr, "extract_unpaired", "VN", VERSION, "CL", args.cmd.data(), NULL);
+    if (sam_hdr_write(out_csam_fp, chdr) < 0 || sam_hdr_write(out_dsam_fp, dhdr) < 0) {
+        std::cerr << "Error: Unable to write SAM header\n";
+        exit(1);
     }
+
+    // Core operation
+    LevioSamUtils::fastq_map reads = (args.fq_fname != "")?
+        LevioSamUtils::read_unpaired_fq(args.fq_fname) :
+        LevioSamUtils::read_deferred_bam(dsam_fp, out_dsam_fp, dhdr);
+    extract_unpaired_core(
+        reads, chdr, dhdr, csam_fp, out_csam_fp, out_dsam_fp, out_r1_fp, out_r2_fp);
+
+    if (dsam_fp != NULL)
+        sam_close(dsam_fp);
+    sam_close(out_dsam_fp);
+    out_r1_fp.close();
+    out_r2_fp.close();
+    sam_close(csam_fp);
+    sam_close(out_csam_fp);
 }
 
 
