@@ -4,6 +4,8 @@
 
 namespace LevioSamUtils {
 
+typedef robin_hood::unordered_map<std::string, FastqRecord> fastq_map;
+
 void WriteToFastq::init(
     const std::string outpre, const std::string sm,
     const int mapq, const int isize,
@@ -232,30 +234,152 @@ void WriteToFastq::write_fq_from_bam(bam1_t* aln) {
     }
 }
 
-/* Construct a FastqRecord object */
-FastqRecord::FastqRecord(bam1_t* aln) {
-    flag = aln->core.flag;
-    seq_str = get_read(aln);
-    std::string qual_seq("");
-    uint8_t* qual = bam_get_qual(aln);
-    if (qual[0] == 255) qual_seq = "*";
-    else {
-        for (auto i = 0; i < aln->core.l_qseq; ++i) {
-            qual_seq += (char) (qual[i] + 33);
-        }
-    }
-    if (aln->core.flag & BAM_FREVERSE)
-        std::reverse(qual_seq.begin(), qual_seq.end());
-    qual_str = qual_seq;
+
+/* Construct a FastqRecord object from seq and qual */
+FastqRecord::FastqRecord(const std::string& seq, const std::string& qual) {
+    seq_str = seq;
+    qual_str = qual;
 }
+
+
+/* Construct a FastqRecord object from a BAM record */
+FastqRecord::FastqRecord(bam1_t* a) {
+    aln = bam_init1();
+    if (bam_copy1(aln, a) == NULL) {
+        std::cerr << "Failed to copy " << bam_get_qname(a) << "\n";
+    };
+    // seq_str = get_read(a);
+    // std::string qual_seq("");
+    // uint8_t* qual = bam_get_qual(a);
+    // if (qual[0] == 255) qual_seq = "*";
+    // else {
+    //     for (auto i = 0; i < a->core.l_qseq; ++i) {
+    //         qual_seq += (char) (qual[i] + 33);
+    //     }
+    // }
+    // if (a->core.flag & BAM_FREVERSE)
+    //     std::reverse(qual_seq.begin(), qual_seq.end());
+    // qual_str = qual_seq;
+}
+
+
+FastqRecord::~FastqRecord() {
+    if (aln != NULL) {
+        bam_destroy1(aln);
+        aln = NULL;
+    }
+}
+
 
 /* Write a FastqRecord object to a FASTQ record */
 int FastqRecord::write(std::ofstream& out_fq, std::string name) {
+    if (aln != NULL) {
+        seq_str = get_read(aln);
+        std::string qual_seq("");
+        uint8_t* qual = bam_get_qual(aln);
+        if (qual[0] == 255) qual_seq = "*";
+        else {
+            for (auto i = 0; i < aln->core.l_qseq; ++i) {
+                qual_seq += (char) (qual[i] + 33);
+            }
+        }
+        if (aln->core.flag & BAM_FREVERSE)
+            std::reverse(qual_seq.begin(), qual_seq.end());
+        qual_str = qual_seq;
+    }
     out_fq << "@" << name << "\n";
     out_fq << seq_str << "\n+\n";
     out_fq << qual_str << "\n";
     return 1;
 }
+
+
+fastq_map read_deferred_bam(
+    const std::string& deferred_sam_fname,
+    const std::string& out_deferred_sam_fname
+) {
+    fastq_map reads1, reads2;
+    samFile* sam_fp = sam_open(deferred_sam_fname.data(), "r");
+    samFile* out_sam_fp = sam_open(out_deferred_sam_fname.data(), "wb");
+    bam_hdr_t* hdr = sam_hdr_read(sam_fp);
+    auto write_hdr = sam_hdr_write(out_sam_fp, hdr);
+    bam1_t* aln = bam_init1();
+
+    while (sam_read1(sam_fp, hdr, aln) > 0) {
+        bam1_core_t c = aln->core;
+        // The following categories of reads are excluded by this method
+        if ((c.flag & 256) || // Secondary alignment - no SEQ field
+            (c.flag & 512) || // not passing filters
+            (c.flag & 1024) || // PCR or optinal duplicate
+            (c.flag & 2048)) { // supplementary alignment
+            continue;
+        }
+        std::string qname = bam_get_qname(aln);
+        LevioSamUtils::FastqRecord fq = LevioSamUtils::FastqRecord(aln);
+        if (c.flag & 64) { // first segment
+            auto search = reads2.find(qname);
+            if (search != reads2.end()) {
+                if (sam_write1(out_sam_fp, hdr, search->second.aln) < 0  ||
+                    sam_write1(out_sam_fp, hdr, aln) < 0) {
+                    std::cerr << "[Error] Failed to write record " << qname << "\n";
+                    exit(1);
+                }
+                reads2.erase(search);
+            } else {
+                reads1.emplace(std::make_pair(qname, fq));
+            }
+        } else if (c.flag & 128) { // second segment
+            auto search = reads1.find(qname);
+            if (search != reads1.end()) {
+                if (sam_write1(out_sam_fp, hdr, aln) < 0 ||
+                    sam_write1(out_sam_fp, hdr, search->second.aln) < 0) {
+                    std::cerr << "[Error] Failed to write record " << qname << "\n";
+                    exit(1);
+                }
+                reads1.erase(search);
+            } else {
+                reads2.emplace(std::make_pair(qname, fq));
+            }
+        } else {
+            std::cerr << "Error: Alignment " << qname << " is not paired.\n";
+            exit(1);
+        }
+    }
+    sam_close(out_sam_fp);
+    std::cerr << "Num. unpaired reads1: " << reads1.size() << "\n";
+    std::cerr << "Num. unpaired reads2: " << reads2.size() << "\n";
+    for (auto& r: reads2) {
+        reads1.emplace(std::make_pair(r.first, r.second.aln));
+    }
+    std::cerr << "Num. merged unpaired: " << reads1.size() << "\n";
+    return reads1;
+}
+
+
+fastq_map read_unpaired_fq(const std::string& fq_fname) {
+    fastq_map reads;
+    std::ifstream fastq_fp(fq_fname);
+    std::string line;
+    int i = 0;
+    std::string name, seq;
+    while (getline (fastq_fp, line)) {
+        if (i % 4 == 0) {
+            name = line.substr(1);
+        } else if (i % 4 == 1) {
+            seq = line;
+        } else if (i % 4 == 3) {
+            // reads.emplace(std::make_pair(name, std::make_pair(seq, line)));
+            reads.emplace(std::make_pair(name, LevioSamUtils::FastqRecord(seq, line)));
+            name = "";
+            seq = "";
+        }
+        i++;
+    }
+    std::cerr << "Number of singletons: " << reads.size() << "\n";
+    fastq_fp.close();
+    return reads;
+}
+
 
 /* Split a string on a delimiter
  * From: https://stackoverflow.com/a/64886763

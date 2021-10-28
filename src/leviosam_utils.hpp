@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <vector>
 #include <cstring>
+#include "robin_hood.h"
 
 const int8_t seq_comp_table[16] = { 0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15 };
 
@@ -15,19 +16,45 @@ namespace LevioSamUtils {
 
 class FastqRecord {
 public:
-    FastqRecord() {};
-    FastqRecord(bam1_t* aln);
-    // copy constructor
+    ~FastqRecord();
+    FastqRecord(bam1_t* a);
+    FastqRecord(const std::string& seq, const std::string& qual);
+
+    // Copy constructor
     FastqRecord(const FastqRecord& rhs):
-        seq_str(rhs.seq_str), qual_str(rhs.qual_str),
-        flag(rhs.flag), written(rhs.written) {}
+        seq_str(rhs.seq_str), qual_str(rhs.qual_str) {
+        if (rhs.aln != NULL) {
+            aln = bam_init1();
+            if (bam_copy1(aln, rhs.aln) == NULL) {
+                std::cerr << "Warning: copying failed for " << bam_get_qname(rhs.aln) << "\n";
+            }
+        }
+    }
+
+    // Move constructor
+    FastqRecord(FastqRecord&& rhs) noexcept:
+        seq_str(rhs.seq_str), qual_str(rhs.qual_str) {
+        if (rhs.aln != NULL) {
+            aln = bam_init1();
+            if (bam_copy1(aln, rhs.aln) == NULL) {
+                std::cerr << "Warning: moving failed for " << bam_get_qname(rhs.aln) << "\n";
+                bam_destroy1(rhs.aln);
+                rhs.aln = NULL;
+            }
+        }
+    }
+
     int write(std::ofstream& out_fq, std::string name);
-    // std::string name;
     std::string seq_str;
     std::string qual_str;
-    uint16_t flag;
-    bool written = false;
+    bam1_t* aln = NULL;
 };
+
+robin_hood::unordered_map<std::string, FastqRecord> read_unpaired_fq(
+    const std::string& fq_fname);
+robin_hood::unordered_map<std::string, FastqRecord> read_deferred_bam(
+    const std::string& deferred_sam_fname,
+    const std::string& out_deferred_sam_fname);
 
 class WriteToFastq {
 public:
