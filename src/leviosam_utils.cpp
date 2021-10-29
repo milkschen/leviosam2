@@ -280,9 +280,8 @@ int FastqRecord::write(std::ofstream& out_fq, std::string name) {
  * and return the rest as a fastq_map
  */
 fastq_map read_deferred_bam(
-    samFile* dsam_fp,
-    samFile* out_dsam_fp,
-    bam_hdr_t* hdr
+    samFile* dsam_fp, samFile* out_dsam_fp, bam_hdr_t* hdr,
+    std::ofstream& out_r1_fp, std::ofstream& out_r2_fp
 ) {
     fastq_map reads1, reads2;
     bam1_t* aln = bam_init1();
@@ -306,6 +305,8 @@ fastq_map read_deferred_bam(
                     std::cerr << "[Error] Failed to write record " << qname << "\n";
                     exit(1);
                 }
+                fq.write(out_r1_fp, qname);
+                search->second.write(out_r2_fp, qname);
                 reads2.erase(search);
             } else {
                 reads1.emplace(std::make_pair(qname, fq));
@@ -318,6 +319,8 @@ fastq_map read_deferred_bam(
                     std::cerr << "[Error] Failed to write record " << qname << "\n";
                     exit(1);
                 }
+                search->second.write(out_r1_fp, qname);
+                fq.write(out_r2_fp, qname);
                 reads1.erase(search);
             } else {
                 reads2.emplace(std::make_pair(qname, fq));
@@ -375,6 +378,30 @@ std::vector<std::string> split_str(
         std::sregex_token_iterator(str.begin(), str.end(), regexz, -1),
         std::sregex_token_iterator());
     return list;
+}
+
+
+/* Update SEQ and QUAL if in a reversed chain */
+int reverse_seq_and_qual(bam1_t* aln) {
+    bam1_core_t* c = &(aln->core);
+    uint8_t *seq = bam_get_seq(aln);
+    uint8_t *qual = bam_get_qual(aln);
+    std::vector<int> read_nt16;
+    std::vector<uint8_t> qual_tmp;
+    for (int n = 0; n < c->l_qseq; n++) {
+        read_nt16.push_back(seq_comp_table[bam_seqi(seq, n)]);
+        qual_tmp.push_back(qual[n]);
+    }
+    // Make sure the length of the reversed seq is concordant with the original seq
+    if (read_nt16.size() != c->l_qseq) {
+        return -1;
+    }
+    for (int n = 0; n < c->l_qseq; n++) {
+        bam_set_seqi(seq, n, read_nt16[c->l_qseq - n - 1]);
+        qual[n] = qual_tmp[c->l_qseq - n - 1];
+    }
+
+    return 0;
 }
 
 };

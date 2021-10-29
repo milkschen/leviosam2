@@ -135,7 +135,7 @@ void extract_unpaired(extract_unpaired_opts args) {
     // Core operation
     LevioSamUtils::fastq_map reads = (args.fq_fname != "")?
         LevioSamUtils::read_unpaired_fq(args.fq_fname) :
-        LevioSamUtils::read_deferred_bam(dsam_fp, out_dsam_fp, dhdr);
+        LevioSamUtils::read_deferred_bam(dsam_fp, out_dsam_fp, dhdr, out_r1_fp, out_r2_fp);
     extract_unpaired_core(
         reads, chdr, dhdr, csam_fp, out_csam_fp, out_dsam_fp, out_r1_fp, out_r2_fp);
 

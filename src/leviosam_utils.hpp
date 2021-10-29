@@ -53,7 +53,8 @@ public:
 robin_hood::unordered_map<std::string, FastqRecord> read_unpaired_fq(
     const std::string& fq_fname);
 robin_hood::unordered_map<std::string, FastqRecord> read_deferred_bam(
-    samFile* dsam_fp, samFile* out_dsam_fp, bam_hdr_t* hdr);
+    samFile* dsam_fp, samFile* out_dsam_fp, bam_hdr_t* hdr,
+    std::ofstream& out_r1_fp, std::ofstream& out_r2_fp);
 
 class WriteToFastq {
 public:
@@ -95,6 +96,8 @@ void write_fq_from_bam_core(bam1_t* aln, std::ofstream& out_fq);
 
 std::vector<std::string> split_str(
     const std::string str, const std::string regex_str);
+int reverse_seq_and_qual(bam1_t* aln);
+
 }
 
 #endif
