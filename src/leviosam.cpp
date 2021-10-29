@@ -10,6 +10,7 @@
  * Distributed under the MIT license
  * https://github.com/alshai/levioSAM
  */
+#include <ctime>
 #include <stdio.h>
 #include <vector>
 #include <zlib.h>
@@ -430,6 +431,8 @@ void print_main_help_msg(){
 }
 
 int main(int argc, char** argv) {
+    double start_cputime = std::clock();
+    auto start_walltime = std::chrono::system_clock::now();
     int c;
     lift_opts args;
     args.cmd = make_cmd(argc,argv);
@@ -577,6 +580,11 @@ int main(int argc, char** argv) {
     } else if (!strcmp(argv[optind], "serialize") || !strcmp(argv[optind], "index")) {
         serialize_run(args);
     }
+    double cpu_duration = (std::clock() - start_cputime) / (double)CLOCKS_PER_SEC;
+    std::chrono::duration<double> wall_duration = (std::chrono::system_clock::now() - start_walltime);
+    std::cerr << "\n";
+    std::cerr << "Finished in " << cpu_duration << " CPU seconds, or " << 
+                                   wall_duration.count() << " wall clock seconds\n";
     return 0;
 }
 
