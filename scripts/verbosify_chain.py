@@ -56,19 +56,6 @@ def reverse_complement(seq):
     return rc[::-1]
 
 
-# '''
-# Read a FASTA file as a dict if a file name is given. If not, return None.
-# '''
-# def read_fasta(ref_fn):
-#     ref = None
-#     if ref_fn != '':
-#         f = pysam.FastaFile(ref_fn)
-#         ref = {}
-#         for r in f.references:
-#             ref[r] = f[r].upper()
-#     return ref
-
-
 def compute_hamming_dist(
     forward,
     ref1, contig1, start1, end1,
@@ -106,6 +93,7 @@ def compute_hamming_dist(
     return idy
 
 
+''' Write a chain record in the BED format '''
 def write_to_summary(fs_fn, fs, strand, l, hd, source, s_start, dest, d_start):
     if fs_fn:
         if strand == '+':
@@ -130,7 +118,6 @@ def verbosify_chain(args):
     ref2 = leviosam_utils.read_fasta(args.ref2)
 
     check_hdist = True if (ref1 != {} and ref2 != {}) else False
-    # check_hdist = True if ref1 != None else False
     if not check_hdist:
         hd = None
     if args.summary:
@@ -190,13 +177,14 @@ def verbosify_chain(args):
                         ref2, dest, d_start-l, d_start)
                     msg += f'\t{hd}'
             print(line + msg, file=fo)
+            write_to_summary(args.summary, fs, strand, l, hd, source, s_start, dest, d_start)
             if strand == '+':
                 s_start += (l + ds)
                 d_start += (l + dd)
             else:
                 s_start += (l + ds)
                 d_start -= (l + dd)
-            write_to_summary(args.summary, fs, strand, l, hd, source, s_start, dest, d_start)
+            # write_to_summary(args.summary, fs, strand, l, hd, source, s_start, dest, d_start)
             if check_hdist:
                 total_bases_idy += (l * hd)
         elif len(fields) == 1 and fields[0] != '':
