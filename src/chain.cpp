@@ -362,8 +362,11 @@ void ChainMap::parse_chain_line(
  * We currenly set an unliftable read as unampped, and thus the 
  * BAM_FUNMAP or BAM_FMUNMAP flags will be raised.
  */
-void ChainMap::update_flag_unmap(bam1_core_t* c, const bool first_seg) {
+void ChainMap::update_flag_unmap(bam1_t* aln, const bool first_seg) {
+    bam1_core_t* c = &(aln->core);
     if (first_seg) {
+        if (c->flag & BAM_FREVERSE)
+            LevioSamUtils::reverse_seq_and_qual(aln);
         c->flag |= BAM_FUNMAP;
         c->flag &= ~BAM_FPROPER_PAIR;
         c->flag &= ~BAM_FREVERSE;
@@ -763,19 +766,17 @@ bool ChainMap::update_interval_indexes(
 }
 
 
+/* Calculate the distance between a position and nearby chain intervals
+ *
+ * Return:
+ *  - -1 if the query is invalid
+ *  - 0 if the position is within a chain interval
+ *  - a positive number if there's a positive distance between the position and nearby intervals
+ */
 int32_t ChainMap::get_num_clipped(
     const int32_t pos, const bool leftmost,
-    const std::string &contig, int32_t &sidx, int32_t &eidx) {
-    /* Check liftability
-     * If an aln cannot be mapped to an interval
-     *   (a) the position is not valid in the interval map
-     *   (b) the position is within the gap between two valid intervals,
-     *   set it as unliftable.
-     *
-     * An exception is if the aln is close enough to the next interval
-     * (under scenario (b)), we might choose to rescue it, with the bases
-     * in the gap clipped.
-     */
+    const std::string &contig, int32_t &sidx, int32_t &eidx
+) {
     int32_t num_clipped = 0;
     if ((sidx <= -1) || (eidx <= -1)) {
         num_clipped = -1;
@@ -873,7 +874,7 @@ bool ChainMap::lift_segment(
         if (num_sclip_end < 0 || num_sclip_end > allowed_cigar_changes) {
             return false;
         }
-        if (num_sclip_end > 0 && verbose > 1) {
+        if (num_sclip_end > 0 && verbose > -1) {
             std::cerr << bam_get_qname(aln) << " - num soft-clipped bases (end) = " << num_sclip_end << "\n";
         }
     }
@@ -914,27 +915,9 @@ bool ChainMap::lift_segment(
             c->pos = c->pos + offset;
         else {
             c->pos = -pos_end + offset + start_sintvl.source_start + start_sintvl.source_end;
-            
-            // Update FLAG if in a reversed chain
+            // Update FLAG, SEQ and QUAL if in a reversed chain
             c->flag ^= BAM_FREVERSE;
-
-            // Update SEQ and QUAL if in a reversed chain
-            uint8_t *seq = bam_get_seq(aln);
-            uint8_t *qual = bam_get_qual(aln);
-            std::vector<int> read_nt16;
-            std::vector<uint8_t> qual_tmp;
-            for (int n = 0; n < c->l_qseq; n++) {
-                read_nt16.push_back(seq_comp_table[bam_seqi(seq, n)]);
-                qual_tmp.push_back(qual[n]);
-            }
-            // Make sure the length of the reversed seq is concordant with the original seq
-            if (read_nt16.size() != c->l_qseq) {
-                return false;
-            }
-            for (int n = 0; n < c->l_qseq; n++) {
-                bam_set_seqi(seq, n, read_nt16[c->l_qseq - n - 1]);
-                qual[n] = qual_tmp[c->l_qseq - n - 1];
-            }
+            LevioSamUtils::reverse_seq_and_qual(aln);
         }
     } else {
         if (strand)
@@ -971,7 +954,7 @@ void ChainMap::lift_aln(
 
     bool r1_liftable = lift_segment(aln, hdr, true, dest_contig);
     if (!r1_liftable) {
-        update_flag_unmap(c, true);
+        update_flag_unmap(aln, true);
     }
 
     size_t lift_status;
@@ -982,7 +965,7 @@ void ChainMap::lift_aln(
         std::string null_mdest_contig;
         bool r2_liftable = lift_segment(aln, hdr, false, null_mdest_contig);
         if (!r2_liftable)
-            update_flag_unmap(c, false);
+            update_flag_unmap(aln, false);
 
         // We currently don't use the "unliftable" category - 
         // an unliftable read is considered as unmapped.
@@ -1073,6 +1056,8 @@ void ChainMap::lift_aln(
             lo = "UL";
         }
     }
+
+
     bam_aux_append(
         aln, "LO", 'Z', lo.length() + 1,
         reinterpret_cast<uint8_t*>(const_cast<char*>(lo.c_str())));

@@ -119,7 +119,7 @@ class ChainMap {
             int &tmp_gap,
             int &query_offset
         );
-        void update_flag_unmap(bam1_core_t* c, const bool first_seg);
+        void update_flag_unmap(bam1_t* aln, const bool first_seg);
 
         const int verbose;
         const int allowed_cigar_changes;
