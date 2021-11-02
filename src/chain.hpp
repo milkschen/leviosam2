@@ -102,7 +102,7 @@ class ChainMap {
             BitVectorMap &start_bv_map, BitVectorMap &end_bv_map
         );
 
-        bam_hdr_t* bam_hdr_from_chainmap(samFile* sam_fp);
+        bam_hdr_t* bam_hdr_from_chainmap(samFile* sam_fp, bam_hdr_t* hdr_orig);
 
         size_t serialize(std::ofstream& out);
         void load(std::ifstream& in);

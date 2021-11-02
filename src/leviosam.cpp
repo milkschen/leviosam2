@@ -88,25 +88,25 @@ void serialize_run(lift_opts args) {
  */
 bool commit_alignment(
     const bam1_t* const aln,
-    const LevioSamUtils::WriteToFastq* const wfq
+    const LevioSamUtils::WriteDeferred* const wd
 ){
     const bam1_core_t* c = &(aln->core);
-    std::vector<std::string> split_modes = LevioSamUtils::split_str(wfq->split_mode, ",");
+    std::vector<std::string> split_modes = LevioSamUtils::split_str(wd->split_mode, ",");
     if (find(split_modes.begin(), split_modes.end(), "mapq") != split_modes.end()){
-        if (c->qual < wfq->min_mapq)
+        if (c->qual < wd->min_mapq)
             return false;
     }
     if (find(split_modes.begin(), split_modes.end(), "isize") != split_modes.end()){
-        if (c->isize == 0 || c->isize > wfq->max_isize || c->isize < -wfq->max_isize)
+        if (c->isize == 0 || c->isize > wd->max_isize || c->isize < -wd->max_isize)
             return false;
     }
     if (find(split_modes.begin(), split_modes.end(), "clipped_frac") != split_modes.end()){
         auto rlen = bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln));
-        if (1 - (rlen / c->l_qseq) > wfq->max_clipped_frac)
+        if (1 - (rlen / c->l_qseq) > wd->max_clipped_frac)
             return false;
     }
     if (find(split_modes.begin(), split_modes.end(), "aln_score") != split_modes.end()){
-        if (bam_aux2i(bam_aux_get(aln, "AS")) < wfq->min_aln_score)
+        if (bam_aux2i(bam_aux_get(aln, "AS")) < wd->min_aln_score)
             return false;
     }
     return true;
@@ -124,13 +124,15 @@ void read_and_lift(
     int chunk_size,
     const std::map<std::string, std::string> &ref_dict,
     int md_flag,
-    LevioSamUtils::WriteToFastq* wfq
+    LevioSamUtils::WriteDeferred* wd
 ){
     std::string current_contig;
-    std::vector<bam1_t*> aln_vec;
+    std::vector<bam1_t*> aln_vec, aln_vec_clone;
     for (int i = 0; i < chunk_size; i++){
         bam1_t* aln = bam_init1();
         aln_vec.push_back(aln);
+        bam1_t* aln_clone = bam_init1();
+        aln_vec_clone.push_back(aln_clone);
     }
     int read = 1;
     std::string ref;
@@ -141,7 +143,8 @@ void read_and_lift(
             std::lock_guard<std::mutex> g(*mutex_fread);
             for (int i = 0; i < chunk_size; i++){
                 read = sam_read1(sam_fp, hdr, aln_vec[i]);
-                if (read < 0){
+                auto clone = bam_copy1(aln_vec_clone[i], aln_vec[i]);
+                if (read < 0 || clone < 0){
                     num_actual_reads = i;
                     break;
                 }
@@ -172,7 +175,7 @@ void read_and_lift(
         }
         for (int i = 0; i < num_actual_reads; i++) {
             // If a read is committed
-            if (commit_alignment(aln_vec[i], wfq) == true) {
+            if (commit_alignment(aln_vec[i], wd) == true) {
                 // write to file, thread corruption protected by lock_guard
                 std::lock_guard<std::mutex> g_commited(*mutex_fwrite);
                 if (sam_write1(out_sam_fp, hdr, aln_vec[i]) < 0) {
@@ -181,18 +184,22 @@ void read_and_lift(
                     exit(1);
                 }
             } else {
-                std::lock_guard<std::mutex> g_deferred(wfq->mutex_fwrite_fq);
-                wfq->write_low_mapq_bam(aln_vec[i], hdr);
+                std::lock_guard<std::mutex> g_deferred(wd->mutex_fwrite);
+                wd->write_deferred_bam(aln_vec[i], hdr);
+                wd->write_deferred_bam_orig(aln_vec_clone[i]);
             }
         }
     }
     for (int i = 0; i < chunk_size; i++){
         bam_destroy1(aln_vec[i]);
+        bam_destroy1(aln_vec_clone[i]);
     }
     aln_vec.clear();
+    aln_vec_clone.clear();
 }
 
 
+/* Load a FASTA file and return a map */
 std::map<std::string, std::string> load_fasta(std::string ref_name) {
     std::cerr << "Loading FASTA...";
     std::map<std::string, std::string> fmap;
@@ -256,17 +263,19 @@ void lift_run(lift_opts args) {
             sam_open((args.outpre + "." + args.out_format).data(), out_mode.data()) :
             sam_open((args.outpre + "-committed." + args.out_format).data(), out_mode.data());
 
-    bam_hdr_t* hdr;
+    bam_hdr_t* hdr = sam_hdr_read(sam_fp);
+    bam_hdr_t* hdr_orig = sam_hdr_dup(hdr);
     if (args.chain_fname == "" || args.chainmap_fname == "") {
-        hdr = chain_map.bam_hdr_from_chainmap(sam_fp);
+        hdr = chain_map.bam_hdr_from_chainmap(sam_fp, hdr);
     } else if (args.lift_fname != "" || args.vcf_fname != "") {
-        hdr = lift_map.bam_hdr_from_liftmap(sam_fp);
+        hdr = lift_map.bam_hdr_from_liftmap(sam_fp, hdr);
     } else {
         fprintf(stderr, "Not enough parameters specified to build/load lift-over\n");
         print_lift_help_msg();
         exit(1);
     }
     sam_hdr_add_pg(hdr, "leviosam", "VN", VERSION, "CL", args.cmd.data(), NULL);
+    sam_hdr_add_pg(hdr_orig, "leviosam", "VN", VERSION, "CL", args.cmd.data(), NULL);
     auto write_hdr = sam_hdr_write(out_sam_fp, hdr);
 
     std::map<std::string, std::string> ref_dict;
@@ -279,7 +288,7 @@ void lift_run(lift_opts args) {
         ref_dict = load_fasta(args.ref_name);
     }
 
-    LevioSamUtils::WriteToFastq wfq;
+    LevioSamUtils::WriteDeferred wd;
     if (args.split_mode != "") {
         std::vector<std::string> split_modes = LevioSamUtils::split_str(args.split_mode, ",");
         std::cerr << "Alignments don't pass the below filter are deferred:\n";
@@ -296,12 +305,12 @@ void lift_run(lift_opts args) {
         if (find(split_modes.begin(), split_modes.end(), "aln_score") != split_modes.end()){
             std::cerr << " - AS:i (pre-liftover) < " << args.min_aln_score << "\n";
         }
-        wfq.init(
+        wd.init(
             args.outpre, args.split_mode,
             args.min_mapq, args.max_isize,
             args.max_clipped_frac, args.min_aln_score,
-            args.out_format);
-        auto write_hdr = sam_hdr_write(wfq.out_fp, hdr);
+            args.out_format, hdr_orig);
+        auto write_hdr = sam_hdr_write(wd.out_fp, hdr);
     }
 
     // const int num_threads = args.threads;
@@ -316,7 +325,7 @@ void lift_run(lift_opts args) {
                     &lift_map,
                     &mutex_fread, &mutex_fwrite,
                     sam_fp, out_sam_fp, hdr, args.chunk_size,
-                    ref_dict, args.md_flag, &wfq));
+                    ref_dict, args.md_flag, &wd));
         } else {
             threads.push_back(
                 std::thread(
@@ -324,7 +333,7 @@ void lift_run(lift_opts args) {
                     &chain_map,
                     &mutex_fread, &mutex_fwrite,
                     sam_fp, out_sam_fp, hdr, args.chunk_size,
-                    ref_dict, args.md_flag, &wfq));
+                    ref_dict, args.md_flag, &wd));
         }
     }
     for (int j = 0; j < args.threads; j++){
@@ -332,6 +341,8 @@ void lift_run(lift_opts args) {
             threads[j].join();
     }
     threads.clear();
+    sam_hdr_destroy(hdr);
+    sam_hdr_destroy(hdr_orig);
     sam_close(sam_fp);
     sam_close(out_sam_fp);
 }
@@ -437,8 +448,8 @@ int main(int argc, char** argv) {
     lift_opts args;
     args.cmd = make_cmd(argc,argv);
     static struct option long_options[] {
-        // {"md", required_argument, 0, 'm'},
         {"md", no_argument, 0, 'm'},
+        // {"write_unliftable", no_argument, 0, 'u'},
         {"sam", required_argument, 0, 'a'},
         {"min_aln_score", required_argument, 0, 'A'},
         {"chain", required_argument, 0, 'c'},
@@ -476,6 +487,9 @@ int main(int argc, char** argv) {
                 args.md_flag |= 8;
                 args.md_flag |= 16;
                 break;
+            // case 'u':
+            //     args.write_unliftable = true;
+            //     break;
             case 'a':
                 args.sam_fname = optarg;
                 break;

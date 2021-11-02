@@ -1232,14 +1232,16 @@ void ChainMap::debug_print_interval_queries(
 }
 
 /* Prepare SAM headers using the ChainMap structure
- * Contig lengths are updated if needed.
+ *
+ * - Contig lengths are updated if needed.
+ * - We pass in a header struct though it's usually inferrable from the SAM fp.
+ *   The reason is we want to have two copies of `hdr` objects in our processing
+ *   loop and we have already read `sam_fp`, which makes the header
+ *   non-inferrable at this point.
  */
 bam_hdr_t* ChainMap::bam_hdr_from_chainmap(
-    samFile* sam_fp
+    samFile* sam_fp, bam_hdr_t* hdr
 ) {
-    // We need the header of the original SAM because the aligned data
-    // is based on this index system
-    bam_hdr_t* hdr = sam_hdr_read(sam_fp);
     // For the contigs that don't appear in the chain file, we set their
     // lengths to zero. There can be alignments based on the contigs in 
     // the source SAM/BAM file, so we cannot remove them at this point.

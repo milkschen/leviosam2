@@ -56,35 +56,32 @@ robin_hood::unordered_map<std::string, FastqRecord> read_deferred_bam(
     samFile* dsam_fp, samFile* out_dsam_fp, bam_hdr_t* hdr,
     std::ofstream& out_r1_fp, std::ofstream& out_r2_fp);
 
-class WriteToFastq {
+class WriteDeferred {
 public:
-    WriteToFastq() {
+    WriteDeferred() {
         write_deferred = false;
     };
-    ~WriteToFastq();
+    ~WriteDeferred();
 
     void init(
         const std::string outpre, const std::string sm,
         const int mapq, const int isize,
         const float clipped_frac, const int aln_score,
-        const std::string of
+        const std::string of, bam_hdr_t* ihdr
     );
 
-    void write_fq_from_bam(bam1_t* aln);
-    void write_low_mapq_bam(bam1_t* aln, bam_hdr_t* hdr);
+    void write_deferred_bam(bam1_t* aln, bam_hdr_t* hdr);
+    void write_deferred_bam_orig(bam1_t* aln);
 
-    // std::ofstream out_fqS;
-    // std::ofstream out_fq1;
-    // std::ofstream out_fq2;
     samFile* out_fp;
+    samFile* out_fp_orig;
+    bam_hdr_t* hdr_orig;
     std::string split_mode = "";
-    std::mutex mutex_fwrite_fq;
+    std::mutex mutex_fwrite;
     int min_mapq;
     int max_isize;
     float max_clipped_frac;
     int min_aln_score;
-    std::unordered_map<std::string, FastqRecord> r1_db;
-    std::unordered_map<std::string, FastqRecord> r2_db;
     bool write_deferred;
 };
 
@@ -92,7 +89,6 @@ void update_cigar(bam1_t* aln, std::vector<uint32_t> &new_cigar);
 void debug_print_cigar(uint32_t* cigar, size_t n_cigar);
 void remove_mn_md_tag(bam1_t* aln);
 static std::string get_read(const bam1_t *rec);
-void write_fq_from_bam_core(bam1_t* aln, std::ofstream& out_fq);
 
 std::vector<std::string> split_str(
     const std::string str, const std::string regex_str);

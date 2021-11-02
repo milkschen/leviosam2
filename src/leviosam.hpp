@@ -732,8 +732,7 @@ class LiftMap {
     /* Prepare SAM headers using the LiftMap structure
      * Contig lengths are updated if needed.
      */
-    bam_hdr_t* bam_hdr_from_liftmap(samFile* sam_fp) {
-        bam_hdr_t* hdr = sam_hdr_read(sam_fp);
+    bam_hdr_t* bam_hdr_from_liftmap(samFile* sam_fp, bam_hdr_t* hdr) {
         // the "ref" lengths are all stored in the LiftMap structure
         std::vector<std::string> contig_names;
         std::vector<size_t> contig_reflens;

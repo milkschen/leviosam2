@@ -6,33 +6,37 @@ namespace LevioSamUtils {
 
 typedef robin_hood::unordered_map<std::string, FastqRecord> fastq_map;
 
-void WriteToFastq::init(
+void WriteDeferred::init(
     const std::string outpre, const std::string sm,
     const int mapq, const int isize,
     const float clipped_frac, const int aln_score,
-    const std::string of
+    const std::string of, bam_hdr_t* ihdr
 ) {
     split_mode = sm;
     min_mapq = mapq;
     max_isize = isize;
     max_clipped_frac = clipped_frac;
     min_aln_score = aln_score;
-
-    r1_db.clear();
-    r2_db.clear();
+    hdr_orig = ihdr;
+    write_deferred = true;
 
     std::string out_mode = (of == "sam")? "w" : "wb";
-    write_deferred = true;
-    out_fp = sam_open(
-        (outpre + "-deferred." + of).data(),
-        out_mode.data()
-    );
+    std::string out_fn = outpre + "-deferred." + of;
+    out_fp = sam_open(out_fn.data(), out_mode.data());
+    std::string out_fn_orig = outpre + "-unliftable." + of;
+    out_fp_orig = sam_open(out_fn_orig.data(), out_mode.data());
+    if (sam_hdr_write(out_fp_orig, hdr_orig) < 0) {
+        std::cerr << "Error during writing sam_hdr for " << out_fn_orig << "\n";
+        exit(1);
+    }
 }
 
 
-WriteToFastq::~WriteToFastq() {
-    if (write_deferred)
+WriteDeferred::~WriteDeferred() {
+    if (write_deferred) {
         sam_close(out_fp);
+        sam_close(out_fp_orig);
+    }
 };
 
 
@@ -132,25 +136,7 @@ static std::string get_read(const bam1_t *rec){
 }
 
 
-/* Write an alignment to a FASTQ file */
-void write_fq_from_bam_core(bam1_t* aln, std::ofstream& out_fq){
-    out_fq << "@" << bam_get_qname(aln) << "\n";
-    out_fq << get_read(aln) << "\n+\n";
-    std::string qual_seq("");
-    uint8_t* qual = bam_get_qual(aln);
-    if (qual[0] == 255) qual_seq = "*";
-    else {
-        for (auto i = 0; i < aln->core.l_qseq; ++i) {
-            qual_seq += (char) (qual[i] + 33);
-        }
-    }
-    if (aln->core.flag & BAM_FREVERSE)
-        std::reverse(qual_seq.begin(), qual_seq.end());
-    out_fq << qual_seq << "\n";
-}
-
-
-void WriteToFastq::write_low_mapq_bam(
+void WriteDeferred::write_deferred_bam(
     bam1_t* aln, bam_hdr_t* hdr
 ) {
     if ((aln->core.flag & 256) || // Secondary alignment - no SEQ field
@@ -159,74 +145,23 @@ void WriteToFastq::write_low_mapq_bam(
         (aln->core.flag & 2048)) { // supplementary alignment
         return;
     }
-    int ret = sam_write1(out_fp, hdr, aln);
-    if (ret < 0) {
+    auto w_ret = sam_write1(out_fp, hdr, aln);
+    if (w_ret < 0) {
         std::cerr << "[Error] Failed to write record " << bam_get_qname(aln) << "\n";
         exit(1);
     }
 }
 
 
-// /* BAM2FASTQ, with a heuristic algorithm to handle paired-end reads
-//  * 
-//  * We don't require the assumption that the dataset is sorted
-//  * by name, and thus read pairs might not occur in an interleaved
-//  * format.
-//  * 
-//  * We use two unordered_maps to store unmatched R1 and R2 reads.
-//  * When a segment comes in, we check if the mate is in the map.
-//  */
-// void WriteToFastq::write_fq_from_bam(bam1_t* aln) {
-//     if ((aln->core.flag & 256) || // Secondary alignment - no SEQ field
-//         (aln->core.flag & 512) || // not passing filters
-//         (aln->core.flag & 1024) || // PCR or optinal duplicate
-//         (aln->core.flag & 2048)) { // supplementary alignment
-//         return;
-//     } 
-//     std::string n (bam_get_qname(aln));
-//     if (!(aln->core.flag & 1)) { // e.g. single-end
-//         write_fq_from_bam_core(aln, out_fqS);
-//     } else if (aln->core.flag & 64) { // First segment
-//         auto find_r2 = r2_db.find(n);
-//         if (find_r2 != r2_db.end()) {
-//             auto w = find_r2->second.write(out_fq2, n);
-//             if (w > 0)
-//                 write_fq_from_bam_core(aln, out_fq1);
-//         } else {
-//             r1_db.emplace(std::make_pair(n, FastqRecord(aln)));
-//             // std::cerr << "first+1: " << r1_db.size() << " " << n << "\n";
-//         }
-//     } else if (aln->core.flag & 128) { // Second segment
-//         auto find_r1 = r1_db.find(n);
-//         if (find_r1 != r1_db.end()) {
-//             auto w = find_r1->second.write(out_fq1, n);
-//             if (w > 0)
-//                 write_fq_from_bam_core(aln, out_fq2);
-//         } else {
-//             r2_db.emplace(std::make_pair(n, FastqRecord(aln)));
-//             // std::cerr << "second+1: " << r2_db.size() << " " << n << "\n";
-//         }
-//     } else {
-//         std::cerr << "Error: issues with read " << n << "\n";
-//         exit(1);
-//     }
-// 
-//     if (r1_db.size() >= 10000) {
-//         std::cerr << "Clearing R1db (" << r1_db.size() << ") and R2db (" << r2_db.size() << ")\n";
-//         for (auto i: r1_db) {
-//             auto n1 = i.first;
-//             n1 += "/1";
-//             i.second.write(out_fqS, n1);
-//         }
-//         for (auto i: r2_db) {
-//             auto n2 = i.first;
-//             n2 += "/2";
-//             i.second.write(out_fqS, n2);
-//         }
-//         r1_db.clear();
-//         r2_db.clear();
-//     }
-// }
+void WriteDeferred::write_deferred_bam_orig(
+    bam1_t* aln
+) {
+    auto w_ret = sam_write1(out_fp_orig, hdr_orig, aln);
+    if (w_ret < 0) {
+        std::cerr << "[Error] Failed to write record " << bam_get_qname(aln) << "\n";
+        exit(1);
+    }
+}
 
 
 /* Construct a FastqRecord object from seq and qual */
