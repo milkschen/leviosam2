@@ -6,7 +6,6 @@
 #include <htslib/sam.h>
 #include "leviosam.hpp"
 #include "leviosam_utils.cpp"
-#include "robin_hood.h"
 
 
 struct extract_unpaired_opts {
