@@ -10,7 +10,7 @@ void WriteDeferred::init(
     const std::string outpre, const std::string sm,
     const int mapq, const int isize,
     const float clipped_frac, const int aln_score,
-    const std::string of, bam_hdr_t* ihdr
+    const std::string of, sam_hdr_t* ihdr
 ) {
     split_mode = sm;
     min_mapq = mapq;
@@ -137,7 +137,7 @@ static std::string get_read(const bam1_t *rec){
 
 
 void WriteDeferred::write_deferred_bam(
-    bam1_t* aln, bam_hdr_t* hdr
+    bam1_t* aln, sam_hdr_t* hdr
 ) {
     if ((aln->core.flag & 256) || // Secondary alignment - no SEQ field
         (aln->core.flag & 512) || // not passing filters
@@ -215,7 +215,7 @@ int FastqRecord::write(std::ofstream& out_fq, std::string name) {
  * and return the rest as a fastq_map
  */
 fastq_map read_deferred_bam(
-    samFile* dsam_fp, samFile* out_dsam_fp, bam_hdr_t* hdr,
+    samFile* dsam_fp, samFile* out_dsam_fp, sam_hdr_t* hdr,
     std::ofstream& out_r1_fp, std::ofstream& out_r2_fp
 ) {
     fastq_map reads1, reads2;
@@ -338,5 +338,27 @@ int reverse_seq_and_qual(bam1_t* aln) {
 
     return 0;
 }
+
+
+sam_hdr_t* fai_to_hdr(std::string dest_fai_fname, const sam_hdr_t* const hdr_orig) {
+    sam_hdr_t* hdr = sam_hdr_dup(hdr_orig);
+    // Clear all contig length info in the original header
+    sam_hdr_remove_lines(hdr, "SQ", "SN", NULL);
+    std::ifstream fai_fp(dest_fai_fname);
+    std::string line;
+    std::string name, length;
+    while (getline (fai_fp, line)) {
+        auto split_line = split_str(line, "\t");
+        name = split_line[0];
+        length = split_line[1];
+        if (sam_hdr_add_line(hdr, "SQ", "SN", name.c_str(), "LN", length.c_str(), NULL) < 0) {
+            std::cerr << "Warning: error during updating BAM header\n";
+            std::cerr << name << " " << length << "\n";
+        }
+    }
+    fai_fp.close();
+    return hdr;
+}
+
 
 };

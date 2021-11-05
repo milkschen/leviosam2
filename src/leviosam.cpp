@@ -120,7 +120,8 @@ void read_and_lift(
     std::mutex* mutex_fwrite,
     samFile* sam_fp,
     samFile* out_sam_fp,
-    bam_hdr_t* hdr,
+    sam_hdr_t* hdr_source,
+    sam_hdr_t* hdr_dest,
     int chunk_size,
     const std::map<std::string, std::string> &ref_dict,
     int md_flag,
@@ -142,7 +143,7 @@ void read_and_lift(
             // read from SAM, protected by mutex
             std::lock_guard<std::mutex> g(*mutex_fread);
             for (int i = 0; i < chunk_size; i++){
-                read = sam_read1(sam_fp, hdr, aln_vec[i]);
+                read = sam_read1(sam_fp, hdr_source, aln_vec[i]);
                 auto clone = bam_copy1(aln_vec_clone[i], aln_vec[i]);
                 if (read < 0 || clone < 0){
                     num_actual_reads = i;
@@ -154,13 +155,13 @@ void read_and_lift(
             // TODO: Plan to remove `null_dest_contig`.
             // Need to test scenarios with `NameMap`
             std::string null_dest_contig;
-            lift_map->lift_aln(aln_vec[i], hdr, null_dest_contig);
+            lift_map->lift_aln(aln_vec[i], hdr_source, hdr_dest, null_dest_contig);
             if (md_flag) {
                 auto tid = aln_vec[i]->core.tid;
                 if (tid == -1) {
                     LevioSamUtils::remove_mn_md_tag(aln_vec[i]);
                 } else {
-                    std::string dest_contig(hdr->target_name[aln_vec[i]->core.tid]);
+                    std::string dest_contig(hdr_dest->target_name[aln_vec[i]->core.tid]);
                     // change ref if needed
                     if (dest_contig != current_contig) {
                         ref = ref_dict.at(dest_contig);
@@ -178,14 +179,14 @@ void read_and_lift(
             if (commit_alignment(aln_vec[i], wd) == true) {
                 // write to file, thread corruption protected by lock_guard
                 std::lock_guard<std::mutex> g_commited(*mutex_fwrite);
-                if (sam_write1(out_sam_fp, hdr, aln_vec[i]) < 0) {
+                if (sam_write1(out_sam_fp, hdr_dest, aln_vec[i]) < 0) {
                     std::cerr << "[Error] Failed to write record " << 
                         bam_get_qname(aln_vec[i]) << "\n";
                     exit(1);
                 }
             } else {
                 std::lock_guard<std::mutex> g_deferred(wd->mutex_fwrite);
-                wd->write_deferred_bam(aln_vec[i], hdr);
+                wd->write_deferred_bam(aln_vec[i], hdr_dest);
                 wd->write_deferred_bam_orig(aln_vec_clone[i]);
             }
         }
@@ -257,18 +258,27 @@ void lift_run(lift_opts args) {
     samFile* sam_fp = (args.sam_fname == "")?
         sam_open("-", "r") : sam_open(args.sam_fname.data(), "r");
     std::string out_mode = (args.out_format == "sam")? "w" : "wb";
+    // if split, append "-committed" after `outpre`
+    std::string out_sam_fname = (args.split_mode == "")?
+        args.outpre + "." + args.out_format :
+        args.outpre + "-committed." + args.out_format;
     samFile* out_sam_fp = (args.outpre == "-" || args.outpre == "")?
         sam_open("-", out_mode.data()) :
-        (args.split_mode == "")? // if split, append "-committed" after `outpre`
-            sam_open((args.outpre + "." + args.out_format).data(), out_mode.data()) :
-            sam_open((args.outpre + "-committed." + args.out_format).data(), out_mode.data());
+        sam_open(out_sam_fname.data(), out_mode.data());
 
-    bam_hdr_t* hdr = sam_hdr_read(sam_fp);
-    bam_hdr_t* hdr_orig = sam_hdr_dup(hdr);
+    sam_hdr_t* hdr_orig = sam_hdr_read(sam_fp);
+    sam_hdr_t* hdr = NULL;
     if (args.chain_fname == "" || args.chainmap_fname == "") {
-        hdr = chain_map.bam_hdr_from_chainmap(sam_fp, hdr);
+        if (args.dest_fai_fname == "") {
+            std::cerr << "Error: -F <fai> must be set in the chainmap mode.\n";
+            exit(1);
+        }
+        hdr = LevioSamUtils::fai_to_hdr(args.dest_fai_fname, hdr_orig);
+        // Infer dest hdr using info in the chain file, but this is sometimes
+        // not robust.
+        // hdr = lift_map.bam_hdr_from_chainmap(sam_fp, hdr_orig);
     } else if (args.lift_fname != "" || args.vcf_fname != "") {
-        hdr = lift_map.bam_hdr_from_liftmap(sam_fp, hdr);
+        hdr = lift_map.bam_hdr_from_liftmap(sam_fp, hdr_orig);
     } else {
         fprintf(stderr, "Not enough parameters specified to build/load lift-over\n");
         print_lift_help_msg();
@@ -313,27 +323,23 @@ void lift_run(lift_opts args) {
         auto write_hdr = sam_hdr_write(wd.out_fp, hdr);
     }
 
-    // const int num_threads = args.threads;
-    // const int chunk_size = args.chunk_size;
     std::vector<std::thread> threads;
     std::mutex mutex_fread, mutex_fwrite;
     for (int j = 0; j < args.threads; j++){
         if (args.chain_fname == "" && args.chainmap_fname == "") {
-            threads.push_back(
-                std::thread(
-                    read_and_lift<lift::LiftMap>,
-                    &lift_map,
-                    &mutex_fread, &mutex_fwrite,
-                    sam_fp, out_sam_fp, hdr, args.chunk_size,
-                    ref_dict, args.md_flag, &wd));
+            threads.push_back(std::thread(
+                read_and_lift<lift::LiftMap>,
+                &lift_map,
+                &mutex_fread, &mutex_fwrite,
+                sam_fp, out_sam_fp, hdr_orig, hdr, args.chunk_size,
+                ref_dict, args.md_flag, &wd));
         } else {
-            threads.push_back(
-                std::thread(
-                    read_and_lift<chain::ChainMap>,
-                    &chain_map,
-                    &mutex_fread, &mutex_fwrite,
-                    sam_fp, out_sam_fp, hdr, args.chunk_size,
-                    ref_dict, args.md_flag, &wd));
+            threads.push_back(std::thread(
+                read_and_lift<chain::ChainMap>,
+                &chain_map,
+                &mutex_fread, &mutex_fwrite,
+                sam_fp, out_sam_fp, hdr_orig, hdr, args.chunk_size,
+                ref_dict, args.md_flag, &wd));
         }
     }
     for (int j = 0; j < args.threads; j++){
@@ -415,6 +421,7 @@ void print_lift_help_msg(){
     fprintf(stderr, "         ChainMap options (one of -c and -C must be set to perform lift-over using a ChainMap):\n");
     fprintf(stderr, "           -c string If -C is not specified, build a ChainMap from a chain file.\n");
     fprintf(stderr, "           -C string Path to an indexed ChainMap.\n");
+    fprintf(stderr, "           -F string Path to the FAI file of the dest reference.\n");
     fprintf(stderr, "           -G INT    Number of allowed CIGAR changes for one alingment. [10]\n");
     fprintf(stderr, "\n");
     fprintf(stderr, "         Commit/defer rule options:\n");
@@ -455,6 +462,7 @@ int main(int argc, char** argv) {
         {"chain", required_argument, 0, 'c'},
         {"chainmap", required_argument, 0, 'C'},
         {"reference", required_argument, 0, 'f'},
+        {"dest_fai", required_argument, 0, 'F'},
         {"haplotype", required_argument, 0, 'g'},
         {"allowed_cigar_changes", required_argument, 0, 'G'},
         {"leviosam", required_argument, 0, 'l'},
@@ -475,7 +483,7 @@ int main(int argc, char** argv) {
     while(
         (c = getopt_long(
             argc, argv,
-            "hma:A:c:C:f:g:G:k:l:L:M:n:O:p:s:S:t:T:v:V:Z:",
+            "hma:A:c:C:f:F:g:G:k:l:L:M:n:O:p:s:S:t:T:v:V:Z:",
             long_options, &long_index)) != -1) {
         switch (c) {
             case 'h':
@@ -503,7 +511,10 @@ int main(int argc, char** argv) {
                 args.chainmap_fname = optarg;
                 break;
             case 'f':
-                args.ref_name = std::string(optarg);
+                args.ref_name = optarg;
+                break;
+            case 'F':
+                args.dest_fai_fname = optarg;
                 break;
             case 'g':
                 args.haplotype = optarg;

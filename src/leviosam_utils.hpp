@@ -93,6 +93,7 @@ static std::string get_read(const bam1_t *rec);
 std::vector<std::string> split_str(
     const std::string str, const std::string regex_str);
 int reverse_seq_and_qual(bam1_t* aln);
+sam_hdr_t* fai_to_hdr(std::string dest_fai_fname, const sam_hdr_t* const hdr_orig);
 
 }
 

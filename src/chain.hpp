@@ -86,12 +86,13 @@ class ChainMap {
             const std::string &contig, int32_t &sidx, int32_t &eidx
         );
         bool lift_segment(
-            bam1_t* aln, bam_hdr_t* hdr,
+            bam1_t* aln, sam_hdr_t* hdr_source, sam_hdr_t* hdr_dest,
             bool first_seg, std::string &dest_contig
         );
         void lift_aln(
             bam1_t* aln,
-            bam_hdr_t* hdr,
+            sam_hdr_t* hdr_source,
+            sam_hdr_t* hdr_dest,
             std::string &dest_contig
         );
 
@@ -102,7 +103,7 @@ class ChainMap {
             BitVectorMap &start_bv_map, BitVectorMap &end_bv_map
         );
 
-        bam_hdr_t* bam_hdr_from_chainmap(samFile* sam_fp, bam_hdr_t* hdr_orig);
+        sam_hdr_t* bam_hdr_from_chainmap(samFile* sam_fp, sam_hdr_t* hdr_orig);
 
         size_t serialize(std::ofstream& out);
         void load(std::ifstream& in);
@@ -128,7 +129,8 @@ class ChainMap {
         SdVectorMap end_map;
         SdRank1Map start_rs1_map;
         SdRank1Map end_rs1_map;
-        std::unordered_map<std::string, int32_t> length_map;
+        // std::unordered_map<std::string, int32_t> length_map;
+        std::map<std::string, int32_t> length_map;
 
         // Debug functions
         void debug_print_interval_queries(

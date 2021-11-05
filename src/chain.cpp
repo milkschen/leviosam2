@@ -804,7 +804,7 @@ int32_t ChainMap::get_num_clipped(
  * Return false if unliftable.
  */
 bool ChainMap::lift_segment(
-    bam1_t* aln, bam_hdr_t* hdr,
+    bam1_t* aln, sam_hdr_t* hdr_source, sam_hdr_t* hdr_dest,
     bool first_seg, std::string &dest_contig
 ) {
     bam1_core_t* c = &(aln->core);
@@ -823,8 +823,9 @@ bool ChainMap::lift_segment(
     bool leftmost = true;
     auto pos = (first_seg)? c->pos : c->mpos;
     std::string source_contig = (first_seg)?
-        hdr->target_name[c->tid] : hdr->target_name[c->mtid];
-    // Update start intervals; if any of the indexes is not value, the segment is unliftable
+        hdr_source->target_name[c->tid] : hdr_source->target_name[c->mtid];
+    // Update start intervals; if any of the indexes is not valid,
+    // the segment is unliftable
     if (!update_interval_indexes(source_contig, pos, start_sidx, start_eidx))
         return false;
     if (verbose > 1) {
@@ -842,9 +843,9 @@ bool ChainMap::lift_segment(
     auto start_sintvl = interval_map[source_contig][start_sidx];
     dest_contig = start_sintvl.target;
     if (first_seg)
-        c->tid = sam_hdr_name2tid(hdr, dest_contig.c_str());
+        c->tid = sam_hdr_name2tid(hdr_dest, dest_contig.c_str());
     else
-        c->mtid = sam_hdr_name2tid(hdr, dest_contig.c_str());
+        c->mtid = sam_hdr_name2tid(hdr_dest, dest_contig.c_str());
 
     if (c->tid < 0 || c->mtid < 0)
         return false;
@@ -853,8 +854,9 @@ bool ChainMap::lift_segment(
     // If it's the first segment, we can calculate the query length wrt the REF;
     // If it's the second segment, we can only do a rough estimate b/c we don't know the RLEN of
     // the mate.
-    auto pos_end = (first_seg)? c->pos + bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln)) :
-                                c->mpos + c->l_qseq;
+    auto pos_end = (first_seg)?
+        c->pos + bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln)) :
+        c->mpos + c->l_qseq;
     int end_sidx = 0;
     int end_eidx = 0;
     // Update end indexes; if either is unavailable, mark the segment as unliftable
@@ -938,21 +940,15 @@ bool ChainMap::lift_segment(
 
 // Pass `dest_contig` by reference because we need it when updating the MD string.
 void ChainMap::lift_aln(
-    bam1_t* aln, bam_hdr_t* hdr, std::string &dest_contig
+    bam1_t* aln, sam_hdr_t* hdr_source, sam_hdr_t* hdr_dest,
+    std::string &dest_contig
 ) {
     bam1_core_t* c = &(aln->core);
     uint16_t flag = c->flag;
     size_t pos = c->pos;
     size_t mpos = c->mpos;
 
-    if (verbose > 1) {
-        std::cerr << "\n" << bam_get_qname(aln) << " (" << c->flag << ")\n";
-        std::cerr << aln->core.tid << "\n";
-        if (aln->core.tid >= 0)
-            std::cerr << hdr->target_name[aln->core.tid] << "\n";
-    }
-
-    bool r1_liftable = lift_segment(aln, hdr, true, dest_contig);
+    bool r1_liftable = lift_segment(aln, hdr_source, hdr_dest, true, dest_contig);
     if (!r1_liftable) {
         update_flag_unmap(aln, true);
     }
@@ -963,7 +959,7 @@ void ChainMap::lift_aln(
     // Paired
     if (c->flag & BAM_FPAIRED) {
         std::string null_mdest_contig;
-        bool r2_liftable = lift_segment(aln, hdr, false, null_mdest_contig);
+        bool r2_liftable = lift_segment(aln, hdr_source, hdr_dest, false, null_mdest_contig);
         if (!r2_liftable)
             update_flag_unmap(aln, false);
 
@@ -1239,8 +1235,8 @@ void ChainMap::debug_print_interval_queries(
  *   loop and we have already read `sam_fp`, which makes the header
  *   non-inferrable at this point.
  */
-bam_hdr_t* ChainMap::bam_hdr_from_chainmap(
-    samFile* sam_fp, bam_hdr_t* hdr
+sam_hdr_t* ChainMap::bam_hdr_from_chainmap(
+    samFile* sam_fp, sam_hdr_t* hdr
 ) {
     // For the contigs that don't appear in the chain file, we set their
     // lengths to zero. There can be alignments based on the contigs in 
