@@ -9,6 +9,7 @@ import argparse
 import pysam
 import sys
 
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
