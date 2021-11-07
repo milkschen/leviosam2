@@ -93,7 +93,18 @@ static std::string get_read(const bam1_t *rec);
 std::vector<std::string> split_str(
     const std::string str, const std::string regex_str);
 int reverse_seq_and_qual(bam1_t* aln);
-sam_hdr_t* fai_to_hdr(std::string dest_fai_fname, const sam_hdr_t* const hdr_orig);
+sam_hdr_t* fai_to_hdr(std::string fai_fn, const sam_hdr_t* const hdr_orig);
+// std::map<std::string, int32_t> fai_to_map(std::string fai_fn);
+std::vector<std::pair<std::string, int32_t>> fai_to_map(std::string fai_fn);
+// sam_hdr_t* lengthmap_to_hdr(std::map<std::string, int32_t> lm, const sam_hdr_t* const hdr_orig);
+sam_hdr_t* lengthmap_to_hdr(
+    std::vector<std::pair<std::string, int32_t>> lm,
+    const sam_hdr_t* const hdr_orig);
+
+std::vector<std::pair<std::string, int32_t>> load_lengthmap(std::ifstream& in);
+size_t serialize_lengthmap(
+    std::ofstream& out,
+    std::vector<std::pair<std::string, int32_t>> length_map);
 
 }
 

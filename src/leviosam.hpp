@@ -33,7 +33,9 @@
 #define VERBOSE_DEV   3
 
 using NameMap = std::vector<std::pair<std::string,std::string>>;
-using LengthMap = std::unordered_map<std::string,size_t>;
+using LengthMap = std::vector<std::pair<std::string, int32_t>>;
+// using LengthMap = std::map<std::string, int32_t>;
+// using LengthMap = std::unordered_map<std::string,size_t>;
 
 static inline void die(std::string msg) {
     fprintf(stderr, "%s\n", msg.data());
@@ -450,7 +452,8 @@ class LiftMap {
     LiftMap(vcfFile* fp, bcf_hdr_t* hdr,
             std::string sample_name, std::string haplotype,
             std::vector<std::pair<std::string,std::string>> nm = {},
-            std::unordered_map<std::string,size_t> ls = {}) {
+            LengthMap ls = {}) {
+            // std::unordered_map<std::string,size_t> ls = {}) {
         bool get_names = 1;
         if (nm.size()) {
             for (int i = 0; i < nm.size(); ++i)
@@ -497,9 +500,10 @@ class LiftMap {
                         die("contig length not specified in vcf, nor was it provided by user!\n");
                     } else {
                         /* get length from input lengths */
-                       auto lpair = ls.find(name_map[bcf_hdr_id2name(hdr, rid)]);
-                       if (lpair != ls.end()) l = lpair->second;
-                       else die("contig length not given by user!!\n");
+                       // auto lpair = ls.find(name_map[bcf_hdr_id2name(hdr, rid)]);
+                       // if (lpair != ls.end()) l = lpair->second;
+                       // else die("contig length not given by user!!\n");
+                       l = ls[rid].second;
                     }
                 }
                 // initialize bit vectors for this contig
@@ -581,6 +585,7 @@ class LiftMap {
         dbv.resize(x + (l - ppos));
         sbv.resize(x + (l - ppos));
         lmap.push_back(Lift(ibv,dbv,sbv));
+        length_map = ls;
     }
 
     // converts a position in the s2 sequence to corresponding position in s1 sequence
@@ -595,14 +600,6 @@ class LiftMap {
         if (it != s2_map.end()) {
             return lmap[it->second].lift_pos(i);
         } else return i;
-        // } else {
-        //     std::lock_guard<std::mutex> g(*mutex);
-        //     for (auto it : *unrecorded_contigs)
-        //         if (it == n) return i;
-        //     unrecorded_contigs->push_back(n);
-        //     fprintf(stderr, "Warning: chromosome %s not found in liftmap! \n", n.c_str());
-        //     return i;
-        // }
     }
 
     std::string lift_contig(std::string n, size_t pos) { // get_other_name()
@@ -705,6 +702,7 @@ class LiftMap {
         size += s1_map.serialize(out);
         size += s2_map.serialize(out);
         size += name_map.serialize(out);
+        size += LevioSamUtils::serialize_lengthmap(out, length_map);
         return size;
     }
 
@@ -718,6 +716,7 @@ class LiftMap {
         s1_map.load(in);
         s2_map.load(in);
         name_map.load(in);
+        length_map = LevioSamUtils::load_lengthmap(in);
     }
 
     // get names and lengths of s1 sequences
@@ -758,10 +757,14 @@ class LiftMap {
         return hdr;
     }
 
+    LengthMap& get_lengthmap(){
+        return length_map;
+    }
+
     private:
 
     std::vector<Lift> lmap;
-
+    LengthMap length_map;
 
     Name2NameMap name_map;
     Name2IdxMap s1_map;

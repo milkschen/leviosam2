@@ -40,22 +40,22 @@ NameMap parse_name_map(const char* fname) {
     return names;
 }
 
-LengthMap parse_length_map(const char* fname) {
-    LengthMap lengths;
-    FILE* fp = fopen(fname, "r");
-    int x;
-    char n[255];
-    char l[255];
-    while ((x = fscanf(fp, "%[^\t]\t%[^\n]\n", n, l)) != EOF) {
-        if (x <= 0 || lengths.find(n) != lengths.end()) {
-            fprintf(stderr, "error encountered reading length map\n");
-            exit(1);
-        }
-        lengths[n] = std::atoi(l);
-    }
-    fclose(fp);
-    return lengths;
-}
+// LengthMap parse_length_map(const char* fname) {
+//     LengthMap lengths;
+//     FILE* fp = fopen(fname, "r");
+//     int x;
+//     char n[255];
+//     char l[255];
+//     while ((x = fscanf(fp, "%[^\t]\t%[^\n]\n", n, l)) != EOF) {
+//         if (x <= 0 || lengths.find(n) != lengths.end()) {
+//             fprintf(stderr, "error encountered reading length map\n");
+//             exit(1);
+//         }
+//         lengths[n] = std::atoi(l);
+//     }
+//     fclose(fp);
+//     return lengths;
+// }
 
 
 void serialize_run(lift_opts args) {
@@ -73,7 +73,9 @@ void serialize_run(lift_opts args) {
         l.serialize(o);
         fprintf(stderr, "levioSAM VcfMap saved to %s\n", (args.outpre + ".lft").data());
     } else if (args.chain_fname != "") {
-        chain::ChainMap cfp(args.chain_fname, args.verbose, args.allowed_cigar_changes);
+        chain::ChainMap cfp(
+            args.chain_fname, args.verbose,
+            args.allowed_cigar_changes, args.length_map);
         std::ofstream o(args.outpre + ".clft", std::ios::binary);
         cfp.serialize(o);
         fprintf(stderr, "levioSAM ChainMap saved to %s\n", (args.outpre + ".clft").data());
@@ -227,7 +229,7 @@ void lift_run(lift_opts args) {
             );
         } else if (args.chain_fname != ""){
             return chain::ChainMap(
-                args.chain_fname, args.verbose, args.allowed_cigar_changes
+                args.chain_fname, args.verbose, args.allowed_cigar_changes, args.length_map
             );
         } else {
             return chain::ChainMap();
@@ -252,6 +254,11 @@ void lift_run(lift_opts args) {
             exit(1);
         }
     } ();
+    if (args.chainmap_fname != "") {
+        args.length_map = chain_map.length_map;
+    } else {
+        args.length_map = lift_map.get_lengthmap();
+    }
 
     std::cerr << "done\n";
 
@@ -267,23 +274,29 @@ void lift_run(lift_opts args) {
         sam_open(out_sam_fname.data(), out_mode.data());
 
     sam_hdr_t* hdr_orig = sam_hdr_read(sam_fp);
-    sam_hdr_t* hdr = NULL;
-    if (args.chain_fname == "" || args.chainmap_fname == "") {
-        if (args.dest_fai_fname == "") {
-            std::cerr << "Error: -F <fai> must be set in the chainmap mode.\n";
-            exit(1);
-        }
-        hdr = LevioSamUtils::fai_to_hdr(args.dest_fai_fname, hdr_orig);
-        // Infer dest hdr using info in the chain file, but this is sometimes
-        // not robust.
-        // hdr = lift_map.bam_hdr_from_chainmap(sam_fp, hdr_orig);
-    } else if (args.lift_fname != "" || args.vcf_fname != "") {
-        hdr = lift_map.bam_hdr_from_liftmap(sam_fp, hdr_orig);
-    } else {
-        fprintf(stderr, "Not enough parameters specified to build/load lift-over\n");
-        print_lift_help_msg();
-        exit(1);
-    }
+    // sam_hdr_t* hdr = NULL;
+    sam_hdr_t* hdr = LevioSamUtils::lengthmap_to_hdr(args.length_map, hdr_orig);
+    // sam_hdr_t* hdr = LevioSamUtils::fai_to_hdr(args.dest_fai_fname, hdr_orig);
+    //// if (args.dest_fai_fname == "") {
+    ////     std::cerr << "Error: -F <fai> must be set in the chainmap mode.\n";
+    ////     exit(1);
+    //// }
+    // if (args.chain_fname != "" || args.chainmap_fname != "") {
+    //     if (args.dest_fai_fname == "") {
+    //         std::cerr << "Error: -F <fai> must be set in the chainmap mode.\n";
+    //         exit(1);
+    //     }
+    //     hdr = LevioSamUtils::fai_to_hdr(args.dest_fai_fname, hdr_orig);
+    //     // Infer dest hdr using info in the chain file, but this is sometimes
+    //     // not robust.
+    //     // hdr = lift_map.bam_hdr_from_chainmap(sam_fp, hdr_orig);
+    // } else if (args.lift_fname != "" || args.vcf_fname != "") {
+    //     hdr = lift_map.bam_hdr_from_liftmap(sam_fp, hdr_orig);
+    // } else {
+    //     fprintf(stderr, "Not enough parameters specified to build/load lift-over\n");
+    //     print_lift_help_msg();
+    //     exit(1);
+    // }
     sam_hdr_add_pg(hdr, "leviosam", "VN", VERSION, "CL", args.cmd.data(), NULL);
     sam_hdr_add_pg(hdr_orig, "leviosam", "VN", VERSION, "CL", args.cmd.data(), NULL);
     auto write_hdr = sam_hdr_write(out_sam_fp, hdr);
@@ -514,6 +527,8 @@ int main(int argc, char** argv) {
                 args.ref_name = optarg;
                 break;
             case 'F':
+                std::cerr << "-F is to be deprecated. Please use -k.\n";
+                exit(1);
                 args.dest_fai_fname = optarg;
                 break;
             case 'g':
@@ -523,7 +538,8 @@ int main(int argc, char** argv) {
                 args.allowed_cigar_changes = atoi(optarg);
                 break;
             case 'k':
-                args.length_map = parse_length_map(optarg);
+                args.length_map = LevioSamUtils::fai_to_map(optarg);
+                // args.length_map = parse_length_map(optarg);
                 break;
             case 'l':
                 args.lift_fname = optarg;

@@ -89,8 +89,11 @@ ChainMap::ChainMap(std::ifstream& in, int verbose, int allowed_cigar_changes) :
 }
 
 
-ChainMap::ChainMap(std::string fname, int verbose, int allowed_cigar_changes) :
-    verbose(verbose), allowed_cigar_changes(allowed_cigar_changes){
+ChainMap::ChainMap(
+    std::string fname, int verbose, int allowed_cigar_changes,
+    LengthMap& lm
+) : verbose(verbose), allowed_cigar_changes(allowed_cigar_changes),
+    length_map(lm) {
     std::ifstream chain_f(fname);
     std::string line;
     BitVectorMap start_bv_map;
@@ -290,8 +293,8 @@ void ChainMap::parse_chain_line(
             strand = (vec[4] == vec[9]);
             source_offset = stoi(vec[5]);
             target_offset = (strand)? stoi(vec[10]) : target_len - stoi(vec[10]);
-            length_map.insert(
-                std::pair<std::string, int32_t>(target, target_len));
+            // length_map.insert(
+            //     std::pair<std::string, int32_t>(target, target_len));
             init_bitvectors(source, source_len, start_bv_map, end_bv_map);
         } else if (vec[0] != "") {
             int32_t s_int_start = source_offset;
@@ -1119,6 +1122,7 @@ size_t ChainMap::serialize(std::ofstream& out) {
     return size;
 }
 
+
 // loads from stream
 void ChainMap::load(std::ifstream& in) {
     size_t map_size;
@@ -1174,8 +1178,7 @@ void ChainMap::load(std::ifstream& in) {
         std::string key(buf.begin(), buf.end());
         int32_t value;
         in.read(reinterpret_cast<char*>(&value), sizeof(value));
-        length_map.insert(
-            std::pair<std::string, int32_t>(key, value));
+        length_map.push_back(std::pair<std::string, int32_t>(key, value));
     }
     if (verbose > 2)
         std::cerr << "Initialize BVs...\n";
@@ -1235,55 +1238,55 @@ void ChainMap::debug_print_interval_queries(
  *   loop and we have already read `sam_fp`, which makes the header
  *   non-inferrable at this point.
  */
-sam_hdr_t* ChainMap::bam_hdr_from_chainmap(
-    samFile* sam_fp, sam_hdr_t* hdr
-) {
-    // For the contigs that don't appear in the chain file, we set their
-    // lengths to zero. There can be alignments based on the contigs in 
-    // the source SAM/BAM file, so we cannot remove them at this point.
-    for (auto i = 0; i < hdr->n_targets; i++) {
-        auto find_map = length_map.find (hdr->target_name[i]);
-        if (find_map == length_map.end()) {
-            if (sam_hdr_update_line(
-                hdr, "SQ", 
-                "SN", hdr->target_name[i],
-                "LN", "0",
-                NULL) == -1
-            ) {
-                std::cerr << "[Error] failed when attempting to convert the length "
-                          << "of contig " << hdr->target_name[i] << ", which doesn't appear in "
-                          << "the ChainMap, to zero.\n";
-                exit(1);
-            }
-        }
-    }
-    // For new contigs that don't appear in the original header, we append them;
-    // for existing contigs, we update the lengths.
-    for (auto& x: length_map) {
-        std::string l = std::to_string(x.second);
-        int sam_hdr_return = 1;
-        if (sam_hdr_name2tid(hdr, x.first.data()) < 0) {
-            sam_hdr_return = sam_hdr_add_line(
-                hdr, "SQ", 
-                "SN", x.first.data(),
-                "LN", l.data(),
-                NULL
-            );
-        } else {
-            sam_hdr_return = sam_hdr_update_line(
-                hdr, "SQ", 
-                "SN", x.first.data(),
-                "LN", l.data(),
-                NULL
-            );
-        }
-        if (sam_hdr_return < 0) {
-            std::cerr << "[Error] failed when converting contig length for "
-                      << x.first << ": " << x.second << "\n";
-            exit(1);
-        }
-    }
-    return hdr;
-}
+// sam_hdr_t* ChainMap::bam_hdr_from_chainmap(
+//     samFile* sam_fp, sam_hdr_t* hdr
+// ) {
+//     // For the contigs that don't appear in the chain file, we set their
+//     // lengths to zero. There can be alignments based on the contigs in 
+//     // the source SAM/BAM file, so we cannot remove them at this point.
+//     for (auto i = 0; i < hdr->n_targets; i++) {
+//         auto find_map = length_map.find (hdr->target_name[i]);
+//         if (find_map == length_map.end()) {
+//             if (sam_hdr_update_line(
+//                 hdr, "SQ", 
+//                 "SN", hdr->target_name[i],
+//                 "LN", "0",
+//                 NULL) == -1
+//             ) {
+//                 std::cerr << "[Error] failed when attempting to convert the length "
+//                           << "of contig " << hdr->target_name[i] << ", which doesn't appear in "
+//                           << "the ChainMap, to zero.\n";
+//                 exit(1);
+//             }
+//         }
+//     }
+//     // For new contigs that don't appear in the original header, we append them;
+//     // for existing contigs, we update the lengths.
+//     for (auto& x: length_map) {
+//         std::string l = std::to_string(x.second);
+//         int sam_hdr_return = 1;
+//         if (sam_hdr_name2tid(hdr, x.first.data()) < 0) {
+//             sam_hdr_return = sam_hdr_add_line(
+//                 hdr, "SQ", 
+//                 "SN", x.first.data(),
+//                 "LN", l.data(),
+//                 NULL
+//             );
+//         } else {
+//             sam_hdr_return = sam_hdr_update_line(
+//                 hdr, "SQ", 
+//                 "SN", x.first.data(),
+//                 "LN", l.data(),
+//                 NULL
+//             );
+//         }
+//         if (sam_hdr_return < 0) {
+//             std::cerr << "[Error] failed when converting contig length for "
+//                       << x.first << ": " << x.second << "\n";
+//             exit(1);
+//         }
+//     }
+//     return hdr;
+// }
 
 }

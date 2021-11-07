@@ -340,11 +340,57 @@ int reverse_seq_and_qual(bam1_t* aln) {
 }
 
 
-sam_hdr_t* fai_to_hdr(std::string dest_fai_fname, const sam_hdr_t* const hdr_orig) {
+// std::map<std::string, int32_t> fai_to_map(std::string fai_fn) {
+std::vector<std::pair<std::string, int32_t>> fai_to_map(std::string fai_fn) {
+    std::ifstream fai_fp(fai_fn);
+    std::string line;
+    std::string name;
+    int32_t length;
+    // std::map<std::string, int32_t> lengths;
+    std::vector<std::pair<std::string, int32_t>> lengths;
+    while (getline (fai_fp, line)) {
+        auto split_line = split_str(line, "\t");
+        name = split_line[0];
+        length = std::stoi(split_line[1]);
+        // std::cerr << name << " " << length << "\n";
+        lengths.push_back(std::make_pair(name, length));
+        // if (lengths.find(name) != lengths.end()) {
+        //     std::cerr << "Error: repetitive contig name " << name << "\n";
+        //     exit(1);
+        // } else {
+        //     // lengths[name] = std::stoi(length);
+        // }
+    }
+    fai_fp.close();
+    return lengths;
+}
+
+
+sam_hdr_t* lengthmap_to_hdr(
+    std::vector<std::pair<std::string, int32_t>> lm, const sam_hdr_t* const hdr_orig) {
+    // std::map<std::string, int32_t> lm, const sam_hdr_t* const hdr_orig) {
     sam_hdr_t* hdr = sam_hdr_dup(hdr_orig);
     // Clear all contig length info in the original header
     sam_hdr_remove_lines(hdr, "SQ", "SN", NULL);
-    std::ifstream fai_fp(dest_fai_fname);
+    for (auto& it: lm) {
+    // for (auto it = lm.begin(); it != lm.end(); ++it) {
+        std::string name = it.first;
+        std::string length = std::to_string(it.second);
+        // std::cerr << name << " " << length << "\n";
+        if (sam_hdr_add_line(hdr, "SQ", "SN", name.c_str(), "LN", length.c_str(), NULL) < 0) {
+            std::cerr << "Warning: error during updating BAM header\n";
+            std::cerr << name << " " << length << "\n";
+        }
+    }
+    return hdr;
+}
+
+
+sam_hdr_t* fai_to_hdr(std::string fai_fn, const sam_hdr_t* const hdr_orig) {
+    sam_hdr_t* hdr = sam_hdr_dup(hdr_orig);
+    // Clear all contig length info in the original header
+    sam_hdr_remove_lines(hdr, "SQ", "SN", NULL);
+    std::ifstream fai_fp(fai_fn);
     std::string line;
     std::string name, length;
     while (getline (fai_fp, line)) {
@@ -358,6 +404,46 @@ sam_hdr_t* fai_to_hdr(std::string dest_fai_fname, const sam_hdr_t* const hdr_ori
     }
     fai_fp.close();
     return hdr;
+}
+
+
+size_t serialize_lengthmap(
+    std::ofstream& out, std::vector<std::pair<std::string, int32_t>> length_map
+) {
+    size_t size = 0;
+    size_t nelems = length_map.size();
+    std::cerr << "LevioSamUtils::serialize_lengthmap(): " << nelems << "\n";
+    out.write(reinterpret_cast<char*>(&nelems), sizeof(nelems));
+    size += sizeof(nelems);
+    for (auto& x: length_map) {
+        size_t str_size = x.first.size();
+        out.write(reinterpret_cast<char*>(&str_size), sizeof(str_size));
+        out.write(reinterpret_cast<const char*>(x.first.data()), str_size);
+        out.write(reinterpret_cast<char*>(&x.second), sizeof(x.second));
+        size += sizeof(str_size) + str_size + sizeof(x.second);
+    }
+    return size;
+}
+
+
+std::vector<std::pair<std::string, int32_t>> load_lengthmap(std::ifstream& in) {
+    size_t map_size;
+    std::cerr << "\nLevioAamUtils:load_lengthmap()\n";
+    in.read(reinterpret_cast<char*>(&map_size), sizeof(map_size));
+    std::vector<std::pair<std::string, int32_t>> length_map;
+    for (auto i = 0; i < map_size; ++i) {
+        size_t str_size;
+        in.read(reinterpret_cast<char*>(&str_size), sizeof(str_size));
+        std::vector<char> buf(str_size);
+        in.read(reinterpret_cast<char*>(buf.data()), str_size);
+        std::string key(buf.begin(), buf.end());
+        int32_t value;
+        in.read(reinterpret_cast<char*>(&value), sizeof(value));
+        // length_map.push_back(std::pair<std::string, int32_t>(key, value));
+        length_map.push_back(std::pair<std::string, int32_t>(key, value));
+        std::cerr << "load " << key << ":" << value << "\n";
+    }
+    return length_map;
 }
 
 

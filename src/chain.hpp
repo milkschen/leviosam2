@@ -43,12 +43,16 @@ using BitVectorMap = std::unordered_map<std::string, sdsl::bit_vector>;
 using SdVectorMap = std::unordered_map<std::string, sdsl::sd_vector<>>;
 using SdRank1Map = std::unordered_map<std::string, sdsl::sd_vector<>::rank_1_type>;
 using IntervalMap = std::unordered_map<std::string, std::vector<Interval>>;
+using LengthMap = std::vector<std::pair<std::string, int32_t>>;
+//using LengthMap = std::map<std::string, int32_t>;
 
 class ChainMap {
     public:
         ChainMap(): verbose(0), allowed_cigar_changes(0) {}
         ~ChainMap() {}
-        ChainMap(std::string fname, int verbose, int allowed_cigar_changes);
+        ChainMap(
+            std::string fname, int verbose,
+            int allowed_cigar_changes, LengthMap& lm);
         ChainMap(std::ifstream& in, int verbose, int allowed_cigar_changes);
         void init_bitvectors(
             std::string source, int source_length,
@@ -107,6 +111,8 @@ class ChainMap {
 
         size_t serialize(std::ofstream& out);
         void load(std::ifstream& in);
+        std::vector<std::pair<std::string, int32_t>> length_map;
+        // std::map<std::string, int32_t> length_map;
 
     private:
         void init_rs();
@@ -129,8 +135,6 @@ class ChainMap {
         SdVectorMap end_map;
         SdRank1Map start_rs1_map;
         SdRank1Map end_rs1_map;
-        // std::unordered_map<std::string, int32_t> length_map;
-        std::map<std::string, int32_t> length_map;
 
         // Debug functions
         void debug_print_interval_queries(
