@@ -472,7 +472,6 @@ void ChainMap::push_cigar(
     // Cancel out complementary operators
     } else if ((back_type == 2 && op_type == 1) ||
                (back_type == 1 && op_type == 2)) {
-        // TODO: need more validation
         // For cases S-D, we ignore Ds, since deletions don't 
         // contribute to either the alignment or the position 
         // in soft-clipped regions.
