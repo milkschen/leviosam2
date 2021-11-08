@@ -171,7 +171,7 @@ TEST(LiftMap, SimpleBamLift) {
     bcf_hdr_t* vcf_hdr = bcf_hdr_read(vcf_fp);
     lift::LiftMap lmap(vcf_fp, vcf_hdr, "", "0");
     samFile* sam_fp = sam_open("simple_example.sam", "r");
-    bam_hdr_t* sam_hdr = sam_hdr_read(sam_fp);
+    sam_hdr_t* sam_hdr = sam_hdr_read(sam_fp);
     bam1_t* aln = bam_init1();
     int err;
     size_t x;
@@ -189,7 +189,7 @@ TEST(LiftMap, SimpleBamCigarLift) {
     bcf_hdr_t* vcf_hdr = bcf_hdr_read(vcf_fp);
     lift::LiftMap lmap(vcf_fp, vcf_hdr, "", "0");
     samFile* sam_fp = sam_open("simple_example.sam", "r");
-    bam_hdr_t* sam_hdr = sam_hdr_read(sam_fp);
+    sam_hdr_t* sam_hdr = sam_hdr_read(sam_fp);
     bam1_t* aln = bam_init1();
     int err;
     size_t x;
@@ -217,7 +217,7 @@ TEST(LiftMap, DelInIndelBamCigarLift) {
     bcf_hdr_t* vcf_hdr = bcf_hdr_read(vcf_fp);
     lift::LiftMap lmap(vcf_fp, vcf_hdr, "", "0");
     samFile* sam_fp = sam_open("del_in_indel_example.sam", "r");
-    bam_hdr_t* sam_hdr = sam_hdr_read(sam_fp);
+    sam_hdr_t* sam_hdr = sam_hdr_read(sam_fp);
     bam1_t* aln = bam_init1();
     int err;
     size_t x;
@@ -245,7 +245,7 @@ TEST(LiftMap, SimpleSplicedBamCigarLift) {
     bcf_hdr_t* vcf_hdr = bcf_hdr_read(vcf_fp);
     lift::LiftMap lmap(vcf_fp, vcf_hdr, "", "0");
     samFile* sam_fp = sam_open("spliced_example.sam", "r");
-    bam_hdr_t* sam_hdr = sam_hdr_read(sam_fp);
+    sam_hdr_t* sam_hdr = sam_hdr_read(sam_fp);
     bam1_t* aln = bam_init1();
     int err;
     size_t x;
@@ -271,7 +271,9 @@ TEST(LiftMap, SimpleSplicedBamCigarLift) {
 
 /* Chain tests */
 TEST(ChainMap, SimpleRankAndLift) {
-    chain::ChainMap cmap ("small.chain", 0, 0);
+    std::vector<std::pair<std::string, int32_t>> lm;
+    lm.push_back(std::make_pair("chr1", 248387328));
+    chain::ChainMap cmap ("small.chain", 0, 0, lm);
 
     int pos = 674047;
     std::string contig = "chr1";
@@ -325,7 +327,9 @@ TEST(ChainMap, ParseChainLineCornerZero) {
 
 
 TEST(ChainMap, LiftInReversedRegion) {
-    chain::ChainMap cmap ("chr1_reversed_region.chain", 0, 0);
+    std::vector<std::pair<std::string, int32_t>> lm;
+    lm.push_back(std::make_pair("chr1", 248387497));
+    chain::ChainMap cmap ("chr1_reversed_region.chain", 0, 0, lm);
 
     std::string contig = "chr1";
     int pos_array [4] = {146735453, 146735605, 146735135, 146735235};
@@ -342,10 +346,55 @@ TEST(ChainMap, LiftInReversedRegion) {
     }
 }
 
+
+// TEST(ChainMap, LiftBamInReversedRegion) {
+//     samFile* gold_fp = sam_open("bwa-h37-chr1_206072707_206332221.bam", "rb");
+//     sam_hdr_t* hdr_gold = sam_hdr_read(gold_fp);
+//     std::cerr << sam_hdr_nref(hdr_gold) << "\n";
+//     bam1_t* aln_gold = bam_init1();
+//     std::unordered_map<std::string, bam1_t*> gold;
+//     while (sam_read1(gold_fp, hdr_gold, aln_gold) > 0) {
+//         // std::cerr << bam_get_qname(aln_gold) << "\n";
+//         gold.emplace(std::make_pair(bam_get_qname(aln_gold), bam_dup1(aln_gold)));
+//     }
+// 
+//     chain::ChainMap cmap ("hg38ToHg19.over.chain", 0, 0);
+// //        hg38ToHg19_chr1_reversed.over.chain", 0, 0);
+//     samFile* sam_fp = sam_open("bwa-h38-chr1_206009146_206268644.bam", "rb");
+//     sam_hdr_t* hdr = sam_hdr_read(sam_fp);
+//     std::cerr << sam_hdr_nref(hdr) << "\n";
+//     bam1_t* aln = bam_init1();
+//     std::string n = "test";
+//     int i = 0;
+//     while (sam_read1(sam_fp, hdr, aln) > 0) {
+//         std::string test_n = bam_get_qname(aln);
+//         std::cerr << hdr->target_name[aln->core.tid] << "\n";
+//         std::cerr << aln->core.pos << "\n";
+//         auto pos = cmap.lift_pos(hdr->target_name[aln->core.tid], aln->core.pos);
+//         auto fg = gold.find(test_n);
+//         EXPECT_EQ(pos, fg->second->core.pos);
+//         // std::string gold_n = bam_get_qname(fg->second);
+//         // std::cerr << aln->core.pos << "\n";
+//         // std::cerr << hdr->target_name[aln->core.tid] << "\n";
+//         // cmap.lift_segment(aln, hdr, hdr_gold, true, n);
+//         // std::cerr << hdr_gold->target_name[aln->core.tid] << "\n";
+//         // std::cerr << aln->core.pos << "\n";
+//         // EXPECT_EQ(test_n, gold_n);
+//         // EXPECT_EQ(aln->core.flag, fg->second->core.flag);
+//         EXPECT_EQ(aln->core.pos, fg->second->core.pos);
+//         //EXPECT_EQ(aln->core.n_cigar, fg->second->core.n_cigar);
+//         std::cerr << bam_get_qname(aln) << "\n";
+//         std::cerr << bam_get_qname(fg->second) << "\n";
+//     }
+// }
+
+
 TEST(ChainMap, LiftCigar) {
-    chain::ChainMap cmap ("small.chain", 0, 0);
+    std::vector<std::pair<std::string, int32_t>> lm;
+    lm.push_back(std::make_pair("chr1", 248387328));
+    chain::ChainMap cmap ("small.chain", 0, 0, lm);
     samFile* sam_fp = sam_open("chain_cigar.sam", "r");
-    bam_hdr_t* sam_hdr = sam_hdr_read(sam_fp);
+    sam_hdr_t* sam_hdr = sam_hdr_read(sam_fp);
     bam1_t* aln = bam_init1();
     int err;
     size_t x;

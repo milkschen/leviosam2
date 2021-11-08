@@ -275,29 +275,7 @@ void lift_run(lift_opts args) {
         sam_open(out_sam_fname.data(), out_mode.data());
 
     sam_hdr_t* hdr_orig = sam_hdr_read(sam_fp);
-    // sam_hdr_t* hdr = NULL;
     sam_hdr_t* hdr = LevioSamUtils::lengthmap_to_hdr(args.length_map, hdr_orig);
-    // sam_hdr_t* hdr = LevioSamUtils::fai_to_hdr(args.dest_fai_fname, hdr_orig);
-    //// if (args.dest_fai_fname == "") {
-    ////     std::cerr << "Error: -F <fai> must be set in the chainmap mode.\n";
-    ////     exit(1);
-    //// }
-    // if (args.chain_fname != "" || args.chainmap_fname != "") {
-    //     if (args.dest_fai_fname == "") {
-    //         std::cerr << "Error: -F <fai> must be set in the chainmap mode.\n";
-    //         exit(1);
-    //     }
-    //     hdr = LevioSamUtils::fai_to_hdr(args.dest_fai_fname, hdr_orig);
-    //     // Infer dest hdr using info in the chain file, but this is sometimes
-    //     // not robust.
-    //     // hdr = lift_map.bam_hdr_from_chainmap(sam_fp, hdr_orig);
-    // } else if (args.lift_fname != "" || args.vcf_fname != "") {
-    //     hdr = lift_map.bam_hdr_from_liftmap(sam_fp, hdr_orig);
-    // } else {
-    //     fprintf(stderr, "Not enough parameters specified to build/load lift-over\n");
-    //     print_lift_help_msg();
-    //     exit(1);
-    // }
     sam_hdr_add_pg(hdr, "leviosam", "VN", VERSION, "CL", args.cmd.data(), NULL);
     sam_hdr_add_pg(hdr_orig, "leviosam", "VN", VERSION, "CL", args.cmd.data(), NULL);
     auto write_hdr = sam_hdr_write(out_sam_fp, hdr);
