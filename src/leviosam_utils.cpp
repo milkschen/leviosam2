@@ -407,12 +407,12 @@ sam_hdr_t* fai_to_hdr(std::string fai_fn, const sam_hdr_t* const hdr_orig) {
 }
 
 
+// Serialize a `vector<pair<string, int32_t>>` object
 size_t serialize_lengthmap(
     std::ofstream& out, std::vector<std::pair<std::string, int32_t>> length_map
 ) {
     size_t size = 0;
     size_t nelems = length_map.size();
-    std::cerr << "LevioSamUtils::serialize_lengthmap(): " << nelems << "\n";
     out.write(reinterpret_cast<char*>(&nelems), sizeof(nelems));
     size += sizeof(nelems);
     for (auto& x: length_map) {
@@ -426,9 +426,9 @@ size_t serialize_lengthmap(
 }
 
 
+// Load a serialized `vector<pair<string, int32_t>>` object
 std::vector<std::pair<std::string, int32_t>> load_lengthmap(std::ifstream& in) {
     size_t map_size;
-    std::cerr << "\nLevioAamUtils:load_lengthmap()\n";
     in.read(reinterpret_cast<char*>(&map_size), sizeof(map_size));
     std::vector<std::pair<std::string, int32_t>> length_map;
     for (auto i = 0; i < map_size; ++i) {
@@ -439,9 +439,7 @@ std::vector<std::pair<std::string, int32_t>> load_lengthmap(std::ifstream& in) {
         std::string key(buf.begin(), buf.end());
         int32_t value;
         in.read(reinterpret_cast<char*>(&value), sizeof(value));
-        // length_map.push_back(std::pair<std::string, int32_t>(key, value));
         length_map.push_back(std::pair<std::string, int32_t>(key, value));
-        std::cerr << "load " << key << ":" << value << "\n";
     }
     return length_map;
 }

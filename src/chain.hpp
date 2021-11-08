@@ -39,12 +39,13 @@ class Interval {
         bool strand; // true: "+"; false: "-"
 };
 
+
 using BitVectorMap = std::unordered_map<std::string, sdsl::bit_vector>;
 using SdVectorMap = std::unordered_map<std::string, sdsl::sd_vector<>>;
 using SdRank1Map = std::unordered_map<std::string, sdsl::sd_vector<>::rank_1_type>;
 using IntervalMap = std::unordered_map<std::string, std::vector<Interval>>;
 using LengthMap = std::vector<std::pair<std::string, int32_t>>;
-//using LengthMap = std::map<std::string, int32_t>;
+
 
 class ChainMap {
     public:
@@ -112,7 +113,6 @@ class ChainMap {
         size_t serialize(std::ofstream& out);
         void load(std::ifstream& in);
         std::vector<std::pair<std::string, int32_t>> length_map;
-        // std::map<std::string, int32_t> length_map;
 
     private:
         void init_rs();

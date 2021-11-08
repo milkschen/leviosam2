@@ -850,7 +850,9 @@ bool ChainMap::lift_segment(
     else
         c->mtid = sam_hdr_name2tid(hdr_dest, dest_contig.c_str());
 
-    if (c->tid < 0 || c->mtid < 0)
+    // Check if CONTIG is reasonable
+    // Only check mate if single-end
+    if (c->tid < 0 || (c->flag & 1 && c->mtid < 0))
         return false;
     
     // Estimate ending pos of the mate
@@ -863,8 +865,9 @@ bool ChainMap::lift_segment(
     int end_sidx = 0;
     int end_eidx = 0;
     // Update end indexes; if either is unavailable, mark the segment as unliftable
-    if (!update_interval_indexes(source_contig, pos_end, end_sidx, end_eidx))
+    if (!update_interval_indexes(source_contig, pos_end, end_sidx, end_eidx)){
         return false;
+    }
     if (verbose > 1) {
         debug_print_interval_queries(
             first_seg, leftmost, source_contig, pos_end, end_sidx, end_eidx);
@@ -933,9 +936,10 @@ bool ChainMap::lift_segment(
             c->flag ^= BAM_FMREVERSE;
         }
     }
-    // There can be cases where a position is lifted to a negative value, in which we set the
-    // read to unmapped.
-    if (c->pos < 0 || c->mpos < 0)
+    // There can be cases where a position is lifted to a negative value,
+    // in which we set the read to unmapped.
+    // Only check POS if single-end
+    if (c->pos < 0 || (c->flag & 1 && c->mpos < 0))
         return false;
     return true;
 }
@@ -1109,16 +1113,7 @@ size_t ChainMap::serialize(std::ofstream& out) {
 
     // length_map
     std::cerr << "serializing length_maps...\n";
-    nelems = length_map.size();
-    out.write(reinterpret_cast<char*>(&nelems), sizeof(nelems));
-    size += sizeof(nelems);
-    for (auto& x: length_map) {
-        size_t str_size = x.first.size();
-        out.write(reinterpret_cast<char*>(&str_size), sizeof(str_size));
-        out.write(reinterpret_cast<const char*>(x.first.data()), str_size);
-        out.write(reinterpret_cast<char*>(&x.second), sizeof(x.second));
-        size += sizeof(str_size) + str_size + sizeof(x.second);
-    }
+    size += LevioSamUtils::serialize_lengthmap(out, length_map);
     return size;
 }
 
@@ -1169,17 +1164,7 @@ void ChainMap::load(std::ifstream& in) {
     }
     if (verbose > 2)
         std::cerr << "Reading length map...\n";
-    in.read(reinterpret_cast<char*>(&map_size), sizeof(map_size));
-    for (auto i = 0; i < map_size; ++i) {
-        size_t str_size;
-        in.read(reinterpret_cast<char*>(&str_size), sizeof(str_size));
-        std::vector<char> buf(str_size);
-        in.read(reinterpret_cast<char*>(buf.data()), str_size);
-        std::string key(buf.begin(), buf.end());
-        int32_t value;
-        in.read(reinterpret_cast<char*>(&value), sizeof(value));
-        length_map.push_back(std::pair<std::string, int32_t>(key, value));
-    }
+    length_map = LevioSamUtils::load_lengthmap(in);
     if (verbose > 2)
         std::cerr << "Initialize BVs...\n";
     init_rs();

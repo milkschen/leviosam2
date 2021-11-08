@@ -40,47 +40,40 @@ NameMap parse_name_map(const char* fname) {
     return names;
 }
 
-// LengthMap parse_length_map(const char* fname) {
-//     LengthMap lengths;
-//     FILE* fp = fopen(fname, "r");
-//     int x;
-//     char n[255];
-//     char l[255];
-//     while ((x = fscanf(fp, "%[^\t]\t%[^\n]\n", n, l)) != EOF) {
-//         if (x <= 0 || lengths.find(n) != lengths.end()) {
-//             fprintf(stderr, "error encountered reading length map\n");
-//             exit(1);
-//         }
-//         lengths[n] = std::atoi(l);
-//     }
-//     fclose(fp);
-//     return lengths;
-// }
-
 
 void serialize_run(lift_opts args) {
     if (args.outpre == "") {
-        fprintf(stderr, "no output prefix specified! Use -p \n");
+        std::cerr << "Error: No output prefix specified. Please use -p\n.";
         print_serialize_help_msg();
         exit(1);
     }
-    if (args.verbose) std::cerr << "verbose\n";
+    if (args.length_map.size() == 0) {
+        std::cerr << "Error: No length map is found. Please set -F properly.\n";
+        print_serialize_help_msg();
+        exit(1);
+    }
+
+    // VcfMap
     if (args.vcf_fname != "") {
+        std::string fn_index = args.outpre + ".lft";
         lift::LiftMap l(lift::lift_from_vcf(
             args.vcf_fname, args.sample, args.haplotype,
             args.name_map, args.length_map));
-        std::ofstream o(args.outpre + ".lft", std::ios::binary);
+        std::ofstream o(fn_index, std::ios::binary);
         l.serialize(o);
-        fprintf(stderr, "levioSAM VcfMap saved to %s\n", (args.outpre + ".lft").data());
+        std::cerr << "levioSAM VcfMap saved to " << fn_index << "\n";
+    // ChainMap
     } else if (args.chain_fname != "") {
+        std::string fn_index = args.outpre + ".clft";
         chain::ChainMap cfp(
             args.chain_fname, args.verbose,
             args.allowed_cigar_changes, args.length_map);
-        std::ofstream o(args.outpre + ".clft", std::ios::binary);
+        std::ofstream o(fn_index, std::ios::binary);
         cfp.serialize(o);
-        fprintf(stderr, "levioSAM ChainMap saved to %s\n", (args.outpre + ".clft").data());
+        std::cerr << "levioSAM ChainMap saved to " << fn_index << "\n";
     } else {
-        fprintf(stderr, "Cannot build a levioSAM index. Neither -v or -c is properly set.\n");
+        std::cerr << "Error: Cannot build a levioSAM index. Please set -v or -c properly\n";
+        print_serialize_help_msg();
         exit(1);
     }
 }
@@ -220,14 +213,20 @@ std::map<std::string, std::string> load_fasta(std::string ref_name) {
 
 
 void lift_run(lift_opts args) {
-    std::cerr << "Loading levioSAM index...";
     chain::ChainMap chain_map = [&] {
         if (args.chainmap_fname != "") {
+            std::cerr << "Loading levioSAM index...";
             std::ifstream in(args.chainmap_fname, std::ios::binary);
             return chain::ChainMap(
                 in, args.verbose, args.allowed_cigar_changes
             );
         } else if (args.chain_fname != ""){
+            std::cerr << "Building levioSAM index...";
+            if (args.length_map.size() == 0){
+                std::cerr << "Error: No length map is found. Please set -F properly.\n";
+                print_serialize_help_msg();
+                exit(1);
+            }
             return chain::ChainMap(
                 args.chain_fname, args.verbose, args.allowed_cigar_changes, args.length_map
             );
@@ -237,10 +236,12 @@ void lift_run(lift_opts args) {
     }();
     lift::LiftMap lift_map = [&]{
         if (args.lift_fname != "") {
+            std::cerr << "Loading levioSAM index...";
             std::ifstream in(args.lift_fname, std::ios::binary);
             return lift::LiftMap(in);
         // if "-l" not specified, then create a levioSAM
         } else if (args.vcf_fname != "") {
+            std::cerr << "Building levioSAM index...";
             return lift::LiftMap(
                 lift::lift_from_vcf(
                     args.vcf_fname, args.sample, args.haplotype,
@@ -256,7 +257,7 @@ void lift_run(lift_opts args) {
     } ();
     if (args.chainmap_fname != "") {
         args.length_map = chain_map.length_map;
-    } else {
+    } else if (args.lift_fname != "") {
         args.length_map = lift_map.get_lengthmap();
     }
 
@@ -396,8 +397,8 @@ lift::LiftMap lift::lift_from_vcf(
 void print_serialize_help_msg(){
     fprintf(stderr, "\n");
     fprintf(stderr, "Index a lift-over map using either a VCF or a chain file.\n");
-    fprintf(stderr, "Usage:   leviosam serialize [options] {-v <vcf> | -c <chain>}     or\n");
-    fprintf(stderr, "         leviosam index [options] {-v <vcf> | -c <chain>}\n");
+    fprintf(stderr, "Usage:   leviosam serialize [options] {-v <vcf> | -c <chain>} -p <out_prefix> -F <fai> or\n");
+    fprintf(stderr, "         leviosam index [options] {-v <vcf> | -c <chain>} -p <out_prefix> -F <fai> \n");
     fprintf(stderr, "Options:\n");
     fprintf(stderr, "         VcfMap options:\n");
     fprintf(stderr, "           -v string Index a lift-over map from a VCF file.\n");
@@ -405,10 +406,10 @@ void print_serialize_help_msg(){
     fprintf(stderr, "           -g 0/1    The haplotype used to index leviosam. [0] \n");
     fprintf(stderr, "           -n string Path to a name map file.\n");
     fprintf(stderr, "                     This can be used to map '1' to 'chr1', or vice versa.\n");
-    fprintf(stderr, "           -k string Path to a length map file.\n");
     fprintf(stderr, "         ChainMap options:\n");
     fprintf(stderr, "           -c string Index a lift-over map from a chain file.\n");
     fprintf(stderr, "\n");
+    fprintf(stderr, "         -F string Path to the FAI (FASTA index) file of the dest reference.\n");
     fprintf(stderr, "         -p string The prefix of the output file.\n");
     fprintf(stderr, "         -O format Output file format, can be sam or bam. [sam]\n");
     fprintf(stderr, "\n");
@@ -434,7 +435,7 @@ void print_lift_help_msg(){
     fprintf(stderr, "         ChainMap options (one of -c and -C must be set to perform lift-over using a ChainMap):\n");
     fprintf(stderr, "           -c string If -C is not specified, build a ChainMap from a chain file.\n");
     fprintf(stderr, "           -C string Path to an indexed ChainMap.\n");
-    fprintf(stderr, "           -F string Path to the FAI file of the dest reference.\n");
+    // fprintf(stderr, "           -F string Path to the FAI file of the dest reference.\n");
     fprintf(stderr, "           -G INT    Number of allowed CIGAR changes for one alingment. [10]\n");
     fprintf(stderr, "\n");
     fprintf(stderr, "         Commit/defer rule options:\n");
@@ -527,9 +528,7 @@ int main(int argc, char** argv) {
                 args.ref_name = optarg;
                 break;
             case 'F':
-                std::cerr << "-F is to be deprecated. Please use -k.\n";
-                exit(1);
-                args.dest_fai_fname = optarg;
+                args.length_map = LevioSamUtils::fai_to_map(optarg);
                 break;
             case 'g':
                 args.haplotype = optarg;
@@ -538,8 +537,9 @@ int main(int argc, char** argv) {
                 args.allowed_cigar_changes = atoi(optarg);
                 break;
             case 'k':
+                std::cerr << "-k is to be deprecated. Please use -F.\n";
+                exit(1);
                 args.length_map = LevioSamUtils::fai_to_map(optarg);
-                // args.length_map = parse_length_map(optarg);
                 break;
             case 'l':
                 args.lift_fname = optarg;

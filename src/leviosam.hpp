@@ -34,8 +34,6 @@
 
 using NameMap = std::vector<std::pair<std::string,std::string>>;
 using LengthMap = std::vector<std::pair<std::string, int32_t>>;
-// using LengthMap = std::map<std::string, int32_t>;
-// using LengthMap = std::unordered_map<std::string,size_t>;
 
 static inline void die(std::string msg) {
     fprintf(stderr, "%s\n", msg.data());
@@ -66,7 +64,6 @@ struct lift_opts {
     LengthMap length_map;
     int md_flag = 0;
     std::string ref_name = "";
-    std::string dest_fai_fname = "";
     int min_mapq = 10;
     int max_isize = 1000;
     float max_clipped_frac = 0.95;
@@ -387,9 +384,7 @@ class Lift {
 
     void init_rs_sls() {
         sdsl::util::init_support(ins_rs0, &ins);
-        // sdsl::util::init_support(del_rs0, &del);
         sdsl::util::init_support(snp_rs0, &snp);
-        // sdsl::util::init_support(ins_sls0, &ins);
         sdsl::util::init_support(del_sls0, &del);
         sdsl::util::init_support(snp_sls0, &snp);
     }
@@ -398,9 +393,7 @@ class Lift {
     sdsl::sd_vector<> del;
     sdsl::sd_vector<> snp;
     sdsl::sd_vector<>::rank_0_type ins_rs0;
-    // sdsl::sd_vector<>::rank_0_type del_rs0;
     sdsl::sd_vector<>::rank_0_type snp_rs0;
-    // sdsl::sd_vector<>::select_0_type ins_sls0;
     sdsl::sd_vector<>::select_0_type del_sls0;
     sdsl::sd_vector<>::select_0_type snp_sls0;
 };
