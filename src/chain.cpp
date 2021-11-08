@@ -979,7 +979,6 @@ void ChainMap::lift_aln(
                 lo = "UM_UM";
                 c->pos = -1;
                 c->tid = -1;
-                // c->qual = 0;
                 c->mpos = -1;
                 c->mtid = -1;
             } else if (r2_liftable) {
@@ -991,7 +990,6 @@ void ChainMap::lift_aln(
             } else {
                 lift_status = LIFT_R1_UM_R2_UL;
                 // Neither is lifted
-                // c->qual = 255;
                 lo = "UM_UL";
             }
         // R1 mapped, liftable
