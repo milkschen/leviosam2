@@ -19,6 +19,53 @@ if(NOT SDSL_LIB)
     # message(FATAL_ERROR "sdsl-lite library not found (lib_path= ${SDSL_LIB_DIR}, inc_path= ${SDSL_INC_DIR}). Please specify -D SDSL_LIB_DIR and -D SDSL_INC_DIR in the CMake command")
 endif()
 
+execute_process(COMMAND git log --pretty=format:'%h' -n 1
+                OUTPUT_VARIABLE GIT_REV
+                ERROR_QUIET)
+
+# Check whether we got any revision (which isn't
+# always the case, e.g. when someone downloaded a zip
+# file from Github instead of a checkout)
+if ("${GIT_REV}" STREQUAL "")
+    set(GIT_REV "N/A")
+    set(GIT_DIFF "")
+    set(GIT_TAG "N/A")
+    set(GIT_BRANCH "N/A")
+else()
+    execute_process(
+        COMMAND bash -c "git diff --quiet --exit-code || echo +"
+        OUTPUT_VARIABLE GIT_DIFF)
+    execute_process(
+        COMMAND git describe --exact-match --tags
+        OUTPUT_VARIABLE GIT_TAG ERROR_QUIET)
+    execute_process(
+        COMMAND git rev-parse --abbrev-ref HEAD
+        OUTPUT_VARIABLE GIT_BRANCH)
+
+    string(STRIP "${GIT_REV}" GIT_REV)
+    string(SUBSTRING "${GIT_REV}" 1 7 GIT_REV)
+    string(STRIP "${GIT_DIFF}" GIT_DIFF)
+    string(STRIP "${GIT_TAG}" GIT_TAG)
+    string(STRIP "${GIT_BRANCH}" GIT_BRANCH)
+endif()
+
+set(VERSION
+"#ifndef VERSION
+#define VERSION \"0.5.0-${GIT_REV}${GIT_DIFF}\"
+#endif
+"
+)
+
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/src/version.hpp)
+    file(READ ${CMAKE_CURRENT_SOURCE_DIR}/src/version.hpp VERSION_)
+else()
+    set(VERSION_ "")
+endif()
+
+if (NOT "${VERSION}" STREQUAL "${VERSION_}")
+    file(WRITE ${CMAKE_CURRENT_SOURCE_DIR}/src/version.hpp "${VERSION}")
+endif()
+
 
 include_directories(${CMAKE_INCLUDE_PATH})
 

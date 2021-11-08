@@ -23,9 +23,10 @@
 #include <sdsl/util.hpp>
 #include "chain.hpp"
 #include "leviosam_utils.hpp"
+#include "version.hpp"
 
 
-#define VERSION "0.5.1-dev"
+// #define VERSION "0.5.1-dev"
 
 #define VERBOSE_CLEAN 0
 #define VERBOSE_INFO  1
