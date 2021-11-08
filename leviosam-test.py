@@ -1,35 +1,36 @@
 import pysam
 import unittest
 import subprocess
+import sys
 
-WG_MAJOR_LFT = 'testdata/wg-maj.lft'
+WG_MAJOR_LFT = 'major.lft'
 
-BWA_SE_GOLD = 'testdata/bwa-single_end-cigar_op-grch38.bam'
-BWA_SE_SAM = 'testdata/bwa-single_end-cigar_op-major.bam'
-BWA_SE_OUT_PREFIX = 'testdata/bwa-single_end-cigar_op-major-lifted'
+BWA_SE_H38 = 'bwa-se-grch38.bam'
+BWA_SE_MAJOR = 'bwa-se-major.bam'
+BWA_SE_OUT_PREFIX = 'bwa-se-major-lifted'
 
-BT2_SE_GOLD = 'testdata/bt2-single_end-cigar_op-grch38.bam'
-BT2_SE_SAM = 'testdata/bt2-single_end-cigar_op-major.bam'
-BT2_SE_OUT_PREFIX = 'testdata/bt2-single_end-cigar_op-major-lifted'
+BT2_SE_H38 = 'bt2-se-grch38.bam'
+BT2_SE_MAJOR = 'bt2-se-major.bam'
+BT2_SE_OUT_PREFIX = 'bt2-se-major-lifted'
 
-BWA_PE_GOLD = 'testdata/bwa-paired_end-grch38.bam'
-BWA_PE_SAM = 'testdata/bwa-paired_end-major.bam'
-BWA_PE_OUT_PREFIX = 'testdata/bwa-paired_end-major-lifted'
+BWA_PE_H38 = 'bwa-pe-grch38.bam'
+BWA_PE_MAJOR = 'bwa-pe-major.bam'
+BWA_PE_OUT_PREFIX = 'bwa-pe-major-lifted'
 
-BT2_PE_GOLD = 'testdata/bt2-paired_end-grch38.bam'
-BT2_PE_SAM = 'testdata/bt2-paired_end-major.bam'
-BT2_PE_OUT_PREFIX = 'testdata/bt2-paired_end-major-lifted'
+BT2_PE_H38 = 'bt2-pe-grch38.bam'
+BT2_PE_MAJOR = 'bt2-pe-major.bam'
+BT2_PE_OUT_PREFIX = 'bt2-pe-major-lifted'
 
-OVRLP_LFT = 'testdata/overlapping_example.lft'
-OVRLP_GOLD = 'testdata/overlapping_example-lifted-gold.bam'
-OVRLP_SAM = 'testdata/overlapping_example.bam'
-OVRLP_OUT_PREFIX = 'testdata/overlapping_example-lifted'
+OVRLP_LFT = 'overlapping_example.lft'
+OVRLP_GOLD = 'overlapping_example-lifted-gold.bam'
+OVRLP_SAM = 'overlapping_example.bam'
+OVRLP_OUT_PREFIX = 'overlapping_example-lifted'
 
 params = [
-    {'name': 'BWA-SE', 'gold': BWA_SE_GOLD, 'sam': BWA_SE_SAM, 'out_prefix': BWA_SE_OUT_PREFIX, 'lft': WG_MAJOR_LFT, 'mode': 'SE'},
-    {'name': 'BT2-PE', 'gold': BT2_SE_GOLD, 'sam': BT2_SE_SAM, 'out_prefix': BT2_SE_OUT_PREFIX, 'lft': WG_MAJOR_LFT, 'mode': 'SE'},
-    {'name': 'BWA-PE', 'gold': BWA_PE_GOLD, 'sam': BWA_PE_SAM, 'out_prefix': BWA_PE_OUT_PREFIX, 'lft': WG_MAJOR_LFT, 'mode': 'PE'},
-    {'name': 'BT2-PE', 'gold': BT2_PE_GOLD, 'sam': BT2_PE_SAM, 'out_prefix': BT2_PE_OUT_PREFIX, 'lft': WG_MAJOR_LFT, 'mode': 'PE'},
+    {'name': 'BWA-SE', 'gold': BWA_SE_H38, 'sam': BWA_SE_MAJOR, 'out_prefix': BWA_SE_OUT_PREFIX, 'lft': WG_MAJOR_LFT, 'mode': 'SE'},
+    {'name': 'BT2-PE', 'gold': BT2_SE_H38, 'sam': BT2_SE_MAJOR, 'out_prefix': BT2_SE_OUT_PREFIX, 'lft': WG_MAJOR_LFT, 'mode': 'SE'},
+    {'name': 'BWA-PE', 'gold': BWA_PE_H38, 'sam': BWA_PE_MAJOR, 'out_prefix': BWA_PE_OUT_PREFIX, 'lft': WG_MAJOR_LFT, 'mode': 'PE'},
+    {'name': 'BT2-PE', 'gold': BT2_PE_H38, 'sam': BT2_PE_MAJOR, 'out_prefix': BT2_PE_OUT_PREFIX, 'lft': WG_MAJOR_LFT, 'mode': 'PE'},
     {'name': 'OVRLP', 'gold': OVRLP_GOLD, 'sam': OVRLP_SAM, 'out_prefix': OVRLP_OUT_PREFIX, 'lft': OVRLP_LFT, 'mode': 'SE'}
 ]
 
@@ -39,12 +40,11 @@ class SamProcessing(unittest.TestCase):
     def setUpClass(cls):
         for param in params:
             process = subprocess.Popen(
-                ['./leviosam', 
+                ['../leviosam', 
                 'lift', '-l', param['lft'], '-a', param['sam'],
                 '-p', param['out_prefix'], '-O', 'bam'],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             stdout, stderr = process.communicate()
-            print(f'Lifted {param["out_prefix"]}.bam')
 
     @classmethod
     def tearDownClass(cls):
@@ -52,11 +52,12 @@ class SamProcessing(unittest.TestCase):
             cmd = f'rm {param["out_prefix"]}.bam; rm {param["out_prefix"]}-RG.bam'
             process_rm = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True)
             stdout, stderr = process_rm.communicate()
-            print(f'Cleaned up {param["out_prefix"]}-lifted.bam and {param["out_prefix"]}-RG.bam')
+            print(f'Cleaned up {param["out_prefix"]}.bam and {param["out_prefix"]}-RG.bam')
 
     """Read a SAM file as a dict."""
     def read_sam_file_as_dict(self, fn):
         d = {}
+        print(fn, file=sys.stderr)
         f = pysam.AlignmentFile(fn)
         for rec in f:
             qname = rec.query_name
@@ -123,11 +124,55 @@ class SamProcessing(unittest.TestCase):
                 print('[PASSED] Picard AddOrReplaceReadGroups & ValidateSamFile')
 
 
+BT2_PE_CHM13 = 'bt2-pe-chm13_v1.1_hg2y.bam'
+BT2_SE_CHM13 = 'bt2-se-chm13_v1.1_hg2y.bam'
+BWA_PE_CHM13 = 'bwa-pe-chm13_v1.1_hg2y.bam'
+BWA_SE_CHM13 = 'bwa-se-chm13_v1.1_hg2y.bam'
+CLFT_CHM13_TO_H38 = 'chm13_v1.1_hg2Y-grch38.clft'
+PE_CHAIN_TESTS = {BT2_PE_CHM13: BT2_PE_H38,
+                  BWA_PE_CHM13: BWA_PE_H38}
+SE_CHAIN_TESTS = {BT2_SE_CHM13: BT2_SE_H38,
+                  BWA_SE_CHM13: BWA_SE_H38}
+
 class Chain(unittest.TestCase):
     def compare_aln(self, gold, result):
-        if gold.is_unmapped or result.is_unmapped:
+        if gold.is_unmapped or result.is_unmapped or gold.is_supplementary or result.is_supplementary:
             return
-        self.assertEqual(gold.reference_start, result.reference_start)
+        self.assertLess(abs(gold.reference_start-result.reference_start), 5)
+        self.assertEqual(gold.reference_name, result.reference_name)
+        self.assertEqual(gold.next_reference_name, result.next_reference_name)
+        self.assertEqual(gold.query_sequence, result.query_sequence)
+        self.assertEqual(gold.query_qualities, result.query_qualities)
+
+    def read_single_end(self, fn):
+        f = pysam.AlignmentFile(fn)
+        reads1 = {}
+        for r in f:
+            reads1[r.query_name] = r
+        return reads1
+
+    def test_single_end_chain(self):
+        for i, (orig, gold) in enumerate(SE_CHAIN_TESTS.items()):
+            lifted_pre = orig + '-lifted'
+            lifted_fn = lifted_pre + '.bam'
+            process = subprocess.Popen(
+                ['../leviosam', 
+                'lift', '-C', CLFT_CHM13_TO_H38, '-a', orig,
+                '-p', lifted_pre, '-O', 'bam'],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            stdout, stderr = process.communicate()
+
+            reads_gold1 = self.read_single_end(gold)
+            reads_lift1 = self.read_single_end(lifted_fn)
+
+            for _, (name, v) in enumerate(reads_gold1.items()):
+                result = reads_lift1.get(name)
+                self.assertFalse(result is None)
+                self.compare_aln(v, result)
+
+            cmd = f'rm {lifted_fn}'
+            process_rm = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True)
+            stdout, stderr = process_rm.communicate()
 
     def read_paired_end(self, fn):
         f = pysam.AlignmentFile(fn)
@@ -144,35 +189,32 @@ class Chain(unittest.TestCase):
                 exit(1)
         return reads1, reads2
 
-    def test_paired_endh38_to_h37(self):
-        INPUT_FN = 'testdata/bt2-paired_end-grch38.bam'
-        GOLD_FN = 'testdata/bt2-paired_end-grch37.bam'
-        OUTPUT_PREFIX = 'testdata/bt2-paired_end-grch38_to_grch37'
-        OUTPUT_FN = OUTPUT_PREFIX + '.bam'
-        process = subprocess.Popen(
-            ['./leviosam', 
-            'lift', '-C', 'testdata/hg38ToHg19.over.clft', '-a', INPUT_FN,
-            '-p', OUTPUT_PREFIX, '-O', 'bam'],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        stdout, stderr = process.communicate()
-        print(f'Lifted {INPUT_FN}')
+    def test_paired_end_chain(self):
+        for i, (orig, gold) in enumerate(PE_CHAIN_TESTS.items()):
+            lifted_pre = orig + '-lifted'
+            lifted_fn = lifted_pre + '.bam'
+            process = subprocess.Popen(
+                ['../leviosam', 
+                'lift', '-C', CLFT_CHM13_TO_H38, '-a', orig,
+                '-p', lifted_pre, '-O', 'bam'],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            stdout, stderr = process.communicate()
 
-        reads_gold1, reads_gold2 = self.read_paired_end(GOLD_FN)
-        reads_lift1, reads_lift2 = self.read_paired_end(OUTPUT_FN)
+            reads_gold1, reads_gold2 = self.read_paired_end(gold)
+            reads_lift1, reads_lift2 = self.read_paired_end(lifted_fn)
 
-        for _, (name, v) in enumerate(reads_gold1.items()):
-            result = reads_lift1.get(name)
-            self.assertFalse(result is None)
-            self.compare_aln(v, result)
-        for _, (name, v) in enumerate(reads_gold2.items()):
-            result = reads_lift2.get(name)
-            self.assertFalse(result is None)
-            self.compare_aln(v, result)
+            for _, (name, v) in enumerate(reads_gold1.items()):
+                result = reads_lift1.get(name)
+                self.assertFalse(result is None)
+                self.compare_aln(v, result)
+            for _, (name, v) in enumerate(reads_gold2.items()):
+                result = reads_lift2.get(name)
+                self.assertFalse(result is None)
+                self.compare_aln(v, result)
 
-        cmd = f'rm {OUTPUT_FN}'
-        process_rm = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True)
-        stdout, stderr = process_rm.communicate()
-        print(f'Cleaned up {OUTPUT_FN}')
+            cmd = f'rm {lifted_fn}'
+            process_rm = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True)
+            stdout, stderr = process_rm.communicate()
 
 
 if __name__ == '__main__':
