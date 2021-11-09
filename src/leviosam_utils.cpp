@@ -40,6 +40,37 @@ WriteDeferred::~WriteDeferred() {
 };
 
 
+/* Returns true if to an alignment can be committed
+ */
+bool commit_alignment(
+    const bam1_t* const aln,
+    const WriteDeferred* const wd
+){
+    const bam1_core_t* c = &(aln->core);
+    if (c->flag & BAM_FUNMAP)
+        return false;
+    std::vector<std::string> split_modes = split_str(wd->split_mode, ",");
+    if (find(split_modes.begin(), split_modes.end(), "mapq") != split_modes.end()){
+        if (c->qual < wd->min_mapq)
+            return false;
+    }
+    if (find(split_modes.begin(), split_modes.end(), "isize") != split_modes.end()){
+        if (c->isize == 0 || c->isize > wd->max_isize || c->isize < -wd->max_isize)
+            return false;
+    }
+    if (find(split_modes.begin(), split_modes.end(), "clipped_frac") != split_modes.end()){
+        auto rlen = bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln));
+        if (1 - (rlen / c->l_qseq) > wd->max_clipped_frac)
+            return false;
+    }
+    if (find(split_modes.begin(), split_modes.end(), "aln_score") != split_modes.end()){
+        if (bam_aux2i(bam_aux_get(aln, "AS")) < wd->min_aln_score)
+            return false;
+    }
+    return true;
+}
+
+
 void update_cigar(
     bam1_t* aln, std::vector<uint32_t> &new_cigar
 ) {
@@ -231,7 +262,7 @@ fastq_map read_deferred_bam(
             continue;
         }
         std::string qname = bam_get_qname(aln);
-        LevioSamUtils::FastqRecord fq = LevioSamUtils::FastqRecord(aln);
+        FastqRecord fq = FastqRecord(aln);
         if (c.flag & 64) { // first segment
             auto search = reads2.find(qname);
             if (search != reads2.end()) {
@@ -289,8 +320,7 @@ fastq_map read_unpaired_fq(const std::string& fq_fname) {
             seq = line;
         } else if (i % 4 == 3) {
             reads.emplace(
-                std::make_pair(name,
-                               LevioSamUtils::FastqRecord(seq, line)));
+                std::make_pair(name, FastqRecord(seq, line)));
             name = "";
             seq = "";
         }

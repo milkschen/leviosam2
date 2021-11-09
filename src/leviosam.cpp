@@ -31,7 +31,7 @@ NameMap parse_name_map(const char* fname) {
     int x;
     while ((x = fscanf(fp,"%[^\t]\t%[^\n]\n", n1, n2)) != EOF) {
         if (x <= 0) {
-            fprintf(stderr, "error encountered reading name map\n");
+            std::cerr << "[E::parse_name_map] Failed to read name map from " << fname << "\n";
             exit(1);
         }
         names.push_back(std::make_pair(std::string(n1), std::string(n2)));
@@ -43,12 +43,12 @@ NameMap parse_name_map(const char* fname) {
 
 void serialize_run(lift_opts args) {
     if (args.outpre == "") {
-        std::cerr << "Error: No output prefix specified. Please use -p\n.";
+        std::cerr << "[E::serialize_run] No output prefix specified. Please set `-p`.\n";
         print_serialize_help_msg();
         exit(1);
     }
     if (args.length_map.size() == 0) {
-        std::cerr << "Error: No length map is found. Please set -F properly.\n";
+        std::cerr << "[E::serialize_run] No length map is found. Please set `-F`.\n";
         print_serialize_help_msg();
         exit(1);
     }
@@ -72,39 +72,10 @@ void serialize_run(lift_opts args) {
         cfp.serialize(o);
         std::cerr << "levioSAM ChainMap saved to " << fn_index << "\n";
     } else {
-        std::cerr << "Error: Cannot build a levioSAM index. Please set -v or -c properly\n";
+        std::cerr << "[E::serialize_run] Cannot build a levioSAM index. Please set -v or -c properly\n";
         print_serialize_help_msg();
         exit(1);
     }
-}
-
-
-/* Returns true if to an alignment can be committed
- */
-bool commit_alignment(
-    const bam1_t* const aln,
-    const LevioSamUtils::WriteDeferred* const wd
-){
-    const bam1_core_t* c = &(aln->core);
-    std::vector<std::string> split_modes = LevioSamUtils::split_str(wd->split_mode, ",");
-    if (find(split_modes.begin(), split_modes.end(), "mapq") != split_modes.end()){
-        if (c->qual < wd->min_mapq)
-            return false;
-    }
-    if (find(split_modes.begin(), split_modes.end(), "isize") != split_modes.end()){
-        if (c->isize == 0 || c->isize > wd->max_isize || c->isize < -wd->max_isize)
-            return false;
-    }
-    if (find(split_modes.begin(), split_modes.end(), "clipped_frac") != split_modes.end()){
-        auto rlen = bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln));
-        if (1 - (rlen / c->l_qseq) > wd->max_clipped_frac)
-            return false;
-    }
-    if (find(split_modes.begin(), split_modes.end(), "aln_score") != split_modes.end()){
-        if (bam_aux2i(bam_aux_get(aln, "AS")) < wd->min_aln_score)
-            return false;
-    }
-    return true;
 }
 
 
@@ -139,14 +110,18 @@ void read_and_lift(
             std::lock_guard<std::mutex> g(*mutex_fread);
             for (int i = 0; i < chunk_size; i++){
                 read = sam_read1(sam_fp, hdr_source, aln_vec[i]);
-                auto clone = bam_copy1(aln_vec_clone[i], aln_vec[i]);
-                if (read < 0 || clone < 0){
+                // TODO check the line below
+                // auto clone = bam_copy1(aln_vec_clone[i], aln_vec[i]);
+                // if (read < 0 || clone < 0){
+                if (read < 0){
                     num_actual_reads = i;
                     break;
                 }
             }
         }
         for (int i = 0; i < num_actual_reads; i++){
+            // TODO check
+            auto clone = bam_copy1(aln_vec_clone[i], aln_vec[i]);
             // TODO: Plan to remove `null_dest_contig`.
             // Need to test scenarios with `NameMap`
             std::string null_dest_contig;
@@ -164,18 +139,17 @@ void read_and_lift(
                     }
                     bam_fillmd1(aln_vec[i], ref.data(), md_flag, 1);
                 }
-            }
-            else { // strip MD and NM tags if md_flag not set bc the liftover invalidates them
+            } else { // strip MD and NM tags if md_flag not set bc the liftover invalidates them
                 LevioSamUtils::remove_mn_md_tag(aln_vec[i]);
             }
         }
         for (int i = 0; i < num_actual_reads; i++) {
             // If a read is committed
-            if (commit_alignment(aln_vec[i], wd) == true) {
+            if (LevioSamUtils::commit_alignment(aln_vec[i], wd) == true) {
                 // write to file, thread corruption protected by lock_guard
                 std::lock_guard<std::mutex> g_commited(*mutex_fwrite);
                 if (sam_write1(out_sam_fp, hdr_dest, aln_vec[i]) < 0) {
-                    std::cerr << "[Error] Failed to write record " << 
+                    std::cerr << "[E::read_and_lift] Failed to write record " << 
                         bam_get_qname(aln_vec[i]) << "\n";
                     exit(1);
                 }
@@ -223,7 +197,7 @@ void lift_run(lift_opts args) {
         } else if (args.chain_fname != ""){
             std::cerr << "Building levioSAM index...";
             if (args.length_map.size() == 0){
-                std::cerr << "Error: No length map is found. Please set -F properly.\n";
+                std::cerr << "[E::lift_run] No length map is found. Please set -F properly.\n";
                 print_serialize_help_msg();
                 exit(1);
             }
@@ -250,7 +224,7 @@ void lift_run(lift_opts args) {
         } else if ((args.chain_fname != "") || (args.chainmap_fname != "")) {
             return lift::LiftMap();
         } else {
-            fprintf(stderr, "Not enough parameters specified to build/load lift-over\n");
+            std::cerr << "[E::lift_run] Not enough parameters specified to build/load lift-over\n";
             print_lift_help_msg();
             exit(1);
         }
@@ -284,7 +258,7 @@ void lift_run(lift_opts args) {
     if (args.md_flag) {
         // load
         if (args.ref_name == "") {
-            std::cerr << "Error: -m/--md -f <fasta> to be provided as well\n";
+            std::cerr << "[E::lift_run] -m/--md -f <fasta> to be provided as well\n";
             exit(1);
         }
         ref_dict = load_fasta(args.ref_name);
@@ -362,7 +336,7 @@ lift::LiftMap lift::lift_from_vcf(
     NameMap names, LengthMap lengths
 ) {
     if (fname == "" && sample == "") {
-        fprintf(stderr, "vcf file name and sample name are required!! \n");
+        std::cerr << "[E::lift_from_vcf] Vcf file name and sample name are required.\n";
         print_serialize_help_msg();
         exit(1);
     }
@@ -375,8 +349,7 @@ lift::LiftMap lift::lift_from_vcf(
 void print_serialize_help_msg(){
     fprintf(stderr, "\n");
     fprintf(stderr, "Index a lift-over map using either a VCF or a chain file.\n");
-    fprintf(stderr, "Usage:   leviosam serialize [options] {-v <vcf> | -c <chain>} -p <out_prefix> -F <fai> or\n");
-    fprintf(stderr, "         leviosam index [options] {-v <vcf> | -c <chain>} -p <out_prefix> -F <fai> \n");
+    fprintf(stderr, "Usage:   leviosam index [options] {-v <vcf> | -c <chain>} -p <out_prefix> -F <fai> \n");
     fprintf(stderr, "Options:\n");
     fprintf(stderr, "         VcfMap options:\n");
     fprintf(stderr, "           -v string Index a lift-over map from a VCF file.\n");
@@ -389,7 +362,6 @@ void print_serialize_help_msg(){
     fprintf(stderr, "\n");
     fprintf(stderr, "         -F string Path to the FAI (FASTA index) file of the dest reference.\n");
     fprintf(stderr, "         -p string The prefix of the output file.\n");
-    fprintf(stderr, "         -O format Output file format, can be sam or bam. [sam]\n");
     fprintf(stderr, "\n");
 }
 
@@ -413,7 +385,6 @@ void print_lift_help_msg(){
     fprintf(stderr, "         ChainMap options (one of -c and -C must be set to perform lift-over using a ChainMap):\n");
     fprintf(stderr, "           -c string If -C is not specified, build a ChainMap from a chain file.\n");
     fprintf(stderr, "           -C string Path to an indexed ChainMap.\n");
-    // fprintf(stderr, "           -F string Path to the FAI file of the dest reference.\n");
     fprintf(stderr, "           -G INT    Number of allowed CIGAR changes for one alingment. [10]\n");
     fprintf(stderr, "\n");
     fprintf(stderr, "         Commit/defer rule options:\n");
@@ -430,10 +401,10 @@ void print_lift_help_msg(){
 
 void print_main_help_msg(){
     fprintf(stderr, "\n");
-    fprintf(stderr, "Program: leviosam (lift over alignments)\n");
+    fprintf(stderr, "Program: leviosam (lifting over alignments)\n");
     fprintf(stderr, "Version: %s\n", VERSION);
     fprintf(stderr, "Usage:   leviosam <command> [options]\n\n");
-    fprintf(stderr, "Commands:serialize   Index a lift-over map.\n");
+    fprintf(stderr, "Commands:index       Index a lift-over map (`serialize` also works).\n");
     fprintf(stderr, "         lift        Lift alignments.\n");
     fprintf(stderr, "Options: -h          Print detailed usage.\n");
     fprintf(stderr, "         -V          Verbose level [0].\n");
@@ -579,12 +550,12 @@ int main(int argc, char** argv) {
     }
 
     if (args.split_mode != "") {
-        std::vector<std::string> split_options {"mapq", "clipped_frac", "isize", "aln_score"};
+        std::vector<std::string> split_options {"lifted", "mapq", "clipped_frac", "isize", "aln_score"};
         std::vector<std::string> sm = LevioSamUtils::split_str(args.split_mode, ",");
         for (auto& m: sm) {
             auto cnt = std::count(split_options.begin(), split_options.end(), m);
             if (cnt != 1) {
-                std::cerr << "Error: " << m << " is not a valid filtering option\n";
+                std::cerr << "[E::main] " << m << " is not a valid filtering option\n";
                 std::cerr << "Valid options:\n";
                 for (auto& opt: split_options) {
                     std::cerr << " - " << opt << "\n";

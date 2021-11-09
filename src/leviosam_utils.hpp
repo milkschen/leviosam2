@@ -85,6 +85,9 @@ public:
     bool write_deferred;
 };
 
+bool commit_alignment(
+    const bam1_t* const aln,
+    const WriteDeferred* const wd);
 void update_cigar(bam1_t* aln, std::vector<uint32_t> &new_cigar);
 void debug_print_cigar(uint32_t* cigar, size_t n_cigar);
 void remove_mn_md_tag(bam1_t* aln);
