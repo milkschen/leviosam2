@@ -404,6 +404,7 @@ void ChainMap::lift_cigar(const std::string& contig, bam1_t* aln) {
         start_sidx, end_sidx, num_sclip_start);
 }
 
+
 /* Lift CIGAR
  * A fast version of `lift_cigar()`, which is used when auxiliary information 
  * including query start/end interval ranks and #clipped bases is available.
@@ -843,7 +844,8 @@ bool ChainMap::lift_segment(
 
     // Lift contig
     auto start_sintvl = interval_map[source_contig][start_sidx];
-    dest_contig = start_sintvl.target;
+    dest_contig = ChainMap::lift_contig(start_sintvl);
+    // dest_contig = start_sintvl.target;
     if (first_seg)
         c->tid = sam_hdr_name2tid(hdr_dest, dest_contig.c_str());
     else
@@ -915,26 +917,8 @@ bool ChainMap::lift_segment(
     // Lift POS and MPOS
     // Updating positions affects the lift-over of other fields (e.g. CIGAR), so this has to be
     // performed in the end of the lift-over process.
-    auto offset = start_sintvl.offset;
-    auto strand = start_sintvl.strand;
-    if (first_seg) {
-        if (strand)
-            c->pos = c->pos + offset;
-        else {
-            c->pos = -pos_end + offset + start_sintvl.source_start + start_sintvl.source_end;
-            // Update FLAG, SEQ and QUAL if in a reversed chain
-            c->flag ^= BAM_FREVERSE;
-            LevioSamUtils::reverse_seq_and_qual(aln);
-        }
-    } else {
-        if (strand)
-            c->mpos = c->mpos + offset;
-        else {
-            c->mpos = -pos_end + offset + start_sintvl.source_start + start_sintvl.source_end;
-            // Update FLAG if in a reversed chain
-            c->flag ^= BAM_FMREVERSE;
-        }
-    }
+    lift_pos(aln, pos_end, start_sintvl, first_seg);
+
     // There can be cases where a position is lifted to a negative value,
     // in which we set the read to unmapped.
     // Only check POS if single-end
@@ -1168,29 +1152,71 @@ void ChainMap::load(std::ifstream& in) {
 }
 
 
-size_t ChainMap::lift_pos(
-    std::string contig, size_t pos) {
-    int rank = this->get_start_rank(contig, pos);
-    int intvl_idx = rank - 1;
-    if (intvl_idx == -1)
-        return pos;
-    else {
-        auto intvl = this->interval_map[contig][intvl_idx];
+/* Lift over the POS field of an alignment
+ *   - aln: target aln object
+ *   - pos_end: putated ending position of an aln
+ *   - intvl: Interval object of the target
+ *   - first_seg: true if is read1/single-end; false if read2
+ */
+void ChainMap::lift_pos(
+    bam1_t* aln, const size_t &pos_end,
+    const chain::Interval &intvl, const bool &first_seg
+) {
+    auto c = &(aln->core);
+    if (first_seg) {
         if (intvl.strand) {
-            return pos + intvl.offset;
+            c->pos = lift_pos(c->pos, intvl);
         } else {
-            return -pos + intvl.offset + intvl.source_start + intvl.source_end;
+            c->pos = lift_pos(pos_end, intvl);
+            // Update FLAG, SEQ and QUAL if in a reversed chain
+            c->flag ^= BAM_FREVERSE;
+            LevioSamUtils::reverse_seq_and_qual(aln);
+        }
+    } else {
+        if (intvl.strand) {
+            c->mpos = ChainMap::lift_pos(c->mpos, intvl);
+        } else {
+            c->mpos = lift_pos(pos_end, intvl);
+            // Update FLAG if in a reversed chain
+            c->flag ^= BAM_FMREVERSE;
         }
     }
 }
+
+
+// This saves one `rank` query by providing `intvl_idx`
+size_t ChainMap::lift_pos(const size_t &pos, const chain::Interval &intvl) {
+    if (intvl.strand) {
+        return pos + intvl.offset;
+    } else {
+        return -pos + intvl.offset + intvl.source_start + intvl.source_end;
+    }
+}
+
+
+size_t ChainMap::lift_pos(const std::string &contig, const size_t &pos) {
+    int intvl_idx = this->get_start_rank(contig, pos) - 1;
+    if (intvl_idx == -1)
+        return pos;
+    auto intvl = this->interval_map[contig][intvl_idx];
+    return lift_pos(pos, intvl);
+}
+
+
+std::string ChainMap::lift_contig(const chain::Interval &intvl) {
+    return intvl.target;
+}
+
 
 std::string ChainMap::lift_contig(std::string contig, size_t pos) {
     int rank = this->get_start_rank(contig, pos);
     int intvl_idx = rank - 1;
     if (intvl_idx == -1)
         return "*";
-    else
-        return this->interval_map[contig][intvl_idx].target;
+    else {
+        auto intvl = this->interval_map[contig][intvl_idx];
+        return lift_contig(intvl);
+    }
 }
 
 
@@ -1211,64 +1237,5 @@ void ChainMap::debug_print_interval_queries(
     interval_map[contig][sidx].debug_print_interval();
     std::cerr << "    end  : " << eidx << "\n";
 }
-
-/* Prepare SAM headers using the ChainMap structure
- *
- * - Contig lengths are updated if needed.
- * - We pass in a header struct though it's usually inferrable from the SAM fp.
- *   The reason is we want to have two copies of `hdr` objects in our processing
- *   loop and we have already read `sam_fp`, which makes the header
- *   non-inferrable at this point.
- */
-// sam_hdr_t* ChainMap::bam_hdr_from_chainmap(
-//     samFile* sam_fp, sam_hdr_t* hdr
-// ) {
-//     // For the contigs that don't appear in the chain file, we set their
-//     // lengths to zero. There can be alignments based on the contigs in 
-//     // the source SAM/BAM file, so we cannot remove them at this point.
-//     for (auto i = 0; i < hdr->n_targets; i++) {
-//         auto find_map = length_map.find (hdr->target_name[i]);
-//         if (find_map == length_map.end()) {
-//             if (sam_hdr_update_line(
-//                 hdr, "SQ", 
-//                 "SN", hdr->target_name[i],
-//                 "LN", "0",
-//                 NULL) == -1
-//             ) {
-//                 std::cerr << "[Error] failed when attempting to convert the length "
-//                           << "of contig " << hdr->target_name[i] << ", which doesn't appear in "
-//                           << "the ChainMap, to zero.\n";
-//                 exit(1);
-//             }
-//         }
-//     }
-//     // For new contigs that don't appear in the original header, we append them;
-//     // for existing contigs, we update the lengths.
-//     for (auto& x: length_map) {
-//         std::string l = std::to_string(x.second);
-//         int sam_hdr_return = 1;
-//         if (sam_hdr_name2tid(hdr, x.first.data()) < 0) {
-//             sam_hdr_return = sam_hdr_add_line(
-//                 hdr, "SQ", 
-//                 "SN", x.first.data(),
-//                 "LN", l.data(),
-//                 NULL
-//             );
-//         } else {
-//             sam_hdr_return = sam_hdr_update_line(
-//                 hdr, "SQ", 
-//                 "SN", x.first.data(),
-//                 "LN", l.data(),
-//                 NULL
-//             );
-//         }
-//         if (sam_hdr_return < 0) {
-//             std::cerr << "[Error] failed when converting contig length for "
-//                       << x.first << ": " << x.second << "\n";
-//             exit(1);
-//         }
-//     }
-//     return hdr;
-// }
 
 }

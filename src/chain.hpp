@@ -72,6 +72,7 @@ class ChainMap {
         );
 
         std::string lift_contig(std::string contig, size_t pos);
+        std::string lift_contig(const Interval &intvl);
         void push_cigar(
             std::vector<uint32_t> &cigar, uint32_t len, uint16_t op,
             const bool no_reduct);
@@ -85,7 +86,11 @@ class ChainMap {
             const int start_sidx, const int end_sidx
         );
 
-        size_t lift_pos(std::string contig, size_t pos);
+        void lift_pos(
+            bam1_t* aln, const size_t &pos_end,
+            const chain::Interval &intvl, const bool &first_seg);
+        size_t lift_pos(const size_t &pos, const Interval &intvl);
+        size_t lift_pos(const std::string &contig, const size_t &pos);
         int32_t get_num_clipped(
             const int32_t pos, const bool leftmost,
             const std::string &contig, int32_t &sidx, int32_t &eidx
