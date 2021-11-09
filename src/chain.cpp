@@ -922,8 +922,14 @@ bool ChainMap::lift_segment(
     // There can be cases where a position is lifted to a negative value,
     // in which we set the read to unmapped.
     // Only check POS if single-end
-    if (c->pos < 0 || (c->flag & 1 && c->mpos < 0))
+    // if (c->pos < 0 || (c->flag & 1 && c->mpos < 0))
+    if (c->pos < 0) {
+        c->pos = 0;
         return false;
+    } else if (c->flag & BAM_FPAIRED && c->mpos < 0) {
+        c->mpos = 0;
+        return false;
+    }
     return true;
 }
 
