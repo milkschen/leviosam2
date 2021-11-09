@@ -19,6 +19,8 @@ if(NOT SDSL_LIB)
     # message(FATAL_ERROR "sdsl-lite library not found (lib_path= ${SDSL_LIB_DIR}, inc_path= ${SDSL_INC_DIR}). Please specify -D SDSL_LIB_DIR and -D SDSL_INC_DIR in the CMake command")
 endif()
 
+
+# From https://www.mattkeeter.com/blog/2018-01-06-versioning/
 execute_process(COMMAND git log --pretty=format:'%h' -n 1
                 OUTPUT_VARIABLE GIT_REV
                 ERROR_QUIET)
