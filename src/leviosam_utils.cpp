@@ -23,6 +23,7 @@ void WriteDeferred::init(
     max_isize = isize;
     max_clipped_frac = clipped_frac;
     min_aln_score = aln_score;
+    hdr = ohdr;
     hdr_orig = ihdr;
     bed_defer_source = b_defer_source;
     bed_defer_dest = b_defer_dest;
@@ -88,10 +89,11 @@ bool WriteDeferred::commit_alignment(
     if (c->flag & BAM_FUNMAP)
         return false;
 
-    std::string qname = bam_get_qname(aln);
+    // std::string qname = bam_get_qname(aln);
+    std::string rname = hdr->target_name[c->tid];
     size_t pos = c->pos;
     size_t pos_end = c->pos + bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln));
-    if (bed_defer_dest.intersect(qname, pos, pos_end)) {
+    if (bed_defer_dest.intersect(rname, pos, pos_end)) {
         return false;
     }
 

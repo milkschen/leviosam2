@@ -86,6 +86,7 @@ private:
     bool write_deferred;
     samFile* out_fp;
     samFile* out_fp_orig;
+    sam_hdr_t* hdr;
     sam_hdr_t* hdr_orig;
     std::string split_mode = "";
     int min_mapq, max_isize, min_aln_score;
