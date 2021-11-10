@@ -71,24 +71,19 @@ endif()
 
 include_directories(${CMAKE_INCLUDE_PATH})
 
-file(GLOB LIB_SOURCES src/chain.cpp src/leviosam_utils.cpp src/bed.cpp src/bam_md.c src/bam_aux.c)
-file(GLOB LIB_HEADERS src/leviosam.hpp src/extract_unpaired.hpp src/chain.hpp src/leviosam_utils.hpp src/bed.hpp)
-add_library(libleviosam ${LIB_SOURCES} ${LIB_HEADERS} )
+file(GLOB LIB_SOURCES   src/collate.cpp src/chain.cpp src/leviosam_utils.cpp src/bed.cpp
+                        src/bam_md.c src/bam_aux.c)
+file(GLOB LIB_HEADERS   src/leviosam.hpp
+                        src/collate.hpp src/chain.hpp src/leviosam_utils.hpp src/bed.hpp)
+add_library(lvsam ${LIB_SOURCES} ${LIB_HEADERS} )
 
-#add_executable(leviosam src/leviosam.cpp src/chain.cpp src/leviosam_utils.cpp src/bam_md.c src/bam_aux.c src/bed.cpp)
 add_executable(leviosam src/leviosam.cpp )
-target_link_libraries(leviosam libleviosam)
+target_link_libraries(leviosam lvsam)
 target_link_libraries(leviosam ${HTS_LIB})
 target_link_libraries(leviosam ${SDSL_LIB})
 target_link_libraries(leviosam pthread)
 target_link_libraries(leviosam z)
 
-add_executable(extract_unpaired src/extract_unpaired.cpp)
-target_link_libraries(extract_unpaired libleviosam)
-target_link_libraries(extract_unpaired ${HTS_LIB})
-target_link_libraries(extract_unpaired ${SDSL_LIB})
-target_link_libraries(extract_unpaired pthread)
-target_link_libraries(extract_unpaired z)
 
 # Download and unpack googletest at configure time
 configure_file(CMakeLists.txt.in googletest-download/CMakeLists.txt)
@@ -119,7 +114,7 @@ add_subdirectory(${CMAKE_CURRENT_BINARY_DIR}/googletest-src
 
 # add_executable(leviosam_test src/leviosam_test.cpp src/chain.cpp src/leviosam_utils.cpp src/bed.cpp)
 add_executable(leviosam_test src/leviosam_test.cpp)
-target_link_libraries(leviosam_test libleviosam)
+target_link_libraries(leviosam_test lvsam)
 target_link_libraries(leviosam_test ${HTS_LIB})
 target_link_libraries(leviosam_test ${SDSL_LIB})
 target_link_libraries(leviosam_test gtest gtest_main)

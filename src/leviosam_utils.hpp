@@ -1,3 +1,13 @@
+/*
+ * leviosam_utils.hpp
+ *
+ * Utility functions for the leviosam software
+ *
+ * Authors: Nae-Chyun Chen
+ *
+ * Distributed under the MIT license
+ * https://github.com/alshai/levioSAM
+ */
 #ifndef LEVIOSAM_UTILS_HPP
 #define LEVIOSAM_UTILS_HPP
 
@@ -114,6 +124,8 @@ std::vector<std::pair<std::string, int32_t>> load_lengthmap(std::ifstream& in);
 size_t serialize_lengthmap(
     std::ofstream& out,
     std::vector<std::pair<std::string, int32_t>> length_map);
+
+std::string make_cmd(int argc, char** argv);
 
 }
 

@@ -3,7 +3,7 @@
  *
  * Building a lift-over map from a chain file and performing lift-over
  *
- * Authors: Nae-Chyun Chen and Ben Langmead
+ * Authors: Nae-Chyun Chen
  *
  * Distributed under the MIT license
  * https://github.com/alshai/levioSAM

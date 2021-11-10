@@ -1,8 +1,8 @@
 /*
  * liftover.cpp
  *
- * Classes and routines for translating (lifting over) coordinates between
- * two aligned sequences
+ * Classes and routines for translating (lifting over) coordinates
+ * between two aligned sequences
  *
  * Authors: Taher Mun, Nae-Chyun Chen, Ben Langmead
  * Dept. of Computer Science, Johns Hopkins University
@@ -17,6 +17,7 @@
 #include <getopt.h>
 #include <htslib/kseq.h>
 #include <htslib/kstring.h>
+#include "collate.hpp"
 #include "leviosam.hpp"
 
 KSEQ_INIT(gzFile, gzread)
@@ -303,14 +304,6 @@ void lift_run(lift_opts args) {
 }
 
 
-std::string make_cmd(int argc, char** argv) {
-    std::string cmd("");
-    for (auto i = 0; i < argc; ++i) {
-        cmd += std::string(argv[i]) + " ";
-    }
-    return cmd;
-}
-
 /* This is a wrapper for the constructor of LiftMap
  */
 lift::LiftMap lift::lift_from_vcf(
@@ -395,11 +388,23 @@ void print_main_help_msg(){
 }
 
 int main(int argc, char** argv) {
+    if (argc - optind < 1) {
+        std::cerr << "[E::main] No argument provided\n";
+        print_main_help_msg();
+        exit(1);
+    }
+    // The collate functionality is separated and use a different
+    // argument set
+    if (!strcmp(argv[optind], "collate")) {
+        return collate_run(argc, argv);
+    }
+
     double start_cputime = std::clock();
     auto start_walltime = std::chrono::system_clock::now();
+
     int c;
     lift_opts args;
-    args.cmd = make_cmd(argc,argv);
+    args.cmd = LevioSamUtils::make_cmd(argc,argv);
     static struct option long_options[] {
         {"md", no_argument, 0, 'm'},
         // {"write_unliftable", no_argument, 0, 'u'},
@@ -540,11 +545,6 @@ int main(int argc, char** argv) {
         }
     }
 
-    if (argc - optind < 1) {
-        fprintf(stderr, "No argument provided\n");
-        print_main_help_msg();
-        exit(1);
-    }
     if (args.haplotype != "0" && args.haplotype != "1"){
         fprintf(stderr, "Invalid haplotype %s\n", args.haplotype.c_str());
         exit(1);

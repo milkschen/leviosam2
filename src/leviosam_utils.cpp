@@ -1,3 +1,13 @@
+/*
+ * leviosam_utils.cpp
+ *
+ * Utility functions for the leviosam software
+ *
+ * Authors: Nae-Chyun Chen
+ *
+ * Distributed under the MIT license
+ * https://github.com/alshai/levioSAM
+ */
 #include <algorithm>
 #include <regex>
 #include "leviosam_utils.hpp"
@@ -510,6 +520,15 @@ std::vector<std::pair<std::string, int32_t>> load_lengthmap(std::ifstream& in) {
         length_map.push_back(std::pair<std::string, int32_t>(key, value));
     }
     return length_map;
+}
+
+
+std::string make_cmd(int argc, char** argv) {
+    std::string cmd("");
+    for (auto i = 0; i < argc; ++i) {
+        cmd += std::string(argv[i]) + " ";
+    }
+    return cmd;
 }
 
 

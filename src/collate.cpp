@@ -1,15 +1,24 @@
-
+/*
+ * collate.cpp
+ *
+ * The `leviosam collate` program that makes sure a split paired-end
+ * BAM file is properly paired
+ *
+ * Authors: Nae-Chyun Chen
+ *
+ * Distributed under the MIT license
+ * https://github.com/alshai/levioSAM
+ */
 #include <ctime>
 #include <getopt.h>
 #include <iostream>
 #include <stdio.h>
 #include <htslib/sam.h>
-// #include "leviosam.hpp"
 #include "leviosam_utils.cpp"
 #include "version.hpp"
 
 
-struct extract_unpaired_opts {
+struct collate_opts {
     std::string cmd = "";
     std::string sam_fname = "";
     std::string deferred_sam_fname = "";
@@ -23,31 +32,23 @@ struct extract_unpaired_opts {
     std::string out_r2_fname = "";
 };
 
-std::string make_cmd(int argc, char** argv) {
-    std::string cmd("");
-    for (auto i = 0; i < argc; ++i) {
-        cmd += std::string(argv[i]) + " ";
-    }
-    return cmd;
-}
-
 
 void print_help_msg() {
     fprintf(stderr, "\n");
-    fprintf(stderr, "Program: extract_unpaired (extract unpaired alignments from a BAM using a FASTQ of singletons)\n");
+    fprintf(stderr, "Collate alignments to make sure reads are paired\n");
     fprintf(stderr, "Version: %s\n", VERSION);
-    fprintf(stderr, "Usage:   extract_unpaired [options] -a <bam> {-b <bam> | -q <fastq>} -o <prefix>\n\n");
+    fprintf(stderr, "Usage:   collate [options] -a <bam> {-b <bam> | -q <fastq>} -o <prefix>\n\n");
     fprintf(stderr, "Inputs:  -a string   Path to the input SAM/BAM.\n");
     fprintf(stderr, "         -b string   Path to the input deferred SAM/BAM.\n");
     fprintf(stderr, "         -q string   Path to the input singleton FASTQ.\n");
-    fprintf(stderr, "         -o string   Prefix to the output files (1 BAM, a pair of FASTQs).\n");
+    fprintf(stderr, "         -p string   Prefix to the output files (1 BAM, a pair of FASTQs).\n");
     fprintf(stderr, "Options: -h          Print detailed usage.\n");
     fprintf(stderr, "         -V INT      Verbose level [0].\n");
     fprintf(stderr, "\n");
 }
 
 
-void extract_unpaired_core(
+void collate_core(
     LevioSamUtils::fastq_map &reads,
     bam_hdr_t* chdr,
     bam_hdr_t* dhdr,
@@ -110,7 +111,7 @@ void extract_unpaired_core(
 }
 
 
-void extract_unpaired(extract_unpaired_opts args) {
+void collate(collate_opts args) {
     // Input file
     samFile* csam_fp = (args.sam_fname == "")?
         sam_open("-", "r") : sam_open(args.sam_fname.data(), "r");
@@ -125,8 +126,8 @@ void extract_unpaired(extract_unpaired_opts args) {
     samFile* out_csam_fp = sam_open(args.out_committed_sam_fname.data(), "wb");
     samFile* out_dsam_fp = sam_open(args.out_deferred_sam_fname.data(), "wb");
 
-    sam_hdr_add_pg(chdr, "extract_unpaired", "VN", VERSION, "CL", args.cmd.data(), NULL);
-    sam_hdr_add_pg(dhdr, "extract_unpaired", "VN", VERSION, "CL", args.cmd.data(), NULL);
+    sam_hdr_add_pg(chdr, "collate", "VN", VERSION, "CL", args.cmd.data(), NULL);
+    sam_hdr_add_pg(dhdr, "collate", "VN", VERSION, "CL", args.cmd.data(), NULL);
     if (sam_hdr_write(out_csam_fp, chdr) < 0 || sam_hdr_write(out_dsam_fp, dhdr) < 0) {
         std::cerr << "Error: Unable to write SAM header\n";
         exit(1);
@@ -136,7 +137,7 @@ void extract_unpaired(extract_unpaired_opts args) {
     LevioSamUtils::fastq_map reads = (args.fq_fname != "")?
         LevioSamUtils::read_unpaired_fq(args.fq_fname) :
         LevioSamUtils::read_deferred_bam(dsam_fp, out_dsam_fp, dhdr, out_r1_fp, out_r2_fp);
-    extract_unpaired_core(
+    collate_core(
         reads, chdr, dhdr, csam_fp, out_csam_fp, out_dsam_fp, out_r1_fp, out_r2_fp);
 
     if (dsam_fp != NULL)
@@ -149,12 +150,12 @@ void extract_unpaired(extract_unpaired_opts args) {
 }
 
 
-int main(int argc, char** argv) {
+int collate_run(int argc, char** argv) {
     double start_cputime = std::clock();
     auto start_walltime = std::chrono::system_clock::now();
     int c;
-    extract_unpaired_opts args;
-    args.cmd = make_cmd(argc,argv);
+    collate_opts args;
+    args.cmd = LevioSamUtils::make_cmd(argc,argv);
     static struct option long_options[] {
         {"sam", required_argument, 0, 'a'},
         {"deferred_sam", required_argument, 0, 'b'},
@@ -219,7 +220,7 @@ int main(int argc, char** argv) {
     std::cerr << " - FASTQ2: " << args.out_r2_fname + "\n";
     std::cerr << "\n";
 
-    extract_unpaired(args);
+    collate(args);
     
     double cpu_duration = (std::clock() - start_cputime) / (double)CLOCKS_PER_SEC;
     std::chrono::duration<double> wall_duration = (std::chrono::system_clock::now() - start_walltime);
