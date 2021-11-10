@@ -3,6 +3,8 @@ import unittest
 import subprocess
 import sys
 
+
+LEVIOSAM = '../leviosam'
 WG_MAJOR_LFT = 'major.lft'
 
 BWA_SE_H38 = 'bwa-se-grch38.bam'
@@ -40,7 +42,7 @@ class SamProcessing(unittest.TestCase):
     def setUpClass(cls):
         for param in params:
             process = subprocess.Popen(
-                ['../leviosam', 
+                [LEVIOSAM, 
                 'lift', '-l', param['lft'], '-a', param['sam'],
                 '-p', param['out_prefix'], '-O', 'bam'],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -156,7 +158,7 @@ class Chain(unittest.TestCase):
             lifted_pre = orig + '-lifted'
             lifted_fn = lifted_pre + '.bam'
             process = subprocess.Popen(
-                ['../leviosam', 
+                [LEVIOSAM, 
                 'lift', '-C', CLFT_CHM13_TO_H38, '-a', orig,
                 '-p', lifted_pre, '-O', 'bam'],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -194,7 +196,7 @@ class Chain(unittest.TestCase):
             lifted_pre = orig + '-lifted'
             lifted_fn = lifted_pre + '.bam'
             process = subprocess.Popen(
-                ['../leviosam', 
+                [LEVIOSAM, 
                 'lift', '-C', CLFT_CHM13_TO_H38, '-a', orig,
                 '-p', lifted_pre, '-O', 'bam'],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -218,4 +220,8 @@ class Chain(unittest.TestCase):
 
 
 if __name__ == '__main__':
+    if len(sys.argv) > 1:
+        LEVIOSAM = sys.argv.pop()
+        print(f'Use the leviosam software at {LEVIOSAM}', file=sys.stderr)
+
     unittest.main()
