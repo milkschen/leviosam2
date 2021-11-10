@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <vector>
 #include <cstring>
+#include "bed.hpp"
 #include "robin_hood.h"
 
 const int8_t seq_comp_table[16] = { 0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15 };
@@ -53,7 +54,7 @@ public:
 robin_hood::unordered_map<std::string, FastqRecord> read_unpaired_fq(
     const std::string& fq_fname);
 robin_hood::unordered_map<std::string, FastqRecord> read_deferred_bam(
-    samFile* dsam_fp, samFile* out_dsam_fp, bam_hdr_t* hdr,
+    samFile* dsam_fp, samFile* out_dsam_fp, sam_hdr_t* hdr,
     std::ofstream& out_r1_fp, std::ofstream& out_r2_fp);
 
 class WriteDeferred {
@@ -67,27 +68,31 @@ public:
         const std::string outpre, const std::string sm,
         const int mapq, const int isize,
         const float clipped_frac, const int aln_score,
-        const std::string of, bam_hdr_t* ihdr
+        const std::string of, sam_hdr_t* ihdr, sam_hdr_t* ohdr,
+        const BedUtils::Bed &b_defer_source,
+        const BedUtils::Bed &b_defer_dest,
+        const BedUtils::Bed &b_remove_source,
+        const BedUtils::Bed &b_remove_dest
     );
 
-    void write_deferred_bam(bam1_t* aln, bam_hdr_t* hdr);
+    void print_info();
+    void write_deferred_bam(bam1_t* aln, sam_hdr_t* hdr);
     void write_deferred_bam_orig(bam1_t* aln);
+    bool commit_alignment(const bam1_t* const aln);
 
+    std::mutex mutex_fwrite;
+
+private:
+    bool write_deferred;
     samFile* out_fp;
     samFile* out_fp_orig;
-    bam_hdr_t* hdr_orig;
+    sam_hdr_t* hdr_orig;
     std::string split_mode = "";
-    std::mutex mutex_fwrite;
-    int min_mapq;
-    int max_isize;
+    int min_mapq, max_isize, min_aln_score;
     float max_clipped_frac;
-    int min_aln_score;
-    bool write_deferred;
+    BedUtils::Bed bed_defer_source, bed_defer_dest, bed_remove_source, bed_remove_dest;
 };
 
-bool commit_alignment(
-    const bam1_t* const aln,
-    const WriteDeferred* const wd);
 void update_cigar(bam1_t* aln, std::vector<uint32_t> &new_cigar);
 void debug_print_cigar(uint32_t* cigar, size_t n_cigar);
 void remove_mn_md_tag(bam1_t* aln);

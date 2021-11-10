@@ -21,6 +21,7 @@
 #include <htslib/sam.h>
 #include <sdsl/bit_vectors.hpp>
 #include <sdsl/util.hpp>
+#include "bed.hpp"
 #include "chain.hpp"
 #include "leviosam_utils.hpp"
 #include "version.hpp"
@@ -35,6 +36,7 @@
 
 using NameMap = std::vector<std::pair<std::string,std::string>>;
 using LengthMap = std::vector<std::pair<std::string, int32_t>>;
+using BedMap = robin_hood::unordered_map<std::string, IITree<std::size_t, bool>>;
 
 static inline void die(std::string msg) {
     fprintf(stderr, "%s\n", msg.data());
@@ -69,6 +71,10 @@ struct lift_opts {
     int max_isize = 1000;
     float max_clipped_frac = 0.95;
     int min_aln_score = 100;
+    BedUtils::Bed bed_defer_source;
+    BedUtils::Bed bed_defer_dest;
+    BedUtils::Bed bed_remove_source;
+    BedUtils::Bed bed_remove_dest;
 };
 
 

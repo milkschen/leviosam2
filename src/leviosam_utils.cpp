@@ -10,23 +10,37 @@ void WriteDeferred::init(
     const std::string outpre, const std::string sm,
     const int mapq, const int isize,
     const float clipped_frac, const int aln_score,
-    const std::string of, sam_hdr_t* ihdr
+    const std::string of,
+    sam_hdr_t* ihdr, sam_hdr_t* ohdr,
+    const BedUtils::Bed &b_defer_source,
+    const BedUtils::Bed &b_defer_dest,
+    const BedUtils::Bed &b_remove_source,
+    const BedUtils::Bed &b_remove_dest
 ) {
+    write_deferred = true;
     split_mode = sm;
     min_mapq = mapq;
     max_isize = isize;
     max_clipped_frac = clipped_frac;
     min_aln_score = aln_score;
     hdr_orig = ihdr;
-    write_deferred = true;
+    bed_defer_source = b_defer_source;
+    bed_defer_dest = b_defer_dest;
+    bed_remove_source = b_defer_source;
+    bed_remove_dest = b_defer_dest;
 
     std::string out_mode = (of == "sam")? "w" : "wb";
     std::string out_fn = outpre + "-deferred." + of;
     out_fp = sam_open(out_fn.data(), out_mode.data());
+    if (sam_hdr_write(out_fp, ohdr) < 0) {
+        std::cerr << "[E::WriteDeferred::init] Failed to write sam_hdr for " << out_fn << "\n";
+        exit(1);
+    }
+
     std::string out_fn_orig = outpre + "-unliftable." + of;
     out_fp_orig = sam_open(out_fn_orig.data(), out_mode.data());
     if (sam_hdr_write(out_fp_orig, hdr_orig) < 0) {
-        std::cerr << "Error during writing sam_hdr for " << out_fn_orig << "\n";
+        std::cerr << "[E::WriteDeferred::init] Failed to write sam_hdr for " << out_fn_orig << "\n";
         exit(1);
     }
 }
@@ -40,31 +54,63 @@ WriteDeferred::~WriteDeferred() {
 };
 
 
+void WriteDeferred::print_info() {
+    std::vector<std::string> split_modes = split_str(split_mode, ",");
+    std::cerr << "Alignments don't pass the below filter are deferred:\n";
+    std::cerr << " - unlifted\n";
+    if (find(split_modes.begin(), split_modes.end(), "mapq") != split_modes.end()){
+        std::cerr << " - MAPQ (pre-liftover) < " << min_mapq << "\n";
+    }
+    if (find(split_modes.begin(), split_modes.end(), "isize") != split_modes.end()){
+        std::cerr << " - TLEN/isize (post-liftover) > " << max_isize << "\n";
+        std::cerr << " - TLEN/isize (post-liftover) == 0\n";
+    }
+    if (find(split_modes.begin(), split_modes.end(), "clipped_frac") != split_modes.end()){
+        std::cerr << " - Fraction of clipped bases (post-liftover) < " << max_clipped_frac << "\n";
+    }
+    if (find(split_modes.begin(), split_modes.end(), "aln_score") != split_modes.end()){
+        std::cerr << " - AS:i (pre-liftover) < " << min_aln_score << "\n";
+    }
+}
+
+
 /* Returns true if to an alignment can be committed
  */
-bool commit_alignment(
-    const bam1_t* const aln,
-    const WriteDeferred* const wd
-){
+bool WriteDeferred::commit_alignment(
+    const bam1_t* const aln
+) {
+    // If defer mode is not activated, all reads are committed
+    if (!write_deferred)
+        return true;
+
     const bam1_core_t* c = &(aln->core);
+
     if (c->flag & BAM_FUNMAP)
         return false;
-    std::vector<std::string> split_modes = split_str(wd->split_mode, ",");
+
+    std::string qname = bam_get_qname(aln);
+    size_t pos = c->pos;
+    size_t pos_end = c->pos + bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln));
+    if (bed_defer_dest.intersect(qname, pos, pos_end)) {
+        return false;
+    }
+
+    std::vector<std::string> split_modes = split_str(split_mode, ",");
     if (find(split_modes.begin(), split_modes.end(), "mapq") != split_modes.end()){
-        if (c->qual < wd->min_mapq)
+        if (c->qual < min_mapq)
             return false;
     }
     if (find(split_modes.begin(), split_modes.end(), "isize") != split_modes.end()){
-        if (c->isize == 0 || c->isize > wd->max_isize || c->isize < -wd->max_isize)
+        if (c->isize == 0 || c->isize > max_isize || c->isize < -max_isize)
             return false;
     }
     if (find(split_modes.begin(), split_modes.end(), "clipped_frac") != split_modes.end()){
         auto rlen = bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln));
-        if (1 - (rlen / c->l_qseq) > wd->max_clipped_frac)
+        if (1 - (rlen / c->l_qseq) > max_clipped_frac)
             return false;
     }
     if (find(split_modes.begin(), split_modes.end(), "aln_score") != split_modes.end()){
-        if (bam_aux2i(bam_aux_get(aln, "AS")) < wd->min_aln_score)
+        if (bam_aux2i(bam_aux_get(aln, "AS")) < min_aln_score)
             return false;
     }
     return true;
@@ -370,26 +416,16 @@ int reverse_seq_and_qual(bam1_t* aln) {
 }
 
 
-// std::map<std::string, int32_t> fai_to_map(std::string fai_fn) {
 std::vector<std::pair<std::string, int32_t>> fai_to_map(std::string fai_fn) {
     std::ifstream fai_fp(fai_fn);
-    std::string line;
-    std::string name;
+    std::string line, name;
     int32_t length;
-    // std::map<std::string, int32_t> lengths;
     std::vector<std::pair<std::string, int32_t>> lengths;
     while (getline (fai_fp, line)) {
         auto split_line = split_str(line, "\t");
         name = split_line[0];
         length = std::stoi(split_line[1]);
-        // std::cerr << name << " " << length << "\n";
         lengths.push_back(std::make_pair(name, length));
-        // if (lengths.find(name) != lengths.end()) {
-        //     std::cerr << "Error: repetitive contig name " << name << "\n";
-        //     exit(1);
-        // } else {
-        //     // lengths[name] = std::stoi(length);
-        // }
     }
     fai_fp.close();
     return lengths;

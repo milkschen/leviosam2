@@ -110,9 +110,6 @@ void read_and_lift(
             std::lock_guard<std::mutex> g(*mutex_fread);
             for (int i = 0; i < chunk_size; i++){
                 read = sam_read1(sam_fp, hdr_source, aln_vec[i]);
-                // TODO check the line below
-                // auto clone = bam_copy1(aln_vec_clone[i], aln_vec[i]);
-                // if (read < 0 || clone < 0){
                 if (read < 0){
                     num_actual_reads = i;
                     break;
@@ -120,7 +117,6 @@ void read_and_lift(
             }
         }
         for (int i = 0; i < num_actual_reads; i++){
-            // TODO check
             auto clone = bam_copy1(aln_vec_clone[i], aln_vec[i]);
             // TODO: Plan to remove `null_dest_contig`.
             // Need to test scenarios with `NameMap`
@@ -145,7 +141,8 @@ void read_and_lift(
         }
         for (int i = 0; i < num_actual_reads; i++) {
             // If a read is committed
-            if (LevioSamUtils::commit_alignment(aln_vec[i], wd) == true) {
+            // if (LevioSamUtils::commit_alignment(aln_vec[i], wd) == true) {
+            if (wd->commit_alignment(aln_vec[i]) == true) {
                 // write to file, thread corruption protected by lock_guard
                 std::lock_guard<std::mutex> g_commited(*mutex_fwrite);
                 if (sam_write1(out_sam_fp, hdr_dest, aln_vec[i]) < 0) {
@@ -266,27 +263,13 @@ void lift_run(lift_opts args) {
 
     LevioSamUtils::WriteDeferred wd;
     if (args.split_mode != "") {
-        std::vector<std::string> split_modes = LevioSamUtils::split_str(args.split_mode, ",");
-        std::cerr << "Alignments don't pass the below filter are deferred:\n";
-        if (find(split_modes.begin(), split_modes.end(), "mapq") != split_modes.end()){
-            std::cerr << " - MAPQ (pre-liftover) < " << args.min_mapq << "\n";
-        }
-        if (find(split_modes.begin(), split_modes.end(), "isize") != split_modes.end()){
-            std::cerr << " - TLEN/isize (post-liftover) > " << args.max_isize << "\n";
-            std::cerr << " - TLEN/isize (post-liftover) == 0\n";
-        }
-        if (find(split_modes.begin(), split_modes.end(), "clipped_frac") != split_modes.end()){
-            std::cerr << " - Fraction of clipped bases (post-liftover) < " << args.max_clipped_frac << "\n";
-        }
-        if (find(split_modes.begin(), split_modes.end(), "aln_score") != split_modes.end()){
-            std::cerr << " - AS:i (pre-liftover) < " << args.min_aln_score << "\n";
-        }
         wd.init(
             args.outpre, args.split_mode,
             args.min_mapq, args.max_isize,
             args.max_clipped_frac, args.min_aln_score,
-            args.out_format, hdr_orig);
-        auto write_hdr = sam_hdr_write(wd.out_fp, hdr);
+            args.out_format, hdr_orig, hdr,
+            args.bed_defer_source, args.bed_defer_dest,
+            args.bed_remove_source, args.bed_remove_dest);
     }
 
     std::vector<std::thread> threads;
@@ -422,6 +405,8 @@ int main(int argc, char** argv) {
         // {"write_unliftable", no_argument, 0, 'u'},
         {"sam", required_argument, 0, 'a'},
         {"min_aln_score", required_argument, 0, 'A'},
+        {"bed_defer_source", required_argument, 0, 'd'},
+        {"bed_defer_dest", required_argument, 0, 'D'},
         {"chain", required_argument, 0, 'c'},
         {"chainmap", required_argument, 0, 'C'},
         {"reference", required_argument, 0, 'f'},
@@ -434,6 +419,8 @@ int main(int argc, char** argv) {
         {"namemap", required_argument, 0, 'n'},
         {"out_format", required_argument, 0, 'O'},
         {"prefix", required_argument, 0, 'p'},
+        {"bed_remove_source", required_argument, 0, 'r'},
+        {"bed_remove_dest", required_argument, 0, 'R'},
         {"sample", required_argument, 0, 's'},
         {"split_mode", required_argument, 0, 'S'},
         {"threads", required_argument, 0, 't'},
@@ -446,7 +433,7 @@ int main(int argc, char** argv) {
     while(
         (c = getopt_long(
             argc, argv,
-            "hma:A:c:C:f:F:g:G:k:l:L:M:n:O:p:s:S:t:T:v:V:Z:",
+            "hma:A:c:C:d:D:f:F:g:G:k:l:L:M:n:O:p:r:R:s:S:t:T:v:V:Z:",
             long_options, &long_index)) != -1) {
         switch (c) {
             case 'h':
@@ -472,6 +459,14 @@ int main(int argc, char** argv) {
                 break;
             case 'C':
                 args.chainmap_fname = optarg;
+                break;
+            case 'd':
+                std::cerr << "-d is not yet supported\n";
+                exit(1);
+                args.bed_defer_source = BedUtils::Bed(optarg);
+                break;
+            case 'D':
+                args.bed_defer_dest = BedUtils::Bed(optarg);
                 break;
             case 'f':
                 args.ref_name = optarg;
@@ -507,6 +502,16 @@ int main(int argc, char** argv) {
                 break;
             case 'p':
                 args.outpre = optarg;
+                break;
+            case 'r':
+                std::cerr << "-r is not yet supported\n";
+                exit(1);
+                args.bed_remove_source = BedUtils::Bed(optarg);
+                break;
+            case 'R':
+                std::cerr << "-R is not yet supported\n";
+                exit(1);
+                args.bed_remove_dest = BedUtils::Bed(optarg);
                 break;
             case 's':
                 args.sample = optarg;
@@ -564,12 +569,22 @@ int main(int argc, char** argv) {
             }
         }
     }
+    if (args.split_mode == "") {
+        if (args.bed_defer_source.get_fn() != "" ||
+            args.bed_defer_dest.get_fn() != "" ||
+            args.bed_remove_source.get_fn() != "" ||
+            args.bed_remove_source.get_fn() != "") {
+            std::cerr << "[E::main] `-S` should be set if any among `-d/D/r/R` is set.\n";
+            exit(1);
+        }
+    }
 
     if (!strcmp(argv[optind], "lift")) {
         lift_run(args);
     } else if (!strcmp(argv[optind], "serialize") || !strcmp(argv[optind], "index")) {
         serialize_run(args);
     }
+
     double cpu_duration = (std::clock() - start_cputime) / (double)CLOCKS_PER_SEC;
     std::chrono::duration<double> wall_duration = (std::chrono::system_clock::now() - start_walltime);
     std::cerr << "\n";
