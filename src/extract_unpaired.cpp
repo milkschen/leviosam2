@@ -4,8 +4,9 @@
 #include <iostream>
 #include <stdio.h>
 #include <htslib/sam.h>
-#include "leviosam.hpp"
+// #include "leviosam.hpp"
 #include "leviosam_utils.cpp"
+#include "version.hpp"
 
 
 struct extract_unpaired_opts {
