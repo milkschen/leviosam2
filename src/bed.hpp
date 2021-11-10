@@ -3,7 +3,6 @@
 
 #include <iostream>
 #include <unordered_map>
-//#include "IntervalTree.h"
 #include "IITree.h"
 #include "robin_hood.h"
 
@@ -19,12 +18,17 @@ class Bed {
 
         int index();
         bool add_interval(const std::string &line);
+        bool intersect(
+            const std::string &contig,
+            const size_t &pos1, const size_t &pos2);
         bool intersect(const std::string &contig, const size_t &pos);
-
         BedMap get_intervals();
+        std::string get_fn();
 
     private:
         BedMap intervals;
+        std::string bed_fn = "";
+        bool is_valid = false;
         // robin_hood::unordered_map<std::string, IITree<std::size_t, bool>> intervals;
 
 }; // Bed class

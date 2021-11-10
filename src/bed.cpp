@@ -14,6 +14,8 @@
 namespace BedUtils {
 
 Bed::Bed(const std::string &fn) {
+    bed_fn = fn;
+    is_valid = true;
     std::ifstream bed_f(fn);
     int cnt = 0;
     if (bed_f.is_open()) {
@@ -44,6 +46,7 @@ int Bed::index() {
 
 
 bool Bed::add_interval(const std::string &line) {
+    is_valid = true;
     std::vector<std::string> fields = LevioSamUtils::split_str(line, "\t");
     if (fields.size() < 3) {
         return false;
@@ -63,33 +66,34 @@ bool Bed::add_interval(const std::string &line) {
 }
 
 
-bool Bed::intersect(const std::string &contig, const size_t &pos) {
+// Interval intersect query
+bool Bed::intersect(
+    const std::string &contig, const size_t &pos1, const size_t &pos2) {
+    if (!is_valid)
+        return false;
     if (intervals.find(contig) == intervals.end())
         return false;
     std::vector<size_t> isec;
-    intervals[contig].overlap(pos, pos+1, isec);
+    intervals[contig].overlap(pos1, pos2, isec);
     return (isec.size() > 0);
 }
+
+
+// Point intersect query
+bool Bed::intersect(const std::string &contig, const size_t &pos) {
+    return Bed::intersect(contig, pos, pos+1);
+}
+
 
 BedMap Bed::get_intervals() {
     return intervals;
 }
 
+
+std::string Bed::get_fn() {
+    return bed_fn;
+}
+
+
 }; // namespace
 
-// int main(int argc, char** argv) {
-//     auto b = BedUtils::Bed("../testdata/test.bed");
-//     std::cerr << "chr1:1000 " << b.intersect("chr1", 1000) << "\n";
-//     std::cerr << "chr1:1500 " << b.intersect("chr1", 1500) << "\n";
-//     std::cerr << "chr10:100 " << b.intersect("chr10", 100) << "\n";
-// 
-//     // IITree<size_t, bool> tree;
-//     // tree.add(12, 34, true); // add an interval
-//     // tree.add(0, 23, true);
-//     // tree.add(34, 56, true);
-//     // tree.index(); // index
-//     // std::vector<size_t> a;
-//     // tree.overlap(22, 25, a); // retrieve overlaps
-//     // for (size_t i = 0; i < a.size(); ++i)
-//     //     printf("%d\t%d\t%d\n", tree.start(a[i]), tree.end(a[i]), tree.data(a[i]));
-// }
