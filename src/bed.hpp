@@ -14,7 +14,6 @@ class Bed {
     public:
         Bed() {};
         Bed(const std::string &fn);
-        // Bed(std::ifstream& in);
 
         int index();
         bool add_interval(const std::string &line);
@@ -29,7 +28,6 @@ class Bed {
         BedMap intervals;
         std::string bed_fn = "";
         bool is_valid = false;
-        // robin_hood::unordered_map<std::string, IITree<std::size_t, bool>> intervals;
 
 }; // Bed class
 
