@@ -92,6 +92,7 @@ def summarize_aln_features(
     print(f'+3 std = {m + 3 * v:.2f}')
     print()
 
+    print(f'   min = {results[0]}')
     print(f'    1% = {results[: int(l * 0.01)][-1]}')
     print(f'    3% = {results[: int(l * 0.03)][-1]}')
     print(f'    5% = {results[: int(l * 0.05)][-1]}')
@@ -103,6 +104,7 @@ def summarize_aln_features(
     print(f'   95% = {results[: int(l * 0.95)][-1]}')
     print(f'   97% = {results[: int(l * 0.97)][-1]}')
     print(f'   99% = {results[: int(l * 0.99)][-1]}')
+    print(f'   max = {results[-1]}')
     if isize:
         print(f'not properly paird = {other_cnt} ({int(other_cnt / total * 100)}%)')
 
