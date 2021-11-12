@@ -1,4 +1,4 @@
-set -x
+set -xp
 
 ALN_RG=""
 THR=$(nproc)
@@ -61,6 +61,7 @@ if [[ ! ${ALN} =~ ^(bowtie2|bwamem)$ ]]; then
     exit
 fi
 
+# Lifting over using leviosam
 if [ ! -f ${PFX}-committed.bam ]; then
     if (( ${MEASURE_TIME} > 0)); then
         if [[ ${DEFERRED_DEST_BED} == "" ]]; then
@@ -85,8 +86,15 @@ if [ ! -f ${PFX}-committed.bam ]; then
     fi
 fi
 
-${LEVIOSAM} collate -a ${PFX}-committed.bam -b ${PFX}-deferred.bam -p ${PFX}-paired
+# Collate
+if (( ${MEASURE_TIME} > 0)); then
+    ${TIME} -v -o collate.time_log \
+        ${LEVIOSAM} collate -a ${PFX}-committed.bam -b ${PFX}-deferred.bam -p ${PFX}-paired
+else
+    ${LEVIOSAM} collate -a ${PFX}-committed.bam -b ${PFX}-deferred.bam -p ${PFX}-paired
+fi
 
+# Re-align deferred reads
 if [ ! -f ${PFX}-paired-realigned.bam ]; then
     if (( ${MEASURE_TIME} > 0)); then
         if [[ ${ALN} == "bowtie2" ]]; then
@@ -103,18 +111,15 @@ if [ ! -f ${PFX}-paired-realigned.bam ]; then
     fi
 fi
 
-if [ ! -f ${PFX}-merged.bam ]; then
-    if (( ${MEASURE_TIME} > 0)); then
-        ${TIME} -v -o merge.time_log samtools cat -o ${PFX}-merged.bam ${PFX}-paired-committed.bam ${PFX}-paired-realigned.bam
-    else
-        samtools cat -o ${PFX}-merged.bam ${PFX}-paired-committed.bam ${PFX}-paired-realigned.bam
-    fi
-fi
-
+# Merge and sort
 if [ ! -f ${PFX}-final.bam ]; then
     if (( ${MEASURE_TIME} > 0)); then
-        ${TIME} -v -o sort_all.time_log samtools sort -@ ${THR} -o ${PFX}-final.bam ${PFX}-merged.bam
+        ${TIME} -v -o merge.time_log \
+            samtools cat -o ${PFX}-merged.bam ${PFX}-paired-committed.bam ${PFX}-paired-realigned.bam
+        ${TIME} -v -o sort_all.time_log \
+            samtools sort -@ ${THR} -o ${PFX}-final.bam ${PFX}-merged.bam
     else
+        samtools cat -o ${PFX}-merged.bam ${PFX}-paired-committed.bam ${PFX}-paired-realigned.bam
         samtools sort -@ ${THR} -o ${PFX}-final.bam ${PFX}-merged.bam
     fi
 fi
