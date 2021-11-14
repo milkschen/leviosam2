@@ -47,7 +47,7 @@ int Bed::index() {
 
 bool Bed::add_interval(const std::string &line) {
     is_valid = true;
-    std::vector<std::string> fields = LevioSamUtils::split_str(line, "\t");
+    std::vector<std::string> fields = LevioSamUtils::str_to_vector(line, "\t");
     if (fields.size() < 3) {
         return false;
     }

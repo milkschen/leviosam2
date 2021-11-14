@@ -28,11 +28,14 @@ void WriteDeferred::init(
     const BedUtils::Bed &b_remove_dest
 ) {
     write_deferred = true;
-    split_mode = sm;
+    // split_mode = sm;
+    split_modes = str_to_set(sm, ",");
     min_mapq = mapq;
     max_isize = isize;
     max_clipped_frac = clipped_frac;
     min_aln_score = aln_score;
+    // TODO
+    max_hdist = 5;
     hdr = ohdr;
     hdr_orig = ihdr;
     bed_defer_source = b_defer_source;
@@ -66,21 +69,35 @@ WriteDeferred::~WriteDeferred() {
 
 
 void WriteDeferred::print_info() {
-    std::vector<std::string> split_modes = split_str(split_mode, ",");
     std::cerr << "Alignments don't pass the below filter are deferred:\n";
     std::cerr << " - unlifted\n";
-    if (find(split_modes.begin(), split_modes.end(), "mapq") != split_modes.end()){
+    if (split_modes.find("mapq") != split_modes.end()){
         std::cerr << " - MAPQ (pre-liftover) < " << min_mapq << "\n";
     }
-    if (find(split_modes.begin(), split_modes.end(), "isize") != split_modes.end()){
+    if (split_modes.find("isize") != split_modes.end()){
         std::cerr << " - TLEN/isize (post-liftover) > " << max_isize << "\n";
         std::cerr << " - TLEN/isize (post-liftover) == 0\n";
     }
-    if (find(split_modes.begin(), split_modes.end(), "clipped_frac") != split_modes.end()){
+    if (split_modes.find("clipped_frac") != split_modes.end()){
         std::cerr << " - Fraction of clipped bases (post-liftover) < " << max_clipped_frac << "\n";
     }
-    if (find(split_modes.begin(), split_modes.end(), "aln_score") != split_modes.end()){
+    if (split_modes.find("aln_score") != split_modes.end()){
         std::cerr << " - AS:i (pre-liftover) < " << min_aln_score << "\n";
+    }
+    if (split_modes.find("hdist") != split_modes.end()){
+        std::cerr << " - NM:i (post-liftover) > " << max_hdist << "\n";
+    }
+    if (bed_defer_source.get_fn().size() > 0){
+        std::cerr << " - BED deferred (source) " << bed_defer_source.get_fn() << "\n";
+    }
+    if (bed_defer_dest.get_fn().size() > 0){
+        std::cerr << " - BED deferred (dest) " << bed_defer_dest.get_fn() << "\n";
+    }
+    if (bed_remove_source.get_fn().size() > 0){
+        std::cerr << " - BED removed (source) " << bed_remove_source.get_fn() << "\n";
+    }
+    if (bed_remove_dest.get_fn().size() > 0){
+        std::cerr << " - BED removed (dest) " << bed_remove_dest.get_fn() << "\n";
     }
 }
 
@@ -98,31 +115,31 @@ bool WriteDeferred::commit_alignment(
 
     if (c->flag & BAM_FUNMAP)
         return false;
-
-    // std::string qname = bam_get_qname(aln);
-    std::string rname = hdr->target_name[c->tid];
-    size_t pos = c->pos;
-    size_t pos_end = c->pos + bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln));
-    if (bed_defer_dest.intersect(rname, pos, pos_end)) {
-        return false;
-    }
-
-    std::vector<std::string> split_modes = split_str(split_mode, ",");
-    if (find(split_modes.begin(), split_modes.end(), "mapq") != split_modes.end()){
+    if (split_modes.find("mapq") != split_modes.end()){
         if (c->qual < min_mapq)
             return false;
     }
-    if (find(split_modes.begin(), split_modes.end(), "isize") != split_modes.end()){
+    if (split_modes.find("isize") != split_modes.end()){
         if (c->isize == 0 || c->isize > max_isize || c->isize < -max_isize)
             return false;
     }
-    if (find(split_modes.begin(), split_modes.end(), "clipped_frac") != split_modes.end()){
-        auto rlen = bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln));
+
+    std::string rname = hdr->target_name[c->tid];
+    auto rlen = bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln));
+    size_t pos_end = c->pos + rlen;
+    if (bed_defer_dest.intersect(rname, c->pos, pos_end)) {
+        return false;
+    }
+    if (split_modes.find("clipped_frac") != split_modes.end()){
         if (1 - (rlen / c->l_qseq) > max_clipped_frac)
             return false;
     }
-    if (find(split_modes.begin(), split_modes.end(), "aln_score") != split_modes.end()){
+    if (split_modes.find("aln_score") != split_modes.end()){
         if (bam_aux2i(bam_aux_get(aln, "AS")) < min_aln_score)
+            return false;
+    }
+    if (split_modes.find("hdist") != split_modes.end()){
+        if (bam_aux2i(bam_aux_get(aln, "NM")) > max_hdist)
             return false;
     }
     return true;
@@ -228,10 +245,10 @@ static std::string get_read(const bam1_t *rec){
 void WriteDeferred::write_deferred_bam(
     bam1_t* aln, sam_hdr_t* hdr
 ) {
-    if ((aln->core.flag & 256) || // Secondary alignment - no SEQ field
-        (aln->core.flag & 512) || // not passing filters
-        (aln->core.flag & 1024) || // PCR or optinal duplicate
-        (aln->core.flag & 2048)) { // supplementary alignment
+    if ((aln->core.flag & BAM_FSECONDARY) || // Secondary alignment - no SEQ field
+        (aln->core.flag & BAM_FQCFAIL) || // not passing filters
+        (aln->core.flag & BAM_FDUP) || // PCR or optinal duplicate
+        (aln->core.flag & BAM_FSUPPLEMENTARY)) { // supplementary alignment
         return;
     }
     auto w_ret = sam_write1(out_fp, hdr, aln);
@@ -313,15 +330,15 @@ fastq_map read_deferred_bam(
     while (sam_read1(dsam_fp, hdr, aln) > 0) {
         bam1_core_t c = aln->core;
         // The following categories of reads are excluded by this method
-        if ((c.flag & 256) || // Secondary alignment - no SEQ field
-            (c.flag & 512) || // not passing filters
-            (c.flag & 1024) || // PCR or optinal duplicate
-            (c.flag & 2048)) { // supplementary alignment
+        if ((c.flag & BAM_FSECONDARY) || // Secondary alignment - no SEQ field
+            (c.flag & BAM_FQCFAIL) || // not passing filters
+            (c.flag & BAM_FDUP) || // PCR or optinal duplicate
+            (c.flag & BAM_FSUPPLEMENTARY)) { // supplementary alignment
             continue;
         }
         std::string qname = bam_get_qname(aln);
         FastqRecord fq = FastqRecord(aln);
-        if (c.flag & 64) { // first segment
+        if (c.flag & BAM_FREAD1) { // first segment
             auto search = reads2.find(qname);
             if (search != reads2.end()) {
                 if (sam_write1(out_dsam_fp, hdr, search->second.aln) < 0  ||
@@ -335,7 +352,7 @@ fastq_map read_deferred_bam(
             } else {
                 reads1.emplace(std::make_pair(qname, fq));
             }
-        } else if (c.flag & 128) { // second segment
+        } else if (c.flag & BAM_FREAD2) { // second segment
             auto search = reads1.find(qname);
             if (search != reads1.end()) {
                 if (sam_write1(out_dsam_fp, hdr, aln) < 0 ||
@@ -393,11 +410,20 @@ fastq_map read_unpaired_fq(const std::string& fq_fname) {
 /* Split a string on a delimiter
  * From: https://stackoverflow.com/a/64886763
  */
-std::vector<std::string> split_str(
+std::vector<std::string> str_to_vector(
     const std::string str, const std::string regex_str
 ) {
     std::regex regexz(regex_str);
     std::vector<std::string> list(
+        std::sregex_token_iterator(str.begin(), str.end(), regexz, -1),
+        std::sregex_token_iterator());
+    return list;
+}
+
+std::set<std::string> str_to_set(
+    const std::string str, const std::string regex_str){
+    std::regex regexz(regex_str);
+    std::set<std::string> list(
         std::sregex_token_iterator(str.begin(), str.end(), regexz, -1),
         std::sregex_token_iterator());
     return list;
@@ -434,7 +460,7 @@ std::vector<std::pair<std::string, int32_t>> fai_to_map(std::string fai_fn) {
     int32_t length;
     std::vector<std::pair<std::string, int32_t>> lengths;
     while (getline (fai_fp, line)) {
-        auto split_line = split_str(line, "\t");
+        auto split_line = str_to_vector(line, "\t");
         name = split_line[0];
         length = std::stoi(split_line[1]);
         lengths.push_back(std::make_pair(name, length));
@@ -472,7 +498,7 @@ sam_hdr_t* fai_to_hdr(std::string fai_fn, const sam_hdr_t* const hdr_orig) {
     std::string line;
     std::string name, length;
     while (getline (fai_fp, line)) {
-        auto split_line = split_str(line, "\t");
+        auto split_line = str_to_vector(line, "\t");
         name = split_line[0];
         length = split_line[1];
         if (sam_hdr_add_line(hdr, "SQ", "SN", name.c_str(), "LN", length.c_str(), NULL) < 0) {

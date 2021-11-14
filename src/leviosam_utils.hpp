@@ -15,7 +15,7 @@
 #include <fstream>
 #include <mutex>
 #include <htslib/sam.h>
-#include <unordered_map>
+#include <set>
 #include <vector>
 #include <cstring>
 #include "bed.hpp"
@@ -24,6 +24,9 @@
 const int8_t seq_comp_table[16] = { 0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15 };
 
 namespace LevioSamUtils {
+
+const std::vector<std::string> DEFER_OPT
+    {"lifted", "mapq", "clipped_frac", "isize", "aln_score", "hdist"};
 
 class FastqRecord {
 public:
@@ -98,8 +101,8 @@ private:
     samFile* out_fp_orig;
     sam_hdr_t* hdr;
     sam_hdr_t* hdr_orig;
-    std::string split_mode = "";
-    int min_mapq, max_isize, min_aln_score;
+    std::set<std::string> split_modes;
+    int min_mapq, max_isize, min_aln_score, max_hdist;
     float max_clipped_frac;
     BedUtils::Bed bed_defer_source, bed_defer_dest, bed_remove_source, bed_remove_dest;
 };
@@ -109,13 +112,14 @@ void debug_print_cigar(uint32_t* cigar, size_t n_cigar);
 void remove_mn_md_tag(bam1_t* aln);
 static std::string get_read(const bam1_t *rec);
 
-std::vector<std::string> split_str(
+std::vector<std::string> str_to_vector(
     const std::string str, const std::string regex_str);
+std::set<std::string> str_to_set(
+    const std::string str, const std::string regex_str);
+
 int reverse_seq_and_qual(bam1_t* aln);
 sam_hdr_t* fai_to_hdr(std::string fai_fn, const sam_hdr_t* const hdr_orig);
-// std::map<std::string, int32_t> fai_to_map(std::string fai_fn);
 std::vector<std::pair<std::string, int32_t>> fai_to_map(std::string fai_fn);
-// sam_hdr_t* lengthmap_to_hdr(std::map<std::string, int32_t> lm, const sam_hdr_t* const hdr_orig);
 sam_hdr_t* lengthmap_to_hdr(
     std::vector<std::pair<std::string, int32_t>> lm,
     const sam_hdr_t* const hdr_orig);
