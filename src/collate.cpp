@@ -126,8 +126,8 @@ void collate(collate_opts args) {
     samFile* out_csam_fp = sam_open(args.out_committed_sam_fname.data(), "wb");
     samFile* out_dsam_fp = sam_open(args.out_deferred_sam_fname.data(), "wb");
 
-    sam_hdr_add_pg(chdr, "collate", "VN", VERSION, "CL", args.cmd.data(), NULL);
-    sam_hdr_add_pg(dhdr, "collate", "VN", VERSION, "CL", args.cmd.data(), NULL);
+    sam_hdr_add_pg(chdr, "leviosam", "VN", VERSION, "CL", args.cmd.data(), NULL);
+    sam_hdr_add_pg(dhdr, "leviosam", "VN", VERSION, "CL", args.cmd.data(), NULL);
     if (sam_hdr_write(out_csam_fp, chdr) < 0 || sam_hdr_write(out_dsam_fp, dhdr) < 0) {
         std::cerr << "Error: Unable to write SAM header\n";
         exit(1);

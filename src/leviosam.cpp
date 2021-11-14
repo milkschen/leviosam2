@@ -323,68 +323,68 @@ lift::LiftMap lift::lift_from_vcf(
 
 
 void print_serialize_help_msg(){
-    fprintf(stderr, "\n");
-    fprintf(stderr, "Index a lift-over map using either a VCF or a chain file.\n");
-    fprintf(stderr, "Usage:   leviosam index [options] {-v <vcf> | -c <chain>} -p <out_prefix> -F <fai> \n");
-    fprintf(stderr, "Options:\n");
-    fprintf(stderr, "         VcfMap options:\n");
-    fprintf(stderr, "           -v string Index a lift-over map from a VCF file.\n");
-    fprintf(stderr, "           -s string The sample used to build leviosam index (-v needs to be set).\n");
-    fprintf(stderr, "           -g 0/1    The haplotype used to index leviosam. [0] \n");
-    fprintf(stderr, "           -n string Path to a name map file.\n");
-    fprintf(stderr, "                     This can be used to map '1' to 'chr1', or vice versa.\n");
-    fprintf(stderr, "         ChainMap options:\n");
-    fprintf(stderr, "           -c string Index a lift-over map from a chain file.\n");
-    fprintf(stderr, "\n");
-    fprintf(stderr, "         -F string Path to the FAI (FASTA index) file of the dest reference.\n");
-    fprintf(stderr, "         -p string The prefix of the output file.\n");
-    fprintf(stderr, "\n");
+    std::cerr << "\n";
+    std::cerr << "Index a lift-over map using either a VCF or a chain file.\n";
+    std::cerr << "Usage:   leviosam index [options] {-v <vcf> | -c <chain>} -p <out_prefix> -F <fai> \n";
+    std::cerr << "Options:\n";
+    std::cerr << "         VcfMap options:\n";
+    std::cerr << "           -v string Index a lift-over map from a VCF file.\n";
+    std::cerr << "           -s string The sample used to build leviosam index (-v needs to be set).\n";
+    std::cerr << "           -g 0/1    The haplotype used to index leviosam. [0] \n";
+    std::cerr << "           -n string Path to a name map file.\n";
+    std::cerr << "                     This can be used to map '1' to 'chr1', or vice versa.\n";
+    std::cerr << "         ChainMap options:\n";
+    std::cerr << "           -c string Index a lift-over map from a chain file.\n";
+    std::cerr << "\n";
+    std::cerr << "         -F string Path to the FAI (FASTA index) file of the dest reference.\n";
+    std::cerr << "         -p string The prefix of the output file.\n";
+    std::cerr << "\n";
 }
 
 void print_lift_help_msg(){
-    fprintf(stderr, "\n");
-    fprintf(stderr, "Perform efficient lift-over using levioSAM.\n");
-    fprintf(stderr, "Usage:   leviosam lift [options] {-v <vcf> | -l <vcfmap> | -c <chain> | -C <chainmap>}\n");
-    fprintf(stderr, "Options:\n");
-    fprintf(stderr, "         -a string Path to the SAM/BAM file to be lifted. \n");
-    fprintf(stderr, "                   Leave empty or set to \"-\" to read from stdin.\n");
-    fprintf(stderr, "         -t INT    Number of threads used. [1] \n");
-    fprintf(stderr, "         -T INT    Chunk size for each thread. [256] \n");
-    fprintf(stderr, "                   Each thread queries <-T> reads, lifts, and writes.\n");
-    fprintf(stderr, "                   Setting a higher <-T> uses slightly more memory but might benefit thread scaling.\n");
-    fprintf(stderr, "         -m        add MD and NM to output alignment records (requires -f option)\n");
-    fprintf(stderr, "         -f string Fasta reference that corresponds to input SAM/BAM (for use w/ -m option)\n");
-    fprintf(stderr, "\n");
-    fprintf(stderr, "         VcfMap options (one of -v or -l must be set to perform lift-over using a VcfMap):\n");
-    fprintf(stderr, "           -v string If -l is not specified, can build indexes using a VCF file.\n");
-    fprintf(stderr, "           -l string Path to an indexed VcfMap.\n");
-    fprintf(stderr, "         ChainMap options (one of -c and -C must be set to perform lift-over using a ChainMap):\n");
-    fprintf(stderr, "           -c string If -C is not specified, build a ChainMap from a chain file.\n");
-    fprintf(stderr, "           -C string Path to an indexed ChainMap.\n");
-    fprintf(stderr, "           -G INT    Number of allowed CIGAR changes for one alingment. [10]\n");
-    fprintf(stderr, "\n");
-    fprintf(stderr, "         Commit/defer rule options:\n");
-    fprintf(stderr, "           Example: `-S mapq,aln_score -M 20 -A 20` commits MQ>=20 and AS>=20 alignments.\n");
-    fprintf(stderr, "           -S string Split the aligned reads with an indicator. Options: mapq, aln_score, isize, clipped_frac. [none]\n");
-    fprintf(stderr, "           -M int    Min MAPQ to commit (pre-liftover; must with `-S mapq`). [10]\n");
-    fprintf(stderr, "           -A int    Min AS:i to commit (pre-liftover; must with `-S aln_score`). [100]\n");
-    fprintf(stderr, "           -Z int    Max TLEN/isize to commit (post-liftover; must with `-S isize`). [1000]\n");
-    fprintf(stderr, "           -L float  Min fraction of clipped to commit (post-liftover; must with `-S aln_score`). [0.95]\n");
-    fprintf(stderr, "\n");
-    fprintf(stderr, "         The options for serialize can also be used here, if -v/-c is set.\n");
-    fprintf(stderr, "\n");
+    std::cerr << "\n";
+    std::cerr << "Perform efficient lift-over using levioSAM.\n";
+    std::cerr << "Usage:   leviosam lift [options] {-v <vcf> | -l <vcfmap> | -c <chain> | -C <chainmap>}\n";
+    std::cerr << "Options:\n";
+    std::cerr << "         -a string Path to the SAM/BAM file to be lifted. \n";
+    std::cerr << "                   Leave empty or set to \"-\" to read from stdin.\n";
+    std::cerr << "         -t INT    Number of threads used. [1] \n";
+    std::cerr << "         -T INT    Chunk size for each thread. [256] \n";
+    std::cerr << "                   Each thread queries <-T> reads, lifts, and writes.\n";
+    std::cerr << "                   Setting a higher <-T> uses slightly more memory but might benefit thread scaling.\n";
+    std::cerr << "         -m        add MD and NM to output alignment records (requires -f option)\n";
+    std::cerr << "         -f string Fasta reference that corresponds to input SAM/BAM (for use w/ -m option)\n";
+    std::cerr << "\n";
+    std::cerr << "         VcfMap options (one of -v or -l must be set to perform lift-over using a VcfMap):\n";
+    std::cerr << "           -v string If -l is not specified, can build indexes using a VCF file.\n";
+    std::cerr << "           -l string Path to an indexed VcfMap.\n";
+    std::cerr << "         ChainMap options (one of -c and -C must be set to perform lift-over using a ChainMap):\n";
+    std::cerr << "           -c string If -C is not specified, build a ChainMap from a chain file.\n";
+    std::cerr << "           -C string Path to an indexed ChainMap.\n";
+    std::cerr << "           -G INT    Number of allowed CIGAR changes for one alingment. [10]\n";
+    std::cerr << "\n";
+    std::cerr << "         Commit/defer rule options:\n";
+    std::cerr << "           Example: `-S mapq,aln_score -M 20 -A 20` commits MQ>=20 and AS>=20 alignments.\n";
+    std::cerr << "           -S string Split the aligned reads with an indicator. Options: mapq, aln_score, isize, clipped_frac. [none]\n";
+    std::cerr << "           -M int    Min MAPQ to commit (pre-liftover; must with `-S mapq`). [10]\n";
+    std::cerr << "           -A int    Min AS:i to commit (pre-liftover; must with `-S aln_score`). [100]\n";
+    std::cerr << "           -Z int    Max TLEN/isize to commit (post-liftover; must with `-S isize`). [1000]\n";
+    std::cerr << "           -L float  Min fraction of clipped to commit (post-liftover; must with `-S aln_score`). [0.95]\n";
+    std::cerr << "\n";
+    std::cerr << "         The options for serialize can also be used here, if -v/-c is set.\n";
+    std::cerr << "\n";
 }
 
 void print_main_help_msg(){
-    fprintf(stderr, "\n");
-    fprintf(stderr, "Program: leviosam (lifting over alignments)\n");
-    fprintf(stderr, "Version: %s\n", VERSION);
-    fprintf(stderr, "Usage:   leviosam <command> [options]\n\n");
-    fprintf(stderr, "Commands:index       Index a lift-over map (`serialize` also works).\n");
-    fprintf(stderr, "         lift        Lift alignments.\n");
-    fprintf(stderr, "Options: -h          Print detailed usage.\n");
-    fprintf(stderr, "         -V          Verbose level [0].\n");
-    fprintf(stderr, "\n");
+    std::cerr << "\n";
+    std::cerr << "Program: leviosam (lifting over alignments)\n";
+    std::cerr << "Version: " << VERSION << "\n";
+    std::cerr << "Usage:   leviosam <command> [options]\n\n";
+    std::cerr << "Commands:index       Index a lift-over map (`serialize` also works).\n";
+    std::cerr << "         lift        Lift alignments.\n";
+    std::cerr << "Options: -h          Print detailed usage.\n";
+    std::cerr << "         -V          Verbose level [0].\n";
+    std::cerr << "\n";
 }
 
 int main(int argc, char** argv) {
@@ -555,14 +555,17 @@ int main(int argc, char** argv) {
     }
 
     if (args.split_mode != "") {
-        std::vector<std::string> split_options {"lifted", "mapq", "clipped_frac", "isize", "aln_score"};
-        std::vector<std::string> sm = LevioSamUtils::split_str(args.split_mode, ",");
+        // std::vector<std::string> split_options {"lifted", "mapq", "clipped_frac", "isize", "aln_score"};
+        std::vector<std::string> sm = LevioSamUtils::str_to_vector(args.split_mode, ",");
         for (auto& m: sm) {
-            auto cnt = std::count(split_options.begin(), split_options.end(), m);
+            auto cnt = std::count(
+                LevioSamUtils::DEFER_OPT.begin(),
+                LevioSamUtils::DEFER_OPT.end(),
+                m);
             if (cnt != 1) {
                 std::cerr << "[E::main] " << m << " is not a valid filtering option\n";
                 std::cerr << "Valid options:\n";
-                for (auto& opt: split_options) {
+                for (auto& opt: LevioSamUtils::DEFER_OPT) {
                     std::cerr << " - " << opt << "\n";
                 }
                 exit(1);
