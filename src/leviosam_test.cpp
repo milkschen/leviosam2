@@ -1,8 +1,9 @@
 #include <iostream>
 #include <unistd.h>
 #include <string>
-#include "leviosam.hpp"
 #include "chain.hpp"
+#include "leviosam.hpp"
+#include "leviosam_utils.hpp"
 #include "htslib/sam.h"
 #include "gtest/gtest.h"
 #include "bed.hpp"
@@ -271,7 +272,7 @@ TEST(LiftMap, SimpleSplicedBamCigarLift) {
 
 
 /* Chain tests */
-TEST(ChainMap, SimpleRankAndLift) {
+TEST(ChainTest, SimpleRankAndLift) {
     std::vector<std::pair<std::string, int32_t>> lm;
     lm.push_back(std::make_pair("chr1", 248387328));
     chain::ChainMap cmap ("small.chain", 0, 0, lm);
@@ -292,7 +293,7 @@ TEST(ChainMap, SimpleRankAndLift) {
 }
 
 
-TEST(ChainMap, ParseChainLineCornerZero) {
+TEST(ChainTest, ParseChainLineCornerZero) {
     std::string hdr = "chain 5 corner_zero 28 + 0 28 corner_zero_dest 300 + 100 130 0";
     std::string line1 = "20\t0\t2\n";
     std::string line2 = "8\n";
@@ -327,7 +328,7 @@ TEST(ChainMap, ParseChainLineCornerZero) {
 }
 
 
-TEST(ChainMap, LiftInReversedRegion) {
+TEST(ChainTest, LiftInReversedRegion) {
     std::vector<std::pair<std::string, int32_t>> lm;
     lm.push_back(std::make_pair("chr1", 248387497));
     chain::ChainMap cmap ("chr1_reversed_region.chain", 0, 0, lm);
@@ -348,7 +349,7 @@ TEST(ChainMap, LiftInReversedRegion) {
 }
 
 
-TEST(ChainMap, LiftBamInReversedRegion) {
+TEST(ChainTest, LiftBamInReversedRegion) {
     samFile* gold_fp = sam_open("HG002-0.3x-bwa-grch37-chr1_rev.sam", "r");
     sam_hdr_t* hdr_gold = sam_hdr_read(gold_fp);
     bam1_t* aln_gold = bam_init1();
@@ -387,7 +388,56 @@ TEST(ChainMap, LiftBamInReversedRegion) {
 }
 
 
-TEST(ChainMap, LiftCigar) {
+TEST(ChainTest, LiftCigarCoreOneRun) {
+    std::vector<uint32_t> new_cigar;
+    int query_offset = 0;
+    int tmp_gap = 0;
+    uint32_t qlen = 252;
+    chain::ChainMap cmap;
+    std::queue<std::tuple<int32_t, int32_t>> bp;
+    bp.push(std::make_tuple(195, -18));
+    bp.push(std::make_tuple(217, -2));
+
+    cmap.lift_cigar_core_one_run(
+        new_cigar, bp, 200, BAM_CMATCH,
+        qlen, tmp_gap, query_offset);
+    EXPECT_EQ(tmp_gap, 13);
+    cmap.lift_cigar_core_one_run(
+        new_cigar, bp, 5, BAM_CINS,
+        qlen, tmp_gap, query_offset);
+    EXPECT_EQ(tmp_gap, 15);
+    cmap.lift_cigar_core_one_run(
+        new_cigar, bp, 47, BAM_CMATCH,
+        qlen, tmp_gap, query_offset);
+    EXPECT_EQ(tmp_gap, 0);
+    LevioSamUtils::debug_print_cigar(new_cigar.data(), new_cigar.size());
+    EXPECT_EQ(bam_cigar_oplen(new_cigar[0]), 195);
+    EXPECT_EQ(bam_cigar_op(new_cigar[0]), BAM_CMATCH);
+    EXPECT_EQ(bam_cigar_oplen(new_cigar[1]), 25);
+    EXPECT_EQ(bam_cigar_op(new_cigar[1]), BAM_CINS);
+    EXPECT_EQ(bam_cigar_oplen(new_cigar[2]), 32);
+    EXPECT_EQ(bam_cigar_op(new_cigar[2]), BAM_CMATCH);
+}
+
+
+TEST(ChainTest, PushCigar) {
+    std::vector<uint32_t> cigar1;
+    chain::push_cigar(cigar1, 2, BAM_CMATCH, false);
+    chain::push_cigar(cigar1, 1, BAM_CMATCH, false);
+    EXPECT_EQ(cigar1.size(), 1);
+    EXPECT_EQ(bam_cigar_oplen(cigar1.back()), 3);
+    EXPECT_EQ(bam_cigar_op(cigar1.back()), BAM_CMATCH);
+
+    std::vector<uint32_t> cigar2;
+    chain::push_cigar(cigar2, 1, BAM_CINS, false);
+    chain::push_cigar(cigar2, 1, BAM_CDEL, false);
+    EXPECT_EQ(cigar2.size(), 1);
+    EXPECT_EQ(bam_cigar_oplen(cigar2.back()), 1);
+    EXPECT_EQ(bam_cigar_op(cigar2.back()), BAM_CMATCH);
+}
+
+
+TEST(ChainTest, LiftCigar) {
     std::vector<std::pair<std::string, int32_t>> lm;
     lm.push_back(std::make_pair("chr1", 248387328));
     chain::ChainMap cmap ("small.chain", 0, 0, lm);
@@ -474,7 +524,7 @@ TEST(HtslibTest, CigarOpType) {
 }
 
 
-TEST(BedMap, AddBedRecord) {
+TEST(BedTest, AddBedRecord) {
     auto b = BedUtils::Bed();
     b.add_interval("chr1	972	1052");
     b.add_interval("chr1	1053	1085");
@@ -505,6 +555,14 @@ TEST(BedMap, AddBedRecord) {
     EXPECT_EQ(b.intersect("chr15", 1000), 0);
 }
 
+
+TEST(UtilsTest, StrToSet) {
+    std::set<std::string> s = LevioSamUtils::str_to_set("a,b", ",");
+    EXPECT_EQ(s.size(), 2);
+    ASSERT_NE(s.find("a"), s.end());
+    ASSERT_NE(s.find("b"), s.end());
+    EXPECT_EQ(s.find("c"), s.end());
+}
 
 int main(int argc, char **argv){
     testing::InitGoogleTest(&argc, argv);

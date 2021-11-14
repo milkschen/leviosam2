@@ -73,9 +73,6 @@ class ChainMap {
 
         std::string lift_contig(std::string contig, size_t pos);
         std::string lift_contig(const Interval &intvl);
-        void push_cigar(
-            std::vector<uint32_t> &cigar, uint32_t len, uint16_t op,
-            const bool no_reduct);
         void lift_cigar(const std::string &contig, bam1_t* aln);
         void lift_cigar(
             const std::string &contig, bam1_t* aln,
@@ -84,6 +81,15 @@ class ChainMap {
         std::vector<uint32_t> lift_cigar_core(
             const std::string &contig, bam1_t* aln, int num_clipped,
             const int start_sidx, const int end_sidx
+        );
+        void lift_cigar_core_one_run(
+            std::vector<uint32_t> &new_cigar,
+            std::queue<std::tuple<int32_t, int32_t>> &break_points,
+            uint32_t cigar_op_len,
+            unsigned int cigar_op,
+            const uint32_t qlen,
+            int &tmp_gap,
+            int &query_offset
         );
 
         void lift_pos(
@@ -121,16 +127,6 @@ class ChainMap {
 
     private:
         void init_rs();
-        void lift_cigar_core_one_run(
-            bam1_t* aln,
-            std::vector<uint32_t> &new_cigar,
-            std::queue<std::tuple<int32_t, int32_t>> &break_points,
-            uint32_t cigar_op_len,
-            unsigned int cigar_op,
-            const uint32_t qlen,
-            int &tmp_gap,
-            int &query_offset
-        );
         void update_flag_unmap(bam1_t* aln, const bool first_seg);
 
         const int verbose;
@@ -141,6 +137,10 @@ class ChainMap {
         SdRank1Map start_rs1_map;
         SdRank1Map end_rs1_map;
 
+        std::queue<std::tuple<int32_t, int32_t>> get_bp(
+            const std::string &contig, const bam1_core_t* const c,
+            const int &start_sidx, const int &end_sidx);
+
         // Debug functions
         void debug_print_interval_queries(
             const bool first_seg, const bool leftmost,
@@ -148,6 +148,11 @@ class ChainMap {
             const int32_t sidx, const int32_t eidx
         );
 };
+
+void push_cigar(std::vector<uint32_t> &cigar, uint32_t len,
+                uint16_t op, const bool no_reduct);
+void pop_cigar(std::vector<uint32_t> &cigar, uint32_t size);
+
 
 };
 
