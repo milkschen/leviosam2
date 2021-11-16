@@ -8,6 +8,13 @@
 #include "gtest/gtest.h"
 #include "bed.hpp"
 
+
+size_t kstr_get_m(size_t var) {
+    size_t lvar = (size_t)exp2(ceil(log2(var)));
+    return lvar;
+}
+
+
 //
 // bit_vector tests
 //
@@ -410,7 +417,7 @@ TEST(ChainTest, LiftCigarCoreOneRun) {
         new_cigar, bp, 47, BAM_CMATCH,
         qlen, tmp_gap, query_offset);
     EXPECT_EQ(tmp_gap, 0);
-    LevioSamUtils::debug_print_cigar(new_cigar.data(), new_cigar.size());
+    // LevioSamUtils::debug_print_cigar(new_cigar.data(), new_cigar.size());
     EXPECT_EQ(bam_cigar_oplen(new_cigar[0]), 195);
     EXPECT_EQ(bam_cigar_op(new_cigar[0]), BAM_CMATCH);
     EXPECT_EQ(bam_cigar_oplen(new_cigar[1]), 25);
@@ -437,62 +444,189 @@ TEST(ChainTest, PushCigar) {
 }
 
 
-TEST(ChainTest, LiftCigar) {
+TEST(ChainTest, SClipCigarFront1) {
+    // 5M -> 3S2M
+    std::vector<uint32_t> cigar;
+    chain::push_cigar(cigar, 5, BAM_CMATCH, false);
+    std::vector<uint32_t> new_cigar;
+    int idx = 0, q = 0;
+    chain::sclip_cigar_front(&cigar[0], cigar.size(), 3, new_cigar, idx, q);
+    EXPECT_EQ(new_cigar.size(), 1);
+    EXPECT_EQ(bam_cigar_oplen(new_cigar[0]), 3);
+    EXPECT_EQ(bam_cigar_op(new_cigar[0]), BAM_CSOFT_CLIP);
+    EXPECT_EQ(idx, 0);
+    EXPECT_EQ(q, 3);
+}
+
+
+TEST(ChainTest, SClipCigarFront2) {
+    // 4S2M -> 5S1M
+    std::vector<uint32_t> cigar;
+    chain::push_cigar(cigar, 4, BAM_CSOFT_CLIP, false);
+    chain::push_cigar(cigar, 2, BAM_CMATCH, false);
+    std::vector<uint32_t> new_cigar;
+    int idx = 0, q = 0;
+    chain::sclip_cigar_front(&cigar[0], cigar.size(), 5, new_cigar, idx, q);
+    EXPECT_EQ(new_cigar.size(), 1);
+    EXPECT_EQ(bam_cigar_oplen(new_cigar[0]), 5);
+    EXPECT_EQ(bam_cigar_op(new_cigar[0]), BAM_CSOFT_CLIP);
+    EXPECT_EQ(idx, 1);
+    EXPECT_EQ(q, 5);
+}
+
+
+TEST(ChainTest, SClipCigarBack) {
+    std::vector<uint32_t> cigar1;
+    chain::push_cigar(cigar1, 5, BAM_CMATCH, false);
+    std::vector<uint32_t> new_cigar1;
+}
+
+
+TEST(ChainTest, LiftCigar1) {
     std::vector<std::pair<std::string, int32_t>> lm;
     lm.push_back(std::make_pair("chr1", 248387328));
     chain::ChainMap cmap ("small.chain", 0, 0, lm);
-    samFile* sam_fp = sam_open("chain_cigar.sam", "r");
-    sam_hdr_t* sam_hdr = sam_hdr_read(sam_fp);
+    std::string hdr_str = "@HD	VN:1.0	SO:unsorted\n@SQ	SN:chr1	LN:248956422";
+    sam_hdr_t* sam_hdr = sam_hdr_parse(hdr_str.length(), &hdr_str[0]);
     bam1_t* aln = bam_init1();
     int err;
     size_t x;
     uint32_t* test_cigar;
-    // Note: can use the helper function to print out CIGAR results
-    // chain::debug_print_cigar(bam_get_cigar(aln), aln->core.n_cigar);
 
     // CIGAR should not change
-    err = sam_read1(sam_fp, sam_hdr, aln);
-    cmap.lift_cigar(sam_hdr->target_name[aln->core.tid], aln);
+    kstring_t str;
+    std::string record = "unchanged	0	chr1	674850	42	7M13D13M	*	0	0	CAGTTTGTAGTATCTGCAAG	~~~~~~~~~~~~~~~~~~~~";
+    str.s = (char*) record.c_str();
+    str.l = record.length();
+    str.m = kstr_get_m(str.l);
+    err = sam_parse1(&str, sam_hdr, aln);
+    EXPECT_EQ(err, 0);
+    err = cmap.lift_cigar(sam_hdr->target_name[aln->core.tid], aln);
+    EXPECT_EQ(err, 0);
     test_cigar = bam_get_cigar(aln);
+    // Note: can use the helper function to print out CIGAR results
+    // LevioSamUtils::debug_print_cigar(bam_get_cigar(aln), aln->core.n_cigar);
     EXPECT_EQ(aln->core.n_cigar, 3);
     EXPECT_EQ(test_cigar[0], bam_cigar_gen( 7, BAM_CMATCH));
     EXPECT_EQ(test_cigar[1], bam_cigar_gen( 13, BAM_CDEL));
     EXPECT_EQ(test_cigar[2], bam_cigar_gen( 13, BAM_CMATCH));
+}
+
+
+TEST(ChainTest, LiftCigar2) {
+    std::vector<std::pair<std::string, int32_t>> lm;
+    lm.push_back(std::make_pair("chr1", 248387328));
+    chain::ChainMap cmap ("small.chain", 0, 0, lm);
+    std::string hdr_str = "@HD	VN:1.0	SO:unsorted\n@SQ	SN:chr1	LN:248956422";
+    sam_hdr_t* sam_hdr = sam_hdr_parse(hdr_str.length(), &hdr_str[0]);
+    bam1_t* aln = bam_init1();
+    int err;
+    size_t x;
+    uint32_t* test_cigar;
 
     // Add 3 BAM_CSOFT_CLIPs in the beginning
-    err = sam_read1(sam_fp, sam_hdr, aln);
+    kstring_t str;
+    std::string record = "16M_3S13M	0	chr1	687455	42	16M	*	0	0	ATTACATTCCATTCCA	~~~~~~~~~~~~~~~~";
+    str.s = (char*) record.c_str();
+    str.l = record.length();
+    str.m = kstr_get_m(str.l);
+    err = sam_parse1(&str, sam_hdr, aln);
     EXPECT_EQ(err, 0);
-    cmap.lift_cigar(sam_hdr->target_name[aln->core.tid], aln);
+    err = cmap.lift_cigar(sam_hdr->target_name[aln->core.tid], aln);
+    EXPECT_EQ(err, 0);
     test_cigar = bam_get_cigar(aln);
     EXPECT_EQ(aln->core.n_cigar, 2);
     EXPECT_EQ(test_cigar[0], bam_cigar_gen( 3, BAM_CSOFT_CLIP));
     EXPECT_EQ(test_cigar[1], bam_cigar_gen( 13, BAM_CMATCH));
-    
+}
+
+
+TEST(ChainTest, LiftCigar3) {
+    std::vector<std::pair<std::string, int32_t>> lm;
+    lm.push_back(std::make_pair("chr1", 248387328));
+    chain::ChainMap cmap ("small.chain", 0, 0, lm);
+    std::string hdr_str = "@HD	VN:1.0	SO:unsorted\n@SQ	SN:chr1	LN:248956422";
+    sam_hdr_t* sam_hdr = sam_hdr_parse(hdr_str.length(), &hdr_str[0]);
+    bam1_t* aln = bam_init1();
+    int err;
+    size_t x;
+    uint32_t* test_cigar;
+
     // Add 2 BAM_CINSs in the middle
-    err = sam_read1(sam_fp, sam_hdr, aln);
+    kstring_t str;
+    std::string record = "16M_10M2I4M	0	chr1	674141	42	16M	*	0	0	ATTACATTCCATTCCA	~~~~~~~~~~~~~~~~";
+    str.s = (char*) record.c_str();
+    str.l = record.length();
+    str.m = kstr_get_m(str.l);
+    err = sam_parse1(&str, sam_hdr, aln);
     EXPECT_EQ(err, 0);
-    cmap.lift_cigar(sam_hdr->target_name[aln->core.tid], aln);
+    err = cmap.lift_cigar(sam_hdr->target_name[aln->core.tid], aln);
+    EXPECT_EQ(err, 0);
     test_cigar = bam_get_cigar(aln);
+    // Note: can use the helper function to print out CIGAR results
+    // LevioSamUtils::debug_print_cigar(bam_get_cigar(aln), aln->core.n_cigar);
     EXPECT_EQ(aln->core.n_cigar, 3);
     EXPECT_EQ(test_cigar[0], bam_cigar_gen( 10, BAM_CMATCH));
     EXPECT_EQ(test_cigar[1], bam_cigar_gen( 2, BAM_CINS));
     EXPECT_EQ(test_cigar[2], bam_cigar_gen( 4, BAM_CMATCH));
-    
+}
+
+
+TEST(ChainTest, LiftCigar4) {
+    std::vector<std::pair<std::string, int32_t>> lm;
+    lm.push_back(std::make_pair("chr1", 248387328));
+    chain::ChainMap cmap ("small.chain", 0, 0, lm);
+    std::string hdr_str = "@HD	VN:1.0	SO:unsorted\n@SQ	SN:chr1	LN:248956422";
+    sam_hdr_t* sam_hdr = sam_hdr_parse(hdr_str.length(), &hdr_str[0]);
+    bam1_t* aln = bam_init1();
+    int err;
+    size_t x;
+    uint32_t* test_cigar;
+
     // Add 3 BAM_CDELs in the middle
-    err = sam_read1(sam_fp, sam_hdr, aln);
+    kstring_t str;
+    std::string record = "16M_10M3D6M	0	chr1	674820	42	16M	*	0	0	ATTACATTCCATTCCA	~~~~~~~~~~~~~~~~";
+    str.s = (char*) record.c_str();
+    str.l = record.length();
+    str.m = kstr_get_m(str.l);
+    err = sam_parse1(&str, sam_hdr, aln);
     EXPECT_EQ(err, 0);
-    cmap.lift_cigar(sam_hdr->target_name[aln->core.tid], aln);
+    err = cmap.lift_cigar(sam_hdr->target_name[aln->core.tid], aln);
+    EXPECT_EQ(err, 0);
     test_cigar = bam_get_cigar(aln);
+    // Note: can use the helper function to print out CIGAR results
+    // LevioSamUtils::debug_print_cigar(bam_get_cigar(aln), aln->core.n_cigar);
     EXPECT_EQ(aln->core.n_cigar, 3);
     EXPECT_EQ(test_cigar[0], bam_cigar_gen( 10, BAM_CMATCH));
     EXPECT_EQ(test_cigar[1], bam_cigar_gen( 3, BAM_CDEL));
     EXPECT_EQ(test_cigar[2], bam_cigar_gen( 6, BAM_CMATCH));
+}
+
+
+TEST(ChainTest, LiftCigar5) {
+    std::vector<std::pair<std::string, int32_t>> lm;
+    lm.push_back(std::make_pair("chr1", 248387328));
+    chain::ChainMap cmap ("small.chain", 0, 0, lm);
+    std::string hdr_str = "@HD	VN:1.0	SO:unsorted\n@SQ	SN:chr1	LN:248956422";
+    sam_hdr_t* sam_hdr = sam_hdr_parse(hdr_str.length(), &hdr_str[0]);
+    bam1_t* aln = bam_init1();
+    int err;
+    size_t x;
+    uint32_t* test_cigar;
 
     // Add 3 BAM_CSOFT_CLIPs in the beginning (secondary alignment)
-    err = sam_read1(sam_fp, sam_hdr, aln);
+    kstring_t str;
+    std::string record = "16M_3S13M	256	chr1	687455	42	16M	*	0	0	*	*";
+    str.s = (char*) record.c_str();
+    str.l = record.length();
+    str.m = kstr_get_m(str.l);
+    err = sam_parse1(&str, sam_hdr, aln);
     EXPECT_EQ(err, 0);
-    cmap.lift_cigar(sam_hdr->target_name[aln->core.tid], aln);
+    err = cmap.lift_cigar(sam_hdr->target_name[aln->core.tid], aln);
+    EXPECT_EQ(err, 0);
     test_cigar = bam_get_cigar(aln);
+    // Note: can use the helper function to print out CIGAR results
+    // LevioSamUtils::debug_print_cigar(bam_get_cigar(aln), aln->core.n_cigar);
     EXPECT_EQ(aln->core.n_cigar, 2);
     EXPECT_EQ(test_cigar[0], bam_cigar_gen( 3, BAM_CSOFT_CLIP));
     EXPECT_EQ(test_cigar[1], bam_cigar_gen( 13, BAM_CMATCH));

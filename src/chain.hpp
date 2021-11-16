@@ -73,14 +73,16 @@ class ChainMap {
 
         std::string lift_contig(std::string contig, size_t pos);
         std::string lift_contig(const Interval &intvl);
-        void lift_cigar(const std::string &contig, bam1_t* aln);
-        void lift_cigar(
+        int lift_cigar(const std::string &contig, bam1_t* aln);
+        int lift_cigar(
             const std::string &contig, bam1_t* aln,
-            int start_sidx, int end_sidx, int num_clipped
+            const int &start_sidx, const int &end_sidx,
+            int num_sclip_start, int num_sclip_end
         );
         std::vector<uint32_t> lift_cigar_core(
-            const std::string &contig, bam1_t* aln, int num_clipped,
-            const int start_sidx, const int end_sidx
+            const std::string &contig, bam1_t* aln,
+            const int &start_sidx, const int &end_sidx,
+            const int &num_sclip_start, const int &num_sclip_end
         );
         void lift_cigar_core_one_run(
             std::vector<uint32_t> &new_cigar,
@@ -152,7 +154,11 @@ class ChainMap {
 void push_cigar(std::vector<uint32_t> &cigar, uint32_t len,
                 uint16_t op, const bool no_reduct);
 void pop_cigar(std::vector<uint32_t> &cigar, uint32_t size);
-
+void sclip_cigar_front(
+    uint32_t* cigar, const uint32_t &n_cigar, int len_clip,
+    std::vector<uint32_t> &new_cigar, int &idx, int &query_offset);
+void sclip_cigar_back(
+    std::vector<uint32_t> &new_cigar, int len_clip);
 
 };
 
