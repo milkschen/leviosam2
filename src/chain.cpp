@@ -765,11 +765,16 @@ int32_t ChainMap::get_num_clipped(
     int32_t num_clipped = 0;
     if ((sidx <= -1) || (eidx <= -1)) {
         return -1;
-    } else if (sidx < interval_map[contig].size() - 1) {
+    } else {
+    //} else if (sidx < interval_map[contig].size() - 1) {
         if (sidx == eidx) {
             // Advance sidx if we are checking the starting pos of a query
             // Keep sidx unchanged if we are checking the ending pos
             if (leftmost) {
+                // If pos is at the left of the rightmost interval, it's not valid
+                if (sidx < interval_map[contig].size() - 1) {
+                    return -1;
+                }
                 auto next_intvl = interval_map[contig][sidx+1];
                 num_clipped = std::abs(pos - next_intvl.source_start);
                 // TODO
@@ -789,8 +794,10 @@ int32_t ChainMap::get_num_clipped(
             }
         } else if (interval_map[contig][sidx].target != interval_map[contig][eidx].target) {
             if (verbose >= VERBOSE_INFO)
-                std::cerr << "Mismatched target contig : " << interval_map[contig][sidx].target <<
-                             " and " << interval_map[contig][eidx].target << "\nSet to unmapped.\n";
+                std::cerr << "[I::chain::get_num_clipped] Mismatched target contig : " <<
+                             interval_map[contig][sidx].target <<
+                             " and " << interval_map[contig][eidx].target <<
+                             "\nSet to unmapped.\n";
             return -1;
         } else {
             return 0;
@@ -832,11 +839,11 @@ bool ChainMap::lift_segment(
     //
     // sidx might be advanced here
     auto num_sclip_start = get_num_clipped(
-        pos, false, source_contig, start_sidx, start_eidx);
+        pos, true, source_contig, start_sidx, start_eidx);
     if (verbose > 1) {
         std::cerr << "\n" << bam_get_qname(aln) << "\n";
         debug_print_interval_queries(
-            first_seg, false, source_contig, pos, start_sidx, start_eidx);
+            first_seg, true, source_contig, pos, start_sidx, start_eidx);
     }
     if (num_sclip_start < 0 || num_sclip_start > allowed_cigar_changes) {
         return false;
@@ -877,12 +884,16 @@ bool ChainMap::lift_segment(
     if (first_seg) {
         num_sclip_end = get_num_clipped(
             pos_end, false, source_contig, end_sidx, end_eidx);
-        if (num_sclip_end < 0)
+        if (num_sclip_end < 0) {
+            if (verbose >= VERBOSE_INFO) {
+                std::cerr << "[I::chain::lift_segment] Set " << bam_get_qname(aln) << 
+                             " to unmapped b/c of invalid num_sclip_end\n";
+            }
             return false;
+        }
         int num_sclip = num_sclip_start + num_sclip_end;
         if (num_sclip_end < 0 || // invalid query
             num_sclip > allowed_cigar_changes // || // #SCLIP must <= `allowed_cigar_changes`
-            // num_sclip > bam_cigar2qlen(aln->core.n_cigar, bam_get_cigar(aln)) // #SCLIP must > QLEN
         ) {
             if (verbose >= VERBOSE_DEBUG) {
                 std::cerr << bam_get_qname(aln) << "\n";
@@ -1483,9 +1494,10 @@ void ChainMap::debug_print_interval_queries(
     }
     std::cerr << "  Source: " << contig << ":" << pos << "\n";
     std::cerr << "  Queried interval indexes:\n";
-    std::cerr << "    start: " << sidx << "\n    ";
+    std::cerr << "    start: " << sidx << " ";
     interval_map[contig][sidx].debug_print_interval();
-    std::cerr << "    end  : " << eidx << "\n";
+    std::cerr << "    end  : " << eidx << " ";
+    interval_map[contig][eidx].debug_print_interval();
 }
 
 }
