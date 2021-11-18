@@ -78,8 +78,6 @@ void Interval::load(std::istream& in) {
     source_start = load_source_start;
     source_end = load_source_end;
     strand = load_strand;
-    // std::cerr << "target=" << target << "\noffset=" << offset <<
-    //     "\n(start, end, strand)=(" << source_start << "," << source_end << "," << strand << ")\n";
 }
 
 
@@ -374,11 +372,16 @@ void ChainMap::update_flag_unmap(bam1_t* aln, const bool first_seg) {
         c->flag &= ~BAM_FPROPER_PAIR;
         c->flag &= ~BAM_FREVERSE;
         // c->qual = 0;
+        c->pos = -1;
+        c->tid = -1;
     } else {
         c->flag |= BAM_FMUNMAP;
         c->flag &= ~BAM_FPROPER_PAIR;
         c->flag &= ~BAM_FMREVERSE;
     }
+    // Remove the secondary/supplementary annotation if unmapped
+    c->flag &= ~BAM_FSECONDARY;
+    c->flag &= ~BAM_FSUPPLEMENTARY;
 }
 
 
@@ -431,10 +434,14 @@ int ChainMap::lift_cigar(
         aln->core.l_qseq < (num_sclip_start + num_sclip_end)){
         return -1;
     }
-    // If POS is inside an interval, `num_sclip_start` <= 0
-    if ((num_sclip_start <= 0) && (start_sidx == end_sidx)) {
+    // If the read sits perfectly inside an interval, just copy the cigar values
+    // (or reverse if in an inversed region):
+    //  - no sidx diff
+    //  - neither sclip values are positive
+    if ((num_sclip_start <= 0) && 
+        (num_sclip_end <= 0) &&
+        (start_sidx == end_sidx)) {
         uint32_t* cigar = bam_get_cigar(aln);
-        // If in a reversed interval, reverse CIGAR
         if (!interval_map[contig][start_sidx].strand) {
             std::vector<uint32_t> new_cigar;
             for (int i = 0; i < aln->core.n_cigar; i++)
@@ -449,6 +456,20 @@ int ChainMap::lift_cigar(
     auto new_cigar = lift_cigar_core(
         contig, aln, start_sidx, end_sidx,
         num_sclip_start, num_sclip_end);
+
+    // There must be >=1 M/I/D/N OPs in the CIGAR, otherwise it's not valid
+    bool contain_midn = false;
+    for (auto& cg: new_cigar) {
+        if (bam_cigar_op(cg) == BAM_CMATCH ||
+            bam_cigar_op(cg) == BAM_CINS ||
+            bam_cigar_op(cg) == BAM_CDEL ||
+            bam_cigar_op(cg) == BAM_CREF_SKIP) {
+            contain_midn = true;
+            break;
+        }
+    }
+    if (!contain_midn)
+        return -1;
 
     LevioSamUtils::update_cigar(aln, new_cigar);
     return 0;
@@ -467,7 +488,6 @@ void ChainMap::lift_cigar_core_one_run(
     int &query_offset
 ) {
     int second_half_len = 0;
-    // bam1_core_t* c = &(aln->core);
     // If CIGAR op doesn't consume QUERY, just copy it to `new_cigar`
     if (!(bam_cigar_type(cigar_op) & 1)) {
         push_cigar(new_cigar, cigar_op_len, cigar_op, false);
@@ -488,7 +508,7 @@ void ChainMap::lift_cigar_core_one_run(
         if (verbose >= VERBOSE_DEV) {
             if (tmp_gap != 0)
                 std::cerr << "  tmp_gap = " << tmp_gap << "\n";
-            std::cerr << "  next_bp =" << next_bp << ", next_q_offset =" << next_q_offset << "\n";
+            std::cerr << "  next_bp = " << next_bp << ", next_q_offset = " << next_q_offset << "\n";
             std::cerr << "  original CIGAR = " << cigar_op_len << bam_cigar_opchr(cigar_op) << "\n";
             if (next_q_offset <= next_bp)
                 std::cerr << "  have not reach next_bp: " << cigar_op_len << bam_cigar_opchr(cigar_op) << "\n";
@@ -509,8 +529,7 @@ void ChainMap::lift_cigar_core_one_run(
                 }
                 int32_t diff = std::get<1>(break_points.front());
                 if (verbose >= VERBOSE_DEV) {
-                    std::cerr << "  first half: " << first_half_len << bam_cigar_opchr(cigar_op) << "\n";
-                    std::cerr << "  query offset = " << query_offset << "\n";
+                    std::cerr << "  first half: " << first_half_len << bam_cigar_opchr(cigar_op) << " (query_offset -> " << query_offset << ")\n";
                     if (diff > 0)
                         std::cerr << "  update liftover CDEL: " << diff << bam_cigar_opchr(BAM_CDEL) << "\n";
                     else if (diff < 0)
@@ -573,7 +592,7 @@ void ChainMap::lift_cigar_core_one_run(
         if (tmp_gap != 0)
             std::cerr << "  tmp_gap = " << tmp_gap << "\n";
         if (second_half_len > 0) {
-            std::cerr << second_half_len << bam_cigar_opchr(cigar_op) << "\n";
+            std::cerr << "  second_half: " << second_half_len << bam_cigar_opchr(cigar_op) << "\n";
         }
         std::cerr << "  query_offset -> " << query_offset << "\n";
     }
@@ -595,24 +614,23 @@ std::vector<uint32_t> ChainMap::lift_cigar_core(
     // c->l_qseq is someimes zero, e.g secondary alignments
     // We can calculate the actual value by parsing its CIGAR
     uint32_t qlen = (c->l_qseq > 0)?
-        c->l_qseq : bam_cigar2qlen(aln->core.n_cigar, cigar);;
+        c->l_qseq : bam_cigar2qlen(aln->core.n_cigar, cigar);
     if (qlen == 0) {
         std::vector<uint32_t> new_cigar(cigar, cigar + c->n_cigar);
         return new_cigar;
     }
 
-    if (verbose >= VERBOSE_INFO) {
+    if (verbose >= VERBOSE_DEBUG) {
         std::cerr << "  num_sclip_start = " << num_sclip_start << "\n";
         std::cerr << "  num_sclip_end = " << num_sclip_end << "\n";
         std::cerr << "    start " << start_sidx << ", pend " << end_sidx << "\n";
-        std::cerr << "* old: ";
+        std::cerr << "  * old: ";
         for (int i = 0; i < aln->core.n_cigar; i++){
             auto cigar_op_len = bam_cigar_oplen(cigar[i]);
             auto cigar_op = bam_cigar_op(cigar[i]);
             std::cerr << cigar_op_len << bam_cigar_opchr(cigar_op);
         }
-        std::cerr << "\n";
-        std::cerr << "pos: " << c->pos << "\n";
+        std::cerr << "\n  pos: " << c->pos << "\n";
     }
 
     auto break_points = get_bp(contig, c, start_sidx, end_sidx);
@@ -620,8 +638,16 @@ std::vector<uint32_t> ChainMap::lift_cigar_core(
     std::vector<uint32_t> new_cigar;
     // Number of bases that need to be clipped in next iterations
     int query_offset = 0;
-    int tmp_gap = 0;
     int idx = 0;
+    // The position of a SAM record starts from the first non-clipped base,
+    // so we don't update the first "S" run
+    if (bam_cigar_op(cigar[0]) == BAM_CSOFT_CLIP) {
+        idx += 1;
+        auto cigar_op_len = bam_cigar_oplen(cigar[0]);
+        push_cigar(new_cigar, cigar_op_len, BAM_CSOFT_CLIP, false);
+    }
+
+    int tmp_gap = 0;
     // We first handle soft clipped bases
     if (num_sclip_start > 0) {
         sclip_cigar_front(
@@ -635,8 +661,7 @@ std::vector<uint32_t> ChainMap::lift_cigar_core(
             std::cerr << "\nOP=" << bam_cigar_opchr(cigar[i]) << ", OP_LEN=" << cigar_op_len << "\n";
         }
         if (start_sidx == end_sidx) {
-            // If within one interval, update CIGAR and
-            // jump to the next CIGAR operator
+            // If within one interval, update CIGAR and jump to the next CIGAR operator
             push_cigar(new_cigar, cigar_op_len, cigar_op, false);
         } else {
             // Lift one cigar run
@@ -650,16 +675,12 @@ std::vector<uint32_t> ChainMap::lift_cigar_core(
     // returned, we need to truncate them from the end to make sure
     // CIGAR is valid (bam_cigar2qlen == l_qseq)
     if (tmp_gap > 0) {
-        // if (verbose >= VERBOSE_DEBUG)
-        //     LevioSamUtils::debug_print_cigar(&new_cigar[0], new_cigar.size());
         pop_cigar(new_cigar, tmp_gap);
     }
 
     // Clip from back
     if (num_sclip_end > 0) {
-        // LevioSamUtils::debug_print_cigar(&new_cigar[0], new_cigar.size());
         sclip_cigar_back(new_cigar, num_sclip_end);
-        // LevioSamUtils::debug_print_cigar(&new_cigar[0], new_cigar.size());
     }
 
     // If there's an "I" in the front or back, replace it with "S"
@@ -673,9 +694,11 @@ std::vector<uint32_t> ChainMap::lift_cigar_core(
             l, BAM_CSOFT_CLIP);
     }
 
+    // Reverse CIGAR
     if (!interval_map[contig][start_sidx].strand) {
         std::reverse(new_cigar.begin(), new_cigar.end());
     }
+
     if (verbose >= VERBOSE_DEBUG) {
         std::cerr << "  len(new_cigar) = " << new_cigar.size() << "\n";
         LevioSamUtils::debug_print_cigar(&new_cigar[0], new_cigar.size());
@@ -741,21 +764,36 @@ int32_t ChainMap::get_num_clipped(
 ) {
     int32_t num_clipped = 0;
     if ((sidx <= -1) || (eidx <= -1)) {
-        num_clipped = -1;
-    } else if (sidx == eidx) {
-        if (sidx < interval_map[contig].size() - 1) {
+        return -1;
+    } else if (sidx < interval_map[contig].size() - 1) {
+        if (sidx == eidx) {
             // Advance sidx if we are checking the starting pos of a query
             // Keep sidx unchanged if we are checking the ending pos
             if (leftmost) {
                 auto next_intvl = interval_map[contig][sidx+1];
                 num_clipped = std::abs(pos - next_intvl.source_start);
+                // TODO
+                if (!next_intvl.strand)
+                    num_clipped += 1;
+                // END TODO
                 sidx += 1;
             } else {
                 auto curr_intvl = interval_map[contig][sidx];
+                // TODO - source_end is an open interval end point
+                // num_clipped = std::abs(pos - curr_intvl.source_end) + 1;
                 num_clipped = std::abs(pos - curr_intvl.source_end);
+                if (curr_intvl.strand)
+                    num_clipped += 1;
+                // END TODO
+                // num_clipped = std::abs(pos - curr_intvl.source_end);
             }
+        } else if (interval_map[contig][sidx].target != interval_map[contig][eidx].target) {
+            if (verbose >= VERBOSE_INFO)
+                std::cerr << "Mismatched target contig : " << interval_map[contig][sidx].target <<
+                             " and " << interval_map[contig][eidx].target << "\nSet to unmapped.\n";
+            return -1;
         } else {
-            num_clipped = -1;
+            return 0;
         }
     }
     return num_clipped;
@@ -782,7 +820,6 @@ bool ChainMap::lift_segment(
 
     int start_sidx = 0;
     int start_eidx = 0;
-    bool leftmost = true;
     auto pos = (first_seg)? c->pos : c->mpos;
     std::string source_contig = (first_seg)?
         hdr_source->target_name[c->tid] : hdr_source->target_name[c->mtid];
@@ -790,16 +827,17 @@ bool ChainMap::lift_segment(
     // the segment is unliftable
     if (!update_interval_indexes(source_contig, pos, start_sidx, start_eidx))
         return false;
-    if (verbose > 1) {
-        debug_print_interval_queries(
-            first_seg, leftmost, source_contig, pos, start_sidx, start_eidx);
-    }
     // Set a segment as unliftable if the gap between it
     // and the nearby interval is too large
     //
     // sidx might be advanced here
     auto num_sclip_start = get_num_clipped(
-        pos, leftmost, source_contig, start_sidx, start_eidx);
+        pos, false, source_contig, start_sidx, start_eidx);
+    if (verbose > 1) {
+        std::cerr << "\n" << bam_get_qname(aln) << "\n";
+        debug_print_interval_queries(
+            first_seg, false, source_contig, pos, start_sidx, start_eidx);
+    }
     if (num_sclip_start < 0 || num_sclip_start > allowed_cigar_changes) {
         return false;
     }
@@ -830,24 +868,27 @@ bool ChainMap::lift_segment(
     if (!update_interval_indexes(source_contig, pos_end, end_sidx, end_eidx)){
         return false;
     }
-    if (verbose > 1) {
+    if (verbose >= VERBOSE_DEBUG) {
         debug_print_interval_queries(
-            first_seg, leftmost, source_contig, pos_end, end_sidx, end_eidx);
+            first_seg, false, source_contig, pos_end, end_sidx, end_eidx);
     }
 
     int num_sclip_end = 0;
-    leftmost = false;
     if (first_seg) {
         num_sclip_end = get_num_clipped(
-            pos_end, leftmost, source_contig, end_sidx, end_eidx);
-        if (num_sclip_end < 0 || // invalid query
-            num_sclip_end > allowed_cigar_changes ||
-            num_sclip_end + num_sclip_start > allowed_cigar_changes) {
+            pos_end, false, source_contig, end_sidx, end_eidx);
+        if (num_sclip_end < 0)
             return false;
-        }
-
-        if (num_sclip_end > 0 && verbose >= VERBOSE_DEBUG) {
-            std::cerr << bam_get_qname(aln) << " - num soft-clipped bases (end) = " << num_sclip_end << "\n";
+        int num_sclip = num_sclip_start + num_sclip_end;
+        if (num_sclip_end < 0 || // invalid query
+            num_sclip > allowed_cigar_changes // || // #SCLIP must <= `allowed_cigar_changes`
+            // num_sclip > bam_cigar2qlen(aln->core.n_cigar, bam_get_cigar(aln)) // #SCLIP must > QLEN
+        ) {
+            if (verbose >= VERBOSE_DEBUG) {
+                std::cerr << bam_get_qname(aln) << "\n";
+                std::cerr << "num_sclip_start = " << num_sclip_start << ", num_sclip_end = " << num_sclip_end << "\n";
+            }
+            return false;
         }
     }
 
@@ -857,26 +898,47 @@ bool ChainMap::lift_segment(
      *   (2) the total offset difference between the first and the last interval 
      * is greater than `allowed_cigar_changes`, mark the alignment as unliftable (return false).
      */
+    auto next_sintvl = interval_map[source_contig][end_sidx];
     if (start_sidx != end_sidx) {
         // Check the first and the last intervals
-        auto next_intvl = interval_map[source_contig][end_sidx];
-        if (std::abs(next_intvl.offset - start_sintvl.offset) > allowed_cigar_changes) {
+        if (next_sintvl.strand != start_sintvl.strand) {
+            if (verbose >= VERBOSE_INFO) {
+                std::cerr << "[I::chain::lift_segment] Set " << bam_get_qname(aln) << 
+                             " to unmapped b/c intervals mismatch in strandness\n";
+            }
+            return false;
+        }
+        if (std::abs(next_sintvl.offset - start_sintvl.offset) > allowed_cigar_changes) {
+            if (verbose >= VERBOSE_INFO) {
+                std::cerr << "[I::chain::lift_segment] Set " << bam_get_qname(aln) << 
+                             " to unmapped b/c chain gaps exceed allowed_cigar_changes\n";
+            }
             return false;
         }
         // Check all interval pairs
         for (auto j = start_sidx; j < end_sidx - 1; j ++) {
             if (std::abs(interval_map[source_contig][j+1].offset -
                          interval_map[source_contig][j].offset) > allowed_cigar_changes) {
+                if (verbose >= VERBOSE_INFO) {
+                    std::cerr << "[I::chain::lift_segment] Set " << bam_get_qname(aln) << 
+                                 " to unmapped b/c chain gaps exceed allowed_cigar_changes\n";
+                }
                 return false;
             }
         }
     }
 
     // Lift CIGAR
+    auto rlen = bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln));
     if (first_seg && lift_cigar(
         source_contig, aln, start_sidx, end_sidx,
-        num_sclip_start, num_sclip_end) != 0)
+        num_sclip_start, num_sclip_end) != 0) {
+        if (verbose >= VERBOSE_INFO) {
+            std::cerr << "[I::chain::lift_segment] Set " << bam_get_qname(aln) << 
+                         " to unmapped b/c of failure in lift_cigar\n";
+        }
         return false;
+    }
 
     // DEBUG
     uint32_t* cigar = bam_get_cigar(aln);
@@ -894,16 +956,36 @@ bool ChainMap::lift_segment(
     // Lift POS and MPOS
     // Updating positions affects the lift-over of other fields (e.g. CIGAR), so this has to be
     // performed in the end of the lift-over process.
-    lift_pos(aln, pos_end, start_sintvl, first_seg);
+    // TODO
+    if (start_sintvl.strand) {
+        lift_pos(aln, pos_end, start_sintvl, first_seg);
+        if (first_seg && num_sclip_start > 0)
+            c->pos += num_sclip_start;
+    } else {
+        lift_pos(aln, pos_end, next_sintvl, first_seg);
+        if (first_seg && num_sclip_end > 0)
+            c->pos += num_sclip_end;
+    }
+    // lift_pos(aln, pos_end, start_sintvl, first_seg);
 
     // There can be cases where a position is lifted to a negative value,
     // in which we set the read to unmapped.
-    // Only check POS if single-end
-    // if (c->pos < 0 || (c->flag & 1 && c->mpos < 0))
     if (c->pos < 0) {
+        std::cerr << "[W::chain::lift_segment] Read " << bam_get_qname(aln) << 
+                     " is lifted to a negative position (" << c->pos << 
+                     "). Set it to unmapped\n";
+        std::cerr << c->flag << "\n";
+        std::cerr << num_sclip_start << ", " << num_sclip_end << "\n";
+        LevioSamUtils::debug_print_cigar(cigar, c->n_cigar);
         c->pos = 0;
         return false;
     } else if (c->flag & BAM_FPAIRED && c->mpos < 0) {
+        std::cerr << "[W::chain::lift_segment] Read " << bam_get_qname(aln) << 
+                     " is lifted to a negative position (mate) (" << c->mpos <<
+                     "). Set it to unmapped\n";
+        std::cerr << c->flag << "\n";
+        std::cerr << num_sclip_start << ", " << num_sclip_end << "\n";
+        LevioSamUtils::debug_print_cigar(cigar, c->n_cigar);
         c->mpos = 0;
         return false;
     }
@@ -1286,11 +1368,10 @@ void sclip_cigar_front(
     uint32_t* cigar, const uint32_t &n_cigar, int len_clip,
     std::vector<uint32_t> &new_cigar, int &idx, int &query_offset
 ) {
-    // `len_clip` can be negative when there's no need to clip
-    if (len_clip <= 0)
+    if (len_clip == 0)
         return;
 
-    for (auto i = 0; i < n_cigar; i++){
+    for (auto i = idx; i < n_cigar; i++){
         auto cigar_op_len = bam_cigar_oplen(cigar[i]);
         auto cigar_op = bam_cigar_op(cigar[i]);
         // Only replace bases that consume the QUERY with the SOFT_CLIP ("S") operator
@@ -1323,12 +1404,11 @@ void sclip_cigar_front(
 void sclip_cigar_back(
     std::vector<uint32_t> &cigar, int len_clip
 ) {
-    // `len_clip` can be negative when there's no need to clip
-    if (len_clip <= 0)
+    if (len_clip == 0)
         return;
 
     int remaining_lc = len_clip;
-    for (auto i = cigar.size() - 1; i >= 0; i--){
+    for (int i = cigar.size() - 1; i >= 0; i--){
         auto cigar_op_len = bam_cigar_oplen(cigar[i]);
         auto cigar_op = bam_cigar_op(cigar[i]);
         cigar.pop_back();
@@ -1341,11 +1421,23 @@ void sclip_cigar_back(
                 push_cigar(cigar, cigar_op_len, cigar_op, false);
                 push_cigar(cigar, len_clip, BAM_CSOFT_CLIP, false);
                 return;
-            } else {
+            // TODO
+            } else if (cigar_op == BAM_CMATCH) {
+            // } else if (cigar_op == BAM_CMATCH || cigar_op == BAM_CSOFT_CLIP) {
                 // If a CIGAR OP is not long enough, shorten `remaining_lc`
                 // and proceed to an earlier OP
                 remaining_lc -= cigar_op_len;
+            } else if (cigar_op == BAM_CINS || cigar_op == BAM_CSOFT_CLIP) {
+            // } else if (cigar_op == BAM_CINS) {
+                len_clip += cigar_op_len;
+            } else {
+                std::cerr << "[W::chain::sclip_cigar_back] Unexpected OP during back_clipping: " << cigar_op << "\n";
             }
+            // } else {
+            //     // If a CIGAR OP is not long enough, shorten `remaining_lc`
+            //     // and proceed to an earlier OP
+            //     remaining_lc -= cigar_op_len;
+            // }
         }
     }
 }
@@ -1360,6 +1452,8 @@ std::queue<std::tuple<int32_t, int32_t>> ChainMap::get_bp(
         int bp = interval_map[contig][i].source_end - c->pos;
         int diff = interval_map[contig][i+1].offset -
                    interval_map[contig][i].offset;
+        if (interval_map[contig][i+1].target != interval_map[contig][i].target)
+            continue;
         if (bp > 0) {
             break_points.push(std::make_tuple(bp, diff));
             // DEBUG
@@ -1378,12 +1472,14 @@ void ChainMap::debug_print_interval_queries(
     const bool first_seg, const bool leftmost,
     const std::string contig, const int32_t pos,
     const int32_t sidx, const int32_t eidx) {
-    if (!leftmost)
-        std::cerr << "* Estimated ending position:\n";
     if (first_seg) {
-        std::cerr << "First segment\n";
+        std::cerr << "First segment ";
+        if (leftmost) std::cerr << "(start)\n";
+        else std::cerr << "(estimated end)\n";
     } else {
-        std::cerr << "Second segment\n";
+        std::cerr << "Second segment";
+        if (leftmost) std::cerr << "(start)\n";
+        else std::cerr << "(estimated end)\n";
     }
     std::cerr << "  Source: " << contig << ":" << pos << "\n";
     std::cerr << "  Queried interval indexes:\n";
