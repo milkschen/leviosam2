@@ -14,7 +14,8 @@
 #include <iostream>
 #include <stdio.h>
 #include <htslib/sam.h>
-#include "leviosam_utils.cpp"
+#include "collate.hpp"
+#include "leviosam_utils.hpp"
 #include "version.hpp"
 
 
