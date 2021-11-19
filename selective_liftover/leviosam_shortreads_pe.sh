@@ -1,3 +1,10 @@
+# LevioSAM pipeline to lift and re-align paired-end short reads
+#
+# Authors: Nae-Chyun Chen
+#
+# Distributed under the MIT license
+# https://github.com/alshai/levioSAM
+#
 set -xp
 
 ALN_RG=""
@@ -62,7 +69,7 @@ if [[ ! ${ALN} =~ ^(bowtie2|bwamem)$ ]]; then
 fi
 
 # Lifting over using leviosam
-if [ ! -f ${PFX}-committed.bam ]; then
+if [ ! -s ${PFX}-committed.bam ]; then
     if (( ${MEASURE_TIME} > 0)); then
         if [[ ${DEFERRED_DEST_BED} == "" ]]; then
             ${TIME} -v -o lift.time_log \
@@ -87,15 +94,17 @@ if [ ! -f ${PFX}-committed.bam ]; then
 fi
 
 # Collate
-if (( ${MEASURE_TIME} > 0)); then
-    ${TIME} -v -o collate.time_log \
+if [ ! -s ${PFX}-paired-deferred-R1.fq ]; then
+    if (( ${MEASURE_TIME} > 0)); then
+        ${TIME} -v -o collate.time_log \
+            ${LEVIOSAM} collate -a ${PFX}-committed.bam -b ${PFX}-deferred.bam -p ${PFX}-paired
+    else
         ${LEVIOSAM} collate -a ${PFX}-committed.bam -b ${PFX}-deferred.bam -p ${PFX}-paired
-else
-    ${LEVIOSAM} collate -a ${PFX}-committed.bam -b ${PFX}-deferred.bam -p ${PFX}-paired
+    fi
 fi
 
 # Re-align deferred reads
-if [ ! -f ${PFX}-paired-realigned.bam ]; then
+if [ ! -s ${PFX}-paired-realigned.bam ]; then
     if (( ${MEASURE_TIME} > 0)); then
         if [[ ${ALN} == "bowtie2" ]]; then
             ${TIME} -v -o aln_paired.time_log bowtie2 --local ${ALN_RG} -p ${THR} -x ${ALN_IDX} -1 ${PFX}-paired-deferred-R1.fq -2 ${PFX}-paired-deferred-R2.fq | samtools view -hb > ${PFX}-paired-realigned.bam
@@ -112,7 +121,7 @@ if [ ! -f ${PFX}-paired-realigned.bam ]; then
 fi
 
 # Merge and sort
-if [ ! -f ${PFX}-final.bam ]; then
+if [ ! -s ${PFX}-final.bam ]; then
     if (( ${MEASURE_TIME} > 0)); then
         ${TIME} -v -o merge.time_log \
             samtools cat -o ${PFX}-merged.bam ${PFX}-paired-committed.bam ${PFX}-paired-realigned.bam
