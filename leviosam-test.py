@@ -42,7 +42,7 @@ class SamProcessing(unittest.TestCase):
     def setUpClass(cls):
         for param in params:
             process = subprocess.Popen(
-                [LEVIOSAM, 
+                [LEVIOSAM,
                 'lift', '-l', param['lft'], '-a', param['sam'],
                 '-p', param['out_prefix'], '-O', 'bam'],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -123,13 +123,15 @@ class SamProcessing(unittest.TestCase):
                 stdout, stderr = process2.communicate()
                 self.assertNotIn(
                     'ERROR', stderr.decode(), msg='Check "No errors found"')
-                print('[PASSED] Picard AddOrReplaceReadGroups & ValidateSamFile')
+                print(f'[PASSED] Picard AddOrReplaceReadGroups & ValidateSamFile ({param["out_prefix"]}.bam)')
 
 
 BT2_PE_CHM13 = 'bt2-pe-chm13_v1.1_hg2y.bam'
 BT2_SE_CHM13 = 'bt2-se-chm13_v1.1_hg2y.bam'
 BWA_PE_CHM13 = 'bwa-pe-chm13_v1.1_hg2y.bam'
 BWA_SE_CHM13 = 'bwa-se-chm13_v1.1_hg2y.bam'
+MM2_HIFI_1 = 'mm2-test1.sam'
+MM2_HIFI_2 = 'mm2-test2.sam'
 CLFT_CHM13_TO_H38 = 'chm13_v1.1_hg2Y-grch38.clft'
 PE_CHAIN_TESTS = {BT2_PE_CHM13: BT2_PE_H38,
                   BWA_PE_CHM13: BWA_PE_H38}
@@ -158,7 +160,7 @@ class Chain(unittest.TestCase):
             lifted_pre = orig + '-lifted'
             lifted_fn = lifted_pre + '.bam'
             process = subprocess.Popen(
-                [LEVIOSAM, 
+                [LEVIOSAM,
                 'lift', '-C', CLFT_CHM13_TO_H38, '-a', orig,
                 '-p', lifted_pre, '-O', 'bam'],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -196,7 +198,7 @@ class Chain(unittest.TestCase):
             lifted_pre = orig + '-lifted'
             lifted_fn = lifted_pre + '.bam'
             process = subprocess.Popen(
-                [LEVIOSAM, 
+                [LEVIOSAM,
                 'lift', '-C', CLFT_CHM13_TO_H38, '-a', orig,
                 '-p', lifted_pre, '-O', 'bam'],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -217,6 +219,26 @@ class Chain(unittest.TestCase):
             cmd = f'rm {lifted_fn}'
             process_rm = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True)
             stdout, stderr = process_rm.communicate()
+
+    def test_validate_long_reads(self):
+        for fn in [MM2_HIFI_1, MM2_HIFI_2]:
+            process = subprocess.Popen(
+                [LEVIOSAM,
+                'lift', '-C', CLFT_CHM13_TO_H38, '-a', fn,
+                '-p', fn+'-lifted', '-O', 'bam'],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            stdout, stderr = process.communicate()
+            process2 = subprocess.Popen(
+                ['picard',
+                    f'ValidateSamFile I={fn}-lifted.bam MODE= VERBOSE'],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            stdout, stderr = process2.communicate()
+            self.assertNotIn(
+                'ERROR', stderr.decode(), msg='Check "No errors found"')
+            cmd = f'rm {fn}-lifted.bam'
+            process_rm = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True)
+            stdout, stderr = process_rm.communicate()
+            print(f'[PASSED] Picard ValidateSamFile ({fn})')
 
 
 if __name__ == '__main__':
