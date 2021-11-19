@@ -67,7 +67,7 @@ if [ ! -s ${PFX}-committed.bam ]; then
 fi
 
 # Convert deferred reads to FASTQ
-if [ ! -s ${PFX}-committed.fq ]; then
+if [ ! -s ${PFX}-deferred.fq ]; then
     samtools fastq ${PFX}-deferred.bam > ${PFX}-deferred.fq
 fi
 
