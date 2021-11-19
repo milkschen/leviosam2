@@ -74,7 +74,8 @@ include_directories(${CMAKE_INCLUDE_PATH})
 file(GLOB LIB_SOURCES   src/collate.cpp src/chain.cpp src/leviosam_utils.cpp src/bed.cpp
                         src/bam_md.c src/bam_aux.c)
 file(GLOB LIB_HEADERS   src/leviosam.hpp
-                        src/collate.hpp src/chain.hpp src/leviosam_utils.hpp src/bed.hpp)
+                        src/collate.hpp src/chain.hpp src/leviosam_utils.hpp src/bed.hpp
+                        src/bam.h src/IITree.h)
 add_library(lvsam ${LIB_SOURCES} ${LIB_HEADERS} )
 
 add_executable(leviosam src/leviosam.cpp )
