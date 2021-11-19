@@ -39,7 +39,7 @@ LevioSAM can perform lift-over using a VCF file as the lift-over map. Please vis
 
 Quick run:
 ```
-leviosam serialize -v <vcf> -s <sample_name> -p <output_prefix>
+leviosam index -v <vcf> -s <sample_name> -p <output_prefix>
 leviosam lift -a <sam> -l <lft> -p <output_prefix> -O bam
 ```
 The levioSAM VcfMap index will be saved to `<output_prefix>.lft`. The output will be saved to `<output_prefix>.bam`.
@@ -60,7 +60,7 @@ LevioSAM can also perform lift-over using a chain file as the lift-over map sinc
 
 Quick run:
 ```
-leviosam serialize -c a_to_b.chain -p a_to_b
+leviosam index -c a_to_b.chain -p a_to_b -F dest.fai
 leviosam lift -C a_to_b.clft -a aligned_to_a.bam -p lifted_from_a -O bam
 ```
 
