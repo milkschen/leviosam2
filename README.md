@@ -16,8 +16,8 @@ LevioSAM uses a VCF or a chain file to lift over alignments efficiently.
     - Position
     - Alignmant flag
     - CIGAR string
-    - MD:Z and NM:i tag
-    - paired read information
+    - Paired read information
+    - MD:Z and NM:i tag (optional)
 
 - Multithreading support
 
@@ -53,8 +53,6 @@ We provide more detailed instructions of how to use levioSAM in common variant-a
 
 
 ## Usage (ChainMap)
-
-_We haven't provided docker installations for the software supporting ChainMap (will come soon!). Please visit [the wiki page](https://github.com/alshai/levioSAM/wiki/Lift-over-using-a-chain-map) for more info regarding installation._
 
 LevioSAM can also perform lift-over using a chain file as the lift-over map since v0.5.0. Please visit the [ChainMap Usage Page](https://github.com/alshai/levioSAM/wiki/Lift-over-using-a-chain-map) for detailed instructions.
 
