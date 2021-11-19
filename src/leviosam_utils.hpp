@@ -64,9 +64,11 @@ public:
     bam1_t* aln = NULL;
 };
 
-robin_hood::unordered_map<std::string, FastqRecord> read_unpaired_fq(
+typedef robin_hood::unordered_map<std::string, FastqRecord> fastq_map;
+
+fastq_map read_unpaired_fq(
     const std::string& fq_fname);
-robin_hood::unordered_map<std::string, FastqRecord> read_deferred_bam(
+fastq_map read_deferred_bam(
     samFile* dsam_fp, samFile* out_dsam_fp, sam_hdr_t* hdr,
     std::ofstream& out_r1_fp, std::ofstream& out_r2_fp);
 

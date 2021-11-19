@@ -14,8 +14,6 @@
 
 namespace LevioSamUtils {
 
-typedef robin_hood::unordered_map<std::string, FastqRecord> fastq_map;
-
 void WriteDeferred::init(
     const std::string outpre, const std::string sm,
     const int mapq, const int isize,
