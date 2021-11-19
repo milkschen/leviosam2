@@ -380,8 +380,8 @@ void ChainMap::update_flag_unmap(bam1_t* aln, const bool first_seg) {
         c->flag &= ~BAM_FMREVERSE;
     }
     // Remove the secondary/supplementary annotation if unmapped
-    c->flag &= ~BAM_FSECONDARY;
-    c->flag &= ~BAM_FSUPPLEMENTARY;
+    // c->flag &= ~BAM_FSECONDARY;
+    // c->flag &= ~BAM_FSUPPLEMENTARY;
 }
 
 
