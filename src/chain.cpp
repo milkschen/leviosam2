@@ -845,7 +845,7 @@ bool ChainMap::lift_segment(
     // sidx might be advanced here
     auto num_sclip_start = get_num_clipped(
         pos, true, source_contig, start_sidx, start_eidx);
-    if (verbose > 1) {
+    if (verbose >= VERBOSE_DEBUG) {
         std::cerr << "\n" << bam_get_qname(aln) << "\n";
         debug_print_interval_queries(
             first_seg, true, source_contig, pos, start_sidx, start_eidx);
@@ -853,13 +853,13 @@ bool ChainMap::lift_segment(
     if (num_sclip_start < 0) {
         if (verbose >= VERBOSE_INFO) {
             std::cerr << "[I::chain::lift_segment] Set " << bam_get_qname(aln) << 
-                         " to unmapped - invalid num_sclip_start\n";
+                         " to unmapped -- invalid num_sclip_start\n";
         }
         return false;
     } else if (num_sclip_start > allowed_cigar_changes) {
         if (verbose >= VERBOSE_INFO) {
             std::cerr << "[I::chain::lift_segment] Set " << bam_get_qname(aln) << 
-                         " to unmapped - num_sclip_start > " << allowed_cigar_changes << "\n";
+                         " to unmapped -- num_sclip_start > " << allowed_cigar_changes << "\n";
         }
         return false;
     }
@@ -903,7 +903,7 @@ bool ChainMap::lift_segment(
         if (num_sclip_end < 0) {
             if (verbose >= VERBOSE_INFO) {
                 std::cerr << "[I::chain::lift_segment] Set " << bam_get_qname(aln) << 
-                             " to unmapped - invalid num_sclip_end\n";
+                             " to unmapped -- invalid num_sclip_end\n";
             }
             return false;
         }
@@ -911,33 +911,34 @@ bool ChainMap::lift_segment(
         if (num_sclip > allowed_cigar_changes) {
             if (verbose >= VERBOSE_INFO) {
                 std::cerr << "[I::chain::lift_segment] Set " << bam_get_qname(aln) << 
-                             " to unmapped - (num_sclip_start+num_sclip_end) > " <<
+                             " to unmapped -- (num_sclip_start+num_sclip_end) > " <<
                              allowed_cigar_changes << "\n";
             }
             return false;
         }
     }
 
+    auto next_sintvl = interval_map[source_contig][end_sidx];
     /* If an alignment is overlapped with multiple intervals, check the gap size between the 
      * intervals. If either
      *   (1) the offset difference between any adjacent interval pair 
      *   (2) the total offset difference between the first and the last interval 
      * is greater than `allowed_cigar_changes`, mark the alignment as unliftable (return false).
      */
-    auto next_sintvl = interval_map[source_contig][end_sidx];
     if (start_sidx != end_sidx) {
-        // Check the first and the last intervals
+        // Check the strand between the first and the last intervals
         if (next_sintvl.strand != start_sintvl.strand) {
             if (verbose >= VERBOSE_INFO) {
                 std::cerr << "[I::chain::lift_segment] Set " << bam_get_qname(aln) << 
-                             " to unmapped - intervals have diff strands\n";
+                             " to unmapped -- intervals have diff strands\n";
             }
             return false;
         }
+        // Check the gap between the first and the last intervals
         if (std::abs(next_sintvl.offset - start_sintvl.offset) > allowed_cigar_changes) {
             if (verbose >= VERBOSE_INFO) {
                 std::cerr << "[I::chain::lift_segment] Set " << bam_get_qname(aln) << 
-                             " to unmapped - num_sclip_start > " << allowed_cigar_changes << "\n";
+                             " to unmapped -- 1st-and-last chain gap > " << allowed_cigar_changes << "\n";
             }
             return false;
         }
@@ -947,7 +948,7 @@ bool ChainMap::lift_segment(
                          interval_map[source_contig][j].offset) > allowed_cigar_changes) {
                 if (verbose >= VERBOSE_INFO) {
                     std::cerr << "[I::chain::lift_segment] Set " << bam_get_qname(aln) << 
-                                 " to unmapped - >=1 chain gaps > " << allowed_cigar_changes << "\n";
+                                 " to unmapped -- >=1 chain gaps > " << allowed_cigar_changes << "\n";
                 }
                 return false;
             }
@@ -966,16 +967,15 @@ bool ChainMap::lift_segment(
         return false;
     }
 
-    // DEBUG
-    uint32_t* cigar = bam_get_cigar(aln);
     if (!(c->flag & BAM_FUNMAP) && !(c->flag & BAM_FSECONDARY) && !(c->flag & BAM_FSUPPLEMENTARY)) {
+        uint32_t* cigar = bam_get_cigar(aln);
         if (c->l_qseq != bam_cigar2qlen(aln->core.n_cigar, cigar)) {
-            std::cerr << bam_get_qname(aln) << "\n";
-            std::cerr << c->flag << "\n";
-            std::cerr << "c->l_qseq = " << c->l_qseq << "\n";
-            std::cerr << "bam_cigar2qlen = " << bam_cigar2qlen(aln->core.n_cigar, cigar) << "\n";
+            std::cerr << "[W::chain::lift_segment] Read " << bam_get_qname(aln) << " (flag=" << 
+                         c->flag << " has mismatched c->l_qseq (" << c->l_qseq << 
+                         ") and bam_cigar2qlen (" << bam_cigar2qlen(aln->core.n_cigar, cigar) << 
+                         "). This is not an expected behavior\n";
             LevioSamUtils::debug_print_cigar(cigar, c->n_cigar);
-            exit(1);
+            return false;
         }
     }
 
@@ -999,18 +999,18 @@ bool ChainMap::lift_segment(
                      " is lifted to a negative position (" << c->pos << 
                      "). Set it to unmapped\n";
         if (verbose >= VERBOSE_DEBUG) {
-            std::cerr << "flag=" << c->flag << "; num_sclip_start=" << num_sclip_start << ", num_sclip_end=" << num_sclip_end << "\n";
-            LevioSamUtils::debug_print_cigar(cigar, c->n_cigar);
+            std::cerr << "flag=" << c->flag << "; num_sclip_start=" << num_sclip_start <<
+                         ", num_sclip_end=" << num_sclip_end << "\n";
+            LevioSamUtils::debug_print_cigar(bam_get_cigar(aln), c->n_cigar);
         }
         c->pos = 0;
         return false;
     } else if ((c->flag & BAM_FPAIRED) && c->mpos < 0) {
-        std::cerr << "[W::chain::lift_segment] Read " << bam_get_qname(aln) << 
-                     " is lifted to a negative position (mate) (" << c->mpos <<
-                     "). Set it to unmapped\n";
-        if (verbose >= VERBOSE_DEBUG) {
-            std::cerr << "flag=" << c->flag << "; num_sclip_start=" << num_sclip_start << ", num_sclip_end=" << num_sclip_end << "\n";
-            LevioSamUtils::debug_print_cigar(cigar, c->n_cigar);
+        // Invalid mate positions can be benign since there's no CIGAR information to add
+        // SOFT_CLIP based in the beginning. We report these as INFO but not WARNING
+        if (verbose >= VERBOSE_INFO) {
+            std::cerr << "[I::chain::lift_segment] The mate of read " << bam_get_qname(aln) << 
+                         " is lifted to a negative position (" << c->mpos << ")\n";
         }
         c->mpos = 0;
         return false;
