@@ -53,7 +53,7 @@ endif()
 
 set(VERSION
 "#ifndef VERSION
-#define VERSION \"0.5.0-${GIT_REV}${GIT_DIFF}\"
+#define VERSION \"0.5.2-${GIT_REV}${GIT_DIFF}\"
 #endif
 "
 )
