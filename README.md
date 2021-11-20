@@ -4,9 +4,9 @@
 [![Anaconda-Server Badge](https://anaconda.org/bioconda/leviosam/badges/platforms.svg)](https://anaconda.org/bioconda/leviosam)
 [![Anaconda-Server Badge](https://anaconda.org/bioconda/leviosam/badges/downloads.svg)](https://anaconda.org/bioconda/leviosam)
 
-# levioSAM: efficient lift-over of alignments
+# levioSAM: accurate and efficient lift-over of alignments
 
-LevioSAM uses a VCF or a chain file to lift over alignments efficiently.
+LevioSAM lifts over alignments accurately and efficiently using a VCF or a chain file.
 
 ## Features
 
@@ -16,7 +16,7 @@ LevioSAM uses a VCF or a chain file to lift over alignments efficiently.
     - Position
     - Alignmant flag
     - CIGAR string
-    - Paired read information
+    - Mate read information
     - MD:Z and NM:i tag (optional)
 
 - Multithreading support
@@ -24,13 +24,20 @@ LevioSAM uses a VCF or a chain file to lift over alignments efficiently.
 
 ## Installation
 
-The easiest way to install levioSAM is by using [Conda](https://docs.conda.io/en/latest/):
+LevioSAM can be installed using:
+
+- [Conda](https://docs.conda.io/en/latest/) (please make sure the version number is specified)
 
 ```
-conda install -c conda-forge -c bioconda leviosam=0.5.0
+conda install -c conda-forge -c bioconda leviosam=0.5.1
 ```
 
-We support a variety of other methods for getting levioSAM to work, including Docker, CMake and Make. See [INSTALL.md](INSTALL.md)
+- [Docker](https://hub.docker.com/r/alshai/leviosam)
+```
+docker pull alshai/leviosam
+```
+
+- Built from source using CMake or Make. See [INSTALL.md](INSTALL.md) for details.
 
 
 ## Usage (VcfMap)
@@ -54,7 +61,7 @@ We provide more detailed instructions of how to use levioSAM in common variant-a
 
 ## Usage (ChainMap)
 
-LevioSAM can also perform lift-over using a chain file as the lift-over map since v0.5.0. Please visit the [ChainMap Usage Page](https://github.com/alshai/levioSAM/wiki/Lift-over-using-a-chain-map) for detailed instructions.
+LevioSAM can also perform lift-over using a chain file as the lift-over map since v0.5.0. Using ChainMap enables assembly-to-assembly lift-over and is usually faster. Please visit the [ChainMap Usage Page](https://github.com/alshai/levioSAM/wiki/Lift-over-using-a-chain-map) for detailed instructions.
 
 Quick run:
 ```
