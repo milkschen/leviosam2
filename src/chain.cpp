@@ -998,18 +998,20 @@ bool ChainMap::lift_segment(
         std::cerr << "[W::chain::lift_segment] Read " << bam_get_qname(aln) << 
                      " is lifted to a negative position (" << c->pos << 
                      "). Set it to unmapped\n";
-        std::cerr << c->flag << "\n";
-        std::cerr << num_sclip_start << ", " << num_sclip_end << "\n";
-        LevioSamUtils::debug_print_cigar(cigar, c->n_cigar);
+        if (verbose >= VERBOSE_DEBUG) {
+            std::cerr << "flag=" << c->flag << "; num_sclip_start=" << num_sclip_start << ", num_sclip_end=" << num_sclip_end << "\n";
+            LevioSamUtils::debug_print_cigar(cigar, c->n_cigar);
+        }
         c->pos = 0;
         return false;
-    } else if (c->flag & BAM_FPAIRED && c->mpos < 0) {
+    } else if ((c->flag & BAM_FPAIRED) && c->mpos < 0) {
         std::cerr << "[W::chain::lift_segment] Read " << bam_get_qname(aln) << 
                      " is lifted to a negative position (mate) (" << c->mpos <<
                      "). Set it to unmapped\n";
-        std::cerr << c->flag << "\n";
-        std::cerr << num_sclip_start << ", " << num_sclip_end << "\n";
-        LevioSamUtils::debug_print_cigar(cigar, c->n_cigar);
+        if (verbose >= VERBOSE_DEBUG) {
+            std::cerr << "flag=" << c->flag << "; num_sclip_start=" << num_sclip_start << ", num_sclip_end=" << num_sclip_end << "\n";
+            LevioSamUtils::debug_print_cigar(cigar, c->n_cigar);
+        }
         c->mpos = 0;
         return false;
     }
