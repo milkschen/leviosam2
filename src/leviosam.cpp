@@ -19,6 +19,7 @@
 #include <htslib/kstring.h>
 #include "collate.hpp"
 #include "leviosam.hpp"
+#include "lift_bed.hpp"
 
 KSEQ_INIT(gzFile, gzread)
 ;;
@@ -397,6 +398,8 @@ int main(int argc, char** argv) {
     // argument set
     if (!strcmp(argv[optind], "collate")) {
         return collate_run(argc, argv);
+    } else if (!strcmp(argv[optind], "bed")) {
+        return lift_bed_run(argc, argv);
     }
 
     double start_cputime = std::clock();
