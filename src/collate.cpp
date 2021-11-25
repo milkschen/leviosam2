@@ -19,26 +19,11 @@
 #include "version.hpp"
 
 
-struct collate_opts {
-    std::string cmd = "";
-    std::string sam_fname = "";
-    std::string deferred_sam_fname = "";
-    std::string outpre = "";
-    std::string fq_fname = "";
-
-    // Non-arguments
-    std::string out_deferred_sam_fname = "";
-    std::string out_committed_sam_fname = "";
-    std::string out_r1_fname = "";
-    std::string out_r2_fname = "";
-};
-
-
-void print_help_msg() {
+void print_collate_help_msg() {
     fprintf(stderr, "\n");
     fprintf(stderr, "Collate alignments to make sure reads are paired\n");
     fprintf(stderr, "Version: %s\n", VERSION);
-    fprintf(stderr, "Usage:   collate [options] -a <bam> {-b <bam> | -q <fastq>} -o <prefix>\n\n");
+    fprintf(stderr, "Usage:   leviosam collate [options] -a <bam> {-b <bam> | -q <fastq>} -p <prefix>\n\n");
     fprintf(stderr, "Inputs:  -a string   Path to the input SAM/BAM.\n");
     fprintf(stderr, "         -b string   Path to the input deferred SAM/BAM.\n");
     fprintf(stderr, "         -q string   Path to the input singleton FASTQ.\n");
@@ -168,7 +153,7 @@ int collate_run(int argc, char** argv) {
     while((c = getopt_long(argc, argv, "ha:b:p:q:V:", long_options, &long_index)) != -1) {
         switch (c) {
             case 'h':
-                print_help_msg();
+                print_collate_help_msg();
                 exit(0);
             case 'a':
                 args.sam_fname = optarg;
@@ -190,12 +175,12 @@ int collate_run(int argc, char** argv) {
     if (args.sam_fname == "" || args.outpre == "" ||
         (args.fq_fname == "" && args.deferred_sam_fname == "")) {
         std::cerr << "Error: required argument missed.\n";
-        print_help_msg();
+        print_collate_help_msg();
         exit(1);
     }
     if (args.fq_fname != "" && args.deferred_sam_fname != "") {
         std::cerr << "Error: only one of `-q` and `-b` can be set.\n";
-        print_help_msg();
+        print_collate_help_msg();
         exit(1);
     }
 

@@ -11,6 +11,24 @@
  */
 #ifndef COLLATE_HPP
 #define COLLATE_HPP
+#include <string>
+
+
+struct collate_opts {
+    std::string cmd = "";
+    std::string sam_fname = "";
+    std::string deferred_sam_fname = "";
+    std::string outpre = "";
+    std::string fq_fname = "";
+
+    // Non-arguments
+    std::string out_deferred_sam_fname = "";
+    std::string out_committed_sam_fname = "";
+    std::string out_r1_fname = "";
+    std::string out_r2_fname = "";
+};
+
+void print_collate_help_msg();
 
 int collate_run(int argc, char** argv);
 

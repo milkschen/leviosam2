@@ -412,10 +412,10 @@ std::vector<std::string> str_to_vector(
     const std::string str, const std::string regex_str
 ) {
     std::regex regexz(regex_str);
-    std::vector<std::string> list(
+    std::vector<std::string> vec(
         std::sregex_token_iterator(str.begin(), str.end(), regexz, -1),
         std::sregex_token_iterator());
-    return list;
+    return vec;
 }
 
 std::set<std::string> str_to_set(
