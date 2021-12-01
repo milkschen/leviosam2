@@ -1,49 +1,77 @@
-CHAIN="/home/cnaechy1/data_blangme2/fasta/chain/hg19ToHg38.over.chain"
-SOURCE_REF="/home/cnaechy1/data_blangme2/fasta/grch37/hg19.fa"
-DEST_REF="/home/cnaechy1/data_blangme2/fasta/grch38/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna"
-PFX="hg19ToHg38"
-SOURCE_HIGHMAP="hg19-k100_e0.01-high.bed"
-SOURCE_LOWMAP="hg19-k100_e0.01-low.bed"
-SOURCE_TO_DEST_LOWMAP="hg19_to_h38-k100_e0.01-low.bed"
-DEST_HIGHMAP="grch38-k100_e0.01-high.bed"
+# Generate genomic annotations with low-liftability for a pair-wise whole genome alignment
+#
+# Author: Nae-Chyun Chen (2021)
+#
 
-DIR_LEVIOSAM="."
+set -xp 
+
+CHAIN="/home/cnaechy1/data_blangme2/fasta/chain/chm13_v1.1_hg2Y-grch38.chain"
+SOURCE_REF="/home/cnaechy1/data_blangme2/fasta/chm13_v1.1-hg2Y/chm13.v1.1-hg002_Y.fasta"
+DEST_REF="/home/cnaechy1/data_blangme2/fasta/grch38/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna"
+SOURCE_LABEL="chm13_v1.1_hg2Y"
+DEST_LABEL="grch38"
+PFX="${SOURCE_LABEL}-${DEST_LABEL}"
+
+K="100"
+E="0.01"
+L="0.98"
+
+SOURCE_BG="/home/cnaechy1/data_blangme2/fasta/chm13_v1.1-hg2Y/chm13.v1.1-hg002_Y_${K}_${E}_10_1.0.bedgraph"
+DEST_BG="/home/cnaechy1/data_blangme2/fasta/grch38/GCA_000001405.15_GRCh38_no_alt_analysis_set_100_0.01_10_1.0.bedgraph"
+
+SOURCE_HIGHMAP="${SOURCE_LABEL}-k${K}_e${E}-high.bed"
+SOURCE_LOWMAP="${SOURCE_LABEL}-k${K}_e${E}-low.bed"
+SOURCE_TO_DEST_HIGHMAP="${SOURCE_LABEL}_to_${DEST_LABEL}-k${K}_e${E}-high.bed"
+DEST_HIGHMAP="${DEST_LABEL}-k${K}_e${E}-high.bed"
+DEST_LOWMAP="${DEST_LABEL}-k${K}_e${E}-low.bed"
+
+DIR_LEVIOSAM="/home/cnaechy1/data_blangme2/naechyun/levioSAM/"
 UCSC_LIFTOVER="/home/cnaechy1/data_blangme2/naechyun/software/ucsc_utilities/liftOver"
 
 # Get low-identity chain segments
-python ${DIR_LEVIOSAM}/scripts/verbosify_chain.py -c ${CHAIN} -o ${PFX}.verbose.chain \
-    -b ${PFX} -s ${PFX}.summary -f1 ${SOURCE_REF} -f2 ${DEST_REF}
-python ${DIR_LEVIOSAM}/scripts/get_low_identity_regions.py -s ${PFX}.summary \
-    -l 0.98 -o ${PFX}.identity_lt98.hg38.bed
+if [ ! -s ${PFX}.summary ]; then
+    python ${DIR_LEVIOSAM}/scripts/verbosify_chain.py -c ${CHAIN} -o ${PFX}.verbose.chain \
+        -b ${PFX} -s ${PFX}.summary -f1 ${SOURCE_REF} -f2 ${DEST_REF}
+fi
+if [ ! -s ${PFX}-identity_lt${L}-${DEST_LABEL}.bed ]; then
+    python ${DIR_LEVIOSAM}/scripts/get_low_identity_regions.py -s ${PFX}.summary \
+        -l ${L} -o ${PFX}-identity_lt${L}-${DEST_LABEL}.bed
+fi
 
 
 # Calculate mappability annotations
 # genmap2 has not been released
-# genmap2 -k 100 -e 0.01 -s 10 -bg ${SOURCE_REF} # hg19.fa -> hg19_100_0.01_10_1.0.bedgraph
-# genmap2 -k 100 -e 0.01 -s 10 -bg ${DEST_REF}
+# genmap2 -k ${K} -e ${E} -s 10 -bg ${SOURCE_REF} # hg19.fa -> hg19_${K}_${E}_10_1.0.bedgraph
+# genmap2 -k ${K} -e ${E} -s 10 -bg ${DEST_REF}
 
-if [ ! -f ${SOURCE_REF}.fai ]; then
-    samtools faidx ${SOURCE_REF}
+if [ ! -s ${SOURCE_HIGHMAP} ]; then
+    python ${DIR_LEVIOSAM}/scripts/get_mappable_regions.py -b ${SOURCE_BG} -k ${K} -o ${SOURCE_HIGHMAP}
 fi
-python ${DIR_LEVIOSAM}/scripts/fai_to_bed.py -f ${SOURCE_REF}.fai -o ${SOURCE_REF}.fai.bed
+if [ ! -s ${SOURCE_TO_DEST_HIGHMAP} ]; then
+    ${UCSC_LIFTOVER} ${SOURCE_HIGHMAP} ${CHAIN} ${SOURCE_TO_DEST_HIGHMAP} ${SOURCE_TO_DEST_HIGHMAP}.unmapped
+fi
 
-SOURCE_BG="/home/cnaechy1/data_blangme2/fasta/grch37/hg19_100_0.01_10_1.0.bedgraph"
-python ${DIR_LEVIOSAM}/scripts/get_mappable_regions.py -b ${SOURCE_BG} -k 100 -o ${SOURCE_HIGHMAP}
-bedtools subtract -a ${SOURCE_REF}.fai.bed -b ${SOURCE_HIGHMAP} > ${SOURCE_LOWMAP}
-${UCSC_LIFTOVER} ${SOURCE_LOWMAP} ${CHAIN} ${SOURCE_TO_DEST_LOWMAP} ${SOURCE_TO_DEST_LOWMAP}.unmapped
+if [ ! -s ${DEST_HIGHMAP} ]; then
+    python ${DIR_LEVIOSAM}/scripts/get_mappable_regions.py -b ${DEST_BG} -k ${K} -o ${DEST_HIGHMAP}
+fi
 
-DEST_BG="/home/cnaechy1/data_blangme2/fasta/grch38/GCA_000001405.15_GRCh38_no_alt_analysis_set_100_0.01_10_1.0.bedgraph"
-python ${DIR_LEVIOSAM}/scripts/get_mappable_regions.py -b ${DEST_BG} -k 100 -o ${DEST_HIGHMAP}
+if [ ! -s ${DEST_REF}.fai ]; then
+    samtools faidx ${DEST_REF}
+fi
+if [ ! -s ${DEST_LOWMAP} ]; then
+    python ${DIR_LEVIOSAM}/scripts/fai_to_bed.py -f ${DEST_REF}.fai -o ${DEST_REF}.fai.bed
+    bedtools subtract -a ${DEST_REF}.fai.bed -b ${DEST_HIGHMAP} > ${DEST_LOWMAP}
+fi
 
-# Low-mappability in SOURCE; high-mappability in DEST
-bedtools intersect -a ${SOURCE_TO_DEST_LOWMAP} -b ${DEST_HIGHMAP} > k100_e0.01-hg19_lowmap-grch38_highmap-grch38.bed
+# Low-mappability in DEST; high-mappability in SOURCE
+# This is wrt the DEST coordinates
+if [ ! -s k${K}_e${E}-${SOURCE_LABEL}_highmap-${DEST_LABEL}_lowmap-${DEST_LABEL}.bed ]; then
+    bedtools intersect -a ${SOURCE_TO_DEST_HIGHMAP} -b ${DEST_LOWMAP} > k${K}_e${E}-${SOURCE_LABEL}_highmap-${DEST_LABEL}_lowmap-${DEST_LABEL}.bed
+fi
 
 
 # Merge low-identity and mappability-reduced BED files
-if [ ! -f ${DEST_REF}.fai ]; then
-    samtools faidx ${DEST_REF}
-fi
-cat ${PFX}.identity_lt98.hg38.bed k100_e0.01-hg19_lowmap-grch38_highmap-grch38.bed |\
-    bedtools intersect -a stdin -b ${DEST_REF}.fai |\
+cat ${PFX}-identity_lt${L}-${DEST_LABEL}.bed k${K}_e${E}-${SOURCE_LABEL}_highmap-${DEST_LABEL}_lowmap-${DEST_LABEL}.bed |\
+    bedtools intersect -a stdin -b ${DEST_REF}.fai.bed |\
     bedtools sort -i stdin |\
-    bedtools merge -i stdin > hg19-grch38-lt98-map_reduction_k100_e0.01-merged.bed
+    bedtools merge -i stdin > ${SOURCE_LABEL}-${DEST_LABEL}-lt${L}-map_reduction_k${K}_e${E}.bed
