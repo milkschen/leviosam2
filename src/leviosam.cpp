@@ -91,7 +91,7 @@ void read_and_lift(
     sam_hdr_t* hdr_source,
     sam_hdr_t* hdr_dest,
     int chunk_size,
-    const std::map<std::string, std::string> &ref_dict,
+    const std::map<std::string, std::string>* ref_dict,
     int md_flag,
     LevioSamUtils::WriteDeferred* wd
 ){
@@ -132,7 +132,7 @@ void read_and_lift(
                     std::string dest_contig(hdr_dest->target_name[aln_vec[i]->core.tid]);
                     // change ref if needed
                     if (dest_contig != current_contig) {
-                        ref = ref_dict.at(dest_contig);
+                        ref = ref_dict->at(dest_contig);
                         current_contig = dest_contig;
                     }
                     bam_fillmd1(aln_vec[i], ref.data(), md_flag, 1);
@@ -283,14 +283,14 @@ void lift_run(lift_opts args) {
                 &lift_map,
                 &mutex_fread, &mutex_fwrite,
                 sam_fp, out_sam_fp, hdr_orig, hdr, args.chunk_size,
-                ref_dict, args.md_flag, &wd));
+                &ref_dict, args.md_flag, &wd));
         } else {
             threads.push_back(std::thread(
                 read_and_lift<chain::ChainMap>,
                 &chain_map,
                 &mutex_fread, &mutex_fwrite,
                 sam_fp, out_sam_fp, hdr_orig, hdr, args.chunk_size,
-                ref_dict, args.md_flag, &wd));
+                &ref_dict, args.md_flag, &wd));
         }
     }
     for (int j = 0; j < args.threads; j++){
