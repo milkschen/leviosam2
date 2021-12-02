@@ -131,12 +131,9 @@ fi
 # Merge and sort
 if [ ! -s ${PFX}-final.bam ]; then
     if (( ${MEASURE_TIME} > 0)); then
-        ${TIME} -v -o merge.time_log \
-            samtools cat -o ${PFX}-merged.bam ${PFX}-paired-committed.bam ${PFX}-paired-realigned.bam
-        ${TIME} -v -o sort_all.time_log \
-            samtools sort -@ ${THR} -o ${PFX}-final.bam ${PFX}-merged.bam
+        ${TIME} -v -o merge_and_sort.time_log \
+            samtools cat ${PFX}-paired-committed.bam ${PFX}-paired-realigned.bam | samtools sort -@ ${THR} -o ${PFX}-final.bam
     else
-        samtools cat -o ${PFX}-merged.bam ${PFX}-paired-committed.bam ${PFX}-paired-realigned.bam
-        samtools sort -@ ${THR} -o ${PFX}-final.bam ${PFX}-merged.bam
+        samtools cat ${PFX}-paired-committed.bam ${PFX}-paired-realigned.bam | samtools sort -@ ${THR} -o ${PFX}-final.bam
     fi
 fi
