@@ -1,8 +1,9 @@
 /*
  * collate.cpp
  *
- * The `leviosam collate` program that makes sure a split paired-end
- * BAM file is properly paired
+ * The `leviosam collate` program that collates a pair of BAM files that are originally split
+ * from a paired-end BAM file (example use case: a BAM is split using a MAPQ cutoff). The
+ * resulting pair of files will be properly paired
  *
  * Authors: Nae-Chyun Chen
  *
@@ -15,6 +16,7 @@
 #include <stdio.h>
 #include <htslib/sam.h>
 #include "collate.hpp"
+#include "gzstream.h"
 #include "leviosam_utils.hpp"
 #include "version.hpp"
 
@@ -27,7 +29,7 @@ void print_collate_help_msg() {
     fprintf(stderr, "Inputs:  -a string   Path to the input SAM/BAM.\n");
     fprintf(stderr, "         -b string   Path to the input deferred SAM/BAM.\n");
     fprintf(stderr, "         -q string   Path to the input singleton FASTQ.\n");
-    fprintf(stderr, "         -p string   Prefix to the output files (1 BAM, a pair of FASTQs).\n");
+    fprintf(stderr, "         -p string   Prefix to the output files (1 BAM and a pair of gzipped FASTQs).\n");
     fprintf(stderr, "Options: -h          Print detailed usage.\n");
     fprintf(stderr, "         -V INT      Verbose level [0].\n");
     fprintf(stderr, "\n");
@@ -40,16 +42,16 @@ void collate_core(
     bam_hdr_t* dhdr,
     samFile* csam_fp, samFile* out_csam_fp,
     samFile* out_dsam_fp,
-    std::ofstream& out_r1_fp, std::ofstream& out_r2_fp
+    ogzstream& out_r1_fp, ogzstream& out_r2_fp
 ) {
     bam1_t* aln = bam_init1();
     int cnt = 0;
     while (sam_read1(csam_fp, chdr, aln) > 0) {
         bam1_core_t c = aln->core;
-        if ((c.flag & 256) || // Secondary alignment - no SEQ field
-            (c.flag & 512) || // not passing filters
-            (c.flag & 1024) || // PCR or optinal duplicate
-            (c.flag & 2048)) { // supplementary alignment
+        if ((c.flag & BAM_FSECONDARY) || // Secondary alignment - no SEQ field
+            (c.flag & BAM_FQCFAIL) || // not passing filters
+            (c.flag & BAM_FDUP) || // PCR or optinal duplicate
+            (c.flag & BAM_FSUPPLEMENTARY)) { // supplementary alignment
             if (sam_write1(out_csam_fp, chdr, aln) < 0) {
                 std::cerr << "[Error] Failed to write record " << 
                     bam_get_qname(aln) << "\n";
@@ -62,10 +64,10 @@ void collate_core(
         if (search != reads.end()){
             LevioSamUtils::FastqRecord fq = LevioSamUtils::FastqRecord(aln);
             // Write the paired records to FASTQ
-            if (c.flag & 64) { // first segment
+            if (c.flag & BAM_FREAD1) { // first segment
                 fq.write(out_r1_fp, qname);
                 search->second.write(out_r2_fp, qname);
-            } else if (c.flag & 128) { // second segment
+            } else if (c.flag & BAM_FREAD2) { // second segment
                 search->second.write(out_r1_fp, qname);
                 fq.write(out_r2_fp, qname);
             } else {
@@ -106,9 +108,10 @@ void collate(collate_opts args) {
         NULL : sam_open(args.deferred_sam_fname.data(), "r");
     bam_hdr_t* dhdr = (args.deferred_sam_fname == "")?
         NULL : sam_hdr_read(dsam_fp);
+
     // Output files
-    std::ofstream out_r1_fp(args.out_r1_fname);
-    std::ofstream out_r2_fp(args.out_r2_fname);
+    ogzstream out_r1_fp(args.out_r1_fname.data());
+    ogzstream out_r2_fp(args.out_r2_fname.data());
     samFile* out_csam_fp = sam_open(args.out_committed_sam_fname.data(), "wb");
     samFile* out_dsam_fp = sam_open(args.out_deferred_sam_fname.data(), "wb");
 
@@ -200,8 +203,8 @@ int collate_run(int argc, char** argv) {
         std::cerr << " - BAM (deferred): " << args.out_deferred_sam_fname << "\n";
     }
 
-    args.out_r1_fname = args.outpre + "-deferred-R1.fq";
-    args.out_r2_fname = args.outpre + "-deferred-R2.fq";
+    args.out_r1_fname = args.outpre + "-deferred-R1.fq.gz";
+    args.out_r2_fname = args.outpre + "-deferred-R2.fq.gz";
     std::cerr << " - FASTQ1: " << args.out_r1_fname << "\n";
     std::cerr << " - FASTQ2: " << args.out_r2_fname + "\n";
     std::cerr << "\n";

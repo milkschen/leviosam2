@@ -92,7 +92,7 @@ if [ ! -s ${PFX}-committed.bam ]; then
 fi
 
 # Collate
-if [ ! -s ${PFX}-paired-deferred-R1.fq ]; then
+if [ ! -s ${PFX}-paired-deferred-R1.fq.gz ]; then
     if (( ${MEASURE_TIME} > 0)); then
         ${TIME} -v -o collate.time_log \
             ${LEVIOSAM} collate -a ${PFX}-committed.bam -b ${PFX}-deferred.bam -p ${PFX}-paired
@@ -107,22 +107,22 @@ if [ ! -s ${PFX}-paired-realigned.bam ]; then
         if [[ ${ALN} == "bowtie2" ]]; then
             ${TIME} -v -o aln_paired.time_log \
                 bowtie2 --local ${ALN_RG} -p ${THR} -x ${ALN_IDX} \
-                -1 ${PFX}-paired-deferred-R1.fq -2 ${PFX}-paired-deferred-R2.fq | \
+                -1 ${PFX}-paired-deferred-R1.fq.gz -2 ${PFX}-paired-deferred-R2.fq.gz | \
                 samtools view -hb > ${PFX}-paired-realigned.bam
         else
             ${TIME} -v -o aln_paired.time_log \
                 bwa mem -t ${THR} -R ${ALN_RG} ${ALN_IDX} \
-                ${PFX}-paired-deferred-R1.fq ${PFX}-paired-deferred-R2.fq | \
+                ${PFX}-paired-deferred-R1.fq.gz ${PFX}-paired-deferred-R2.fq.gz | \
                 samtools view -hb > ${PFX}-paired-realigned.bam
         fi
     else
         if [[ ${ALN} == "bowtie2" ]]; then
             bowtie2 --local ${ALN_RG} -p ${THR} -x ${ALN_IDX} \
-            -1 ${PFX}-paired-deferred-R1.fq -2 ${PFX}-paired-deferred-R2.fq | \
+            -1 ${PFX}-paired-deferred-R1.fq.gz -2 ${PFX}-paired-deferred-R2.fq.gz | \
             samtools view -hb > ${PFX}-paired-realigned.bam
         else
             bwa mem -t ${THR} -R ${ALN_RG} ${ALN_IDX} \
-            ${PFX}-paired-deferred-R1.fq ${PFX}-paired-deferred-R2.fq | \
+            ${PFX}-paired-deferred-R1.fq.gz ${PFX}-paired-deferred-R2.fq.gz | \
             samtools view -hb > ${PFX}-paired-realigned.bam
         fi
     fi
