@@ -362,7 +362,7 @@ void print_lift_help_msg(){
     std::cerr << "         ChainMap options (one of -c and -C must be set to perform lift-over using a ChainMap):\n";
     std::cerr << "           -c string If -C is not specified, build a ChainMap from a chain file.\n";
     std::cerr << "           -C string Path to an indexed ChainMap.\n";
-    std::cerr << "           -G INT    Number of allowed CIGAR changes for one alingment. [10]\n";
+    std::cerr << "           -G INT    Number of allowed CIGAR changes for one alingment. [0]\n";
     std::cerr << "\n";
     std::cerr << "         Commit/defer rule options:\n";
     std::cerr << "           Example: `-S mapq,aln_score -M 20 -A 20` commits MQ>=20 and AS>=20 alignments.\n";
