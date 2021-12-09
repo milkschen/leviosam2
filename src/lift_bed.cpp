@@ -1,33 +1,75 @@
 #include <ctime>
 #include <getopt.h>
 #include <iostream>
-#include "chain.hpp"
 #include "leviosam_utils.hpp"
 #include "lift_bed.hpp"
 #include "version.hpp"
 
 
 void print_lift_bed_help_msg() {
-    fprintf(stderr, "\n");
-    fprintf(stderr, "Lift over a BED file\n");
-    fprintf(stderr, "Version: %s\n", VERSION);
-    fprintf(stderr, "Usage:   leviosam bed [options] -b <bed> -C <clft> -p <prefix>\n\n");
-    fprintf(stderr, "Inputs:  -b string   Path to the input BED.\n");
-    fprintf(stderr, "         -C string   Path to the chain index.\n");
-    fprintf(stderr, "         -p string   Prefix to the output files.\n");
-    fprintf(stderr, "Options: -h          Print detailed usage.\n");
-    fprintf(stderr, "         -V INT      Verbose level [0].\n");
-    fprintf(stderr, "\n");
+    std::cerr << "\nLift over a BED file\n";
+    std::cerr << "Version: %s\n", VERSION;
+    std::cerr << "Usage:   leviosam bed [options] -b <bed> -C <clft> -p <prefix>\n\n";
+    std::cerr << "Inputs:  -b string   Path to the input BED.\n";
+    std::cerr << "         -C string   Path to the chain index.\n";
+    std::cerr << "         -p string   Prefix to the output files.\n";
+    std::cerr << "Options: -h          Print detailed usage.\n";
+    std::cerr << "         -G INT      Number of allowed gaps for an interval. [500]\n";
+    std::cerr << "         -V INT      Verbose level [0].\n";
+    std::cerr << "\n";
 }
 
 
-int lift_bed(lift_bed_opts &args) {
+/* Lift a BED record
+ *
+ * Returns 1 if it's liftable; 0 if not.
+ * The lifted record is updated in the `line` string variable by reference
+ */
+int lift_bed_record(
+    chain::ChainMap& cmap,
+    std::string& line, const int& allowed_gaps
+) {
+    std::vector<std::string> fields = LevioSamUtils::str_to_vector(line, "\t");
+    std::string s = fields[0];
+
+    hts_pos_t p1 = std::stoi(fields[1]);
+    hts_pos_t op1 = cmap.lift_pos(s, p1, allowed_gaps, true);
+    // BED end position is open, so we subtract p2 by one and then
+    // add it back after lift-over
+    hts_pos_t p2 = std::stoi(fields[2]) - 1;
+    hts_pos_t op2 = cmap.lift_pos(s, p2, allowed_gaps, false) + 1;
+    // TODO - haven't handled gap between (intvl(p1), intvl(p2))
+    
+    // Lift contig
+    std::string t1 = cmap.lift_contig(s, p1);
+    std::string t2 = cmap.lift_contig(s, p2);
+    if (op1 < 0 || op2 < 0 || (op2 - op1 <= 0) ||
+        t1 == "*" || t2 == "*" || (t1 != t2)
+    ) {
+        line += ("\t# " + t1 + ":" + std::to_string(op1) + "-" + t2 + ":" + std::to_string(op2) + "\n");
+        return 0;
+    } else {
+        line = t1 + "\t" + std::to_string(op1) + "\t" + std::to_string(op2);
+        if (fields.size() > 3) {
+            for (int i = 3; i < fields.size(); i++) {
+                line += ("\t" + fields[i]);
+            }
+        }
+        line += "\n";
+        return 1;
+    }
+    // error
+    return -1;
+}
+
+
+void lift_bed(lift_bed_opts &args) {
     chain::ChainMap cmap = [&] {
         if (args.chainmap_fname != "") {
             std::cerr << "Loading levioSAM index...";
             std::ifstream in(args.chainmap_fname, std::ios::binary);
             return chain::ChainMap(
-                in, args.verbose, args.allowed_cigar_changes
+                in, args.verbose, args.allowed_gaps
             );
         } else {
             std::cerr << "[E::lift_bed] Failed to load chain index. Exit.\n";
@@ -44,23 +86,20 @@ int lift_bed(lift_bed_opts &args) {
         std::string line;
         while (std::getline(bed_f, line)) {
             cnt += 1;
-            std::vector<std::string> fields = LevioSamUtils::str_to_vector(line, "\t");
-            std::cerr << line << "\n";
-            size_t p1 = std::stoi(fields[1]);
-            size_t p2 = std::stoi(fields[2]);
-            size_t op1 = cmap.lift_pos(fields[0], p1);
-            size_t op2 = cmap.lift_pos(fields[0], p2);
-            out_f << fields[0] << "\t" << op1 << "\t" << op2;
-            if (fields.size() > 3) {
-                for (int i = 3; i < fields.size(); i++) {
-                    out_f << "\t" << fields[i];
-                }
+            // std::cerr << line << "\n";
+            int lift = lift_bed_record(cmap, line, args.allowed_gaps);
+            if (lift == 1) {
+                out_f << line;
+            } else if (lift == 0) {
+                unmapped_f << line;
+            } else {
+                std::cerr << "[E::lift_bed] Unexpected liftover outcome at record ";
+                std::cerr << cnt << "\n";
+                exit(1);
             }
-            out_f << "\n";
         }
         bed_f.close();
     }
-
 }
 
 
@@ -73,7 +112,7 @@ int lift_bed_run(int argc, char** argv) {
     static struct option long_options[] {
         {"bed_fname", required_argument, 0, 'b'},
         {"chainmap_fname", required_argument, 0, 'C'},
-        {"allowed_cigar_changes", required_argument, 0, 'G'},
+        {"allowed_gaps", required_argument, 0, 'G'},
         {"output", required_argument, 0, 'p'},
         {"verbose", required_argument, 0, 'V'},
     };
@@ -90,7 +129,7 @@ int lift_bed_run(int argc, char** argv) {
                 args.chainmap_fname = optarg;
                 break;
             case 'G':
-                args.allowed_cigar_changes = atoi(optarg);
+                args.allowed_gaps = atoi(optarg);
                 break;
             case 'p':
                 args.outpre = optarg;
