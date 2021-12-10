@@ -1295,7 +1295,6 @@ hts_pos_t ChainMap::lift_pos(
         int32_t num_sclip_start = get_num_clipped(
             pos, true, contig, sidx, eidx);
         if (num_sclip_start > allowed_gaps) {
-            std::cerr << "num_sclip_start=" << num_sclip_start << "\n";
             return -1;
         }
         chain::Interval intvl = this->interval_map[contig][sidx];
