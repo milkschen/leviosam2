@@ -20,14 +20,14 @@ TEST(ChainTest, SimpleRankAndLift) {
     int rank = cmap.get_start_rank(contig, pos);
     EXPECT_EQ(rank, 1);
     EXPECT_EQ(cmap.lift_contig(contig, pos), contig);
-    EXPECT_EQ(cmap.lift_pos(contig, pos), 100272);
+    EXPECT_EQ(cmap.lift_pos(contig, pos, 0, true), 100272);
 
     pos = 207130;
     contig = "chr2";
     rank = cmap.get_start_rank(contig, pos);
     EXPECT_EQ(rank, 2);
     EXPECT_EQ(cmap.lift_contig(contig, pos), contig);
-    EXPECT_EQ(cmap.lift_pos(contig, pos), 206846+121+8);
+    EXPECT_EQ(cmap.lift_pos(contig, pos, 0, true), 206846+121+8);
 }
 
 
@@ -82,7 +82,7 @@ TEST(ChainTest, LiftInReversedRegion) {
         rank = cmap.get_start_rank(contig, pos);
         EXPECT_EQ(rank, gold_rank);
         EXPECT_EQ(cmap.lift_contig(contig, pos), contig);
-        EXPECT_EQ(cmap.lift_pos(contig, pos), gold_pos_array[i]);
+        EXPECT_EQ(cmap.lift_pos(contig, pos, 0, true), gold_pos_array[i]);
     }
 }
 
