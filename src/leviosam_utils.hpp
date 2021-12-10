@@ -19,6 +19,7 @@
 #include <vector>
 #include <cstring>
 #include "bed.hpp"
+#include "gzstream.h"
 #include "robin_hood.h"
 
 const int8_t seq_comp_table[16] = { 0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15 };
@@ -58,7 +59,7 @@ public:
         }
     }
 
-    int write(std::ofstream& out_fq, std::string name);
+    int write(ogzstream& out_fq, std::string name);
     std::string seq_str;
     std::string qual_str;
     bam1_t* aln = NULL;
@@ -70,7 +71,7 @@ fastq_map read_unpaired_fq(
     const std::string& fq_fname);
 fastq_map read_deferred_bam(
     samFile* dsam_fp, samFile* out_dsam_fp, sam_hdr_t* hdr,
-    std::ofstream& out_r1_fp, std::ofstream& out_r2_fp);
+    ogzstream& out_r1_fp, ogzstream& out_r2_fp);
 
 class WriteDeferred {
 public:

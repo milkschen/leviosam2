@@ -67,29 +67,26 @@ if [ ! -s ${PFX}-committed.bam ]; then
 fi
 
 # Convert deferred reads to FASTQ
-if [ ! -s ${PFX}-deferred.fq ]; then
-    samtools fastq ${PFX}-deferred.bam > ${PFX}-deferred.fq
+if [ ! -s ${PFX}-deferred.fq.gz ]; then
+    samtools fastq ${PFX}-deferred.bam | bgzip > ${PFX}-deferred.fq.gz
 fi
 
 # Re-align deferred reads
 if [ ! -s ${PFX}-realigned.bam ]; then
     if (( ${MEASURE_TIME} > 0)); then
-        ${TIME} -v -o aln_deferred.time_log ${ALN} -ax asm20 -t ${THR} ${REF} ${PFX}-deferred.fq | samtools view -hbo ${PFX}-realigned.bam
+        ${TIME} -v -o aln_deferred.time_log ${ALN} -ax asm20 -t ${THR} ${REF} ${PFX}-deferred.fq.gz | samtools view -hbo ${PFX}-realigned.bam
     else
-        ${ALN} -ax asm20 -t ${THR} ${REF} ${PFX}-deferred.fq | samtools view -hbo ${PFX}-realigned.bam
+        ${ALN} -ax asm20 -t ${THR} ${REF} ${PFX}-deferred.fq.gz | samtools view -hbo ${PFX}-realigned.bam
     fi
 fi
 
 # Merge and sort
 if [ ! -s ${PFX}-final.bam ]; then
     if (( ${MEASURE_TIME} > 0)); then
-        ${TIME} -v -o merge.time_log \
-            samtools cat -o ${PFX}-merged.bam ${PFX}-committed.bam ${PFX}-realigned.bam
-        ${TIME} -v -o sort_all.time_log \
-            samtools sort -@ ${THR} -o ${PFX}-final.bam ${PFX}-merged.bam
+        ${TIME} -v -o merge_and_sort.time_log \
+            samtools cat ${PFX}-committed.bam ${PFX}-realigned.bam | samtools sort -@ ${THR} -o ${PFX}-final.bam
     else
-        samtools cat -o ${PFX}-merged.bam ${PFX}-committed.bam ${PFX}-realigned.bam
-        samtools sort -@ ${THR} -o ${PFX}-final.bam ${PFX}-merged.bam
+        samtools cat ${PFX}-committed.bam ${PFX}-realigned.bam | samtools sort -@ ${THR} -o ${PFX}-final.bam
     fi
 fi
 

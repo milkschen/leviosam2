@@ -1,5 +1,4 @@
-
-[![Anaconda-Server Badge](https://anaconda.org/bioconda/leviosam/badges/installer/conda.svg)](https://conda.anaconda.org/bioconda)
+[![Docker](https://img.shields.io/docker/v/alshai/leviosam?label=Docker)](https://hub.docker.com/r/alshai/leviosam)
 [![Anaconda-Server Badge](https://anaconda.org/bioconda/leviosam/badges/version.svg)](https://anaconda.org/bioconda/leviosam)
 [![Anaconda-Server Badge](https://anaconda.org/bioconda/leviosam/badges/platforms.svg)](https://anaconda.org/bioconda/leviosam)
 [![Anaconda-Server Badge](https://anaconda.org/bioconda/leviosam/badges/downloads.svg)](https://anaconda.org/bioconda/leviosam)

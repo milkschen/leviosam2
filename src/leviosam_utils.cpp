@@ -293,7 +293,7 @@ FastqRecord::~FastqRecord() {
 
 
 /* Write a FastqRecord object to a FASTQ file */
-int FastqRecord::write(std::ofstream& out_fq, std::string name) {
+int FastqRecord::write(ogzstream& out_fq, std::string name) {
     if (aln != NULL) {
         seq_str = get_read(aln);
         std::string qual_seq("");
@@ -320,7 +320,7 @@ int FastqRecord::write(std::ofstream& out_fq, std::string name) {
  */
 fastq_map read_deferred_bam(
     samFile* dsam_fp, samFile* out_dsam_fp, sam_hdr_t* hdr,
-    std::ofstream& out_r1_fp, std::ofstream& out_r2_fp
+    ogzstream& out_r1_fp, ogzstream& out_r2_fp
 ) {
     fastq_map reads1, reads2;
     bam1_t* aln = bam_init1();
@@ -412,10 +412,10 @@ std::vector<std::string> str_to_vector(
     const std::string str, const std::string regex_str
 ) {
     std::regex regexz(regex_str);
-    std::vector<std::string> list(
+    std::vector<std::string> vec(
         std::sregex_token_iterator(str.begin(), str.end(), regexz, -1),
         std::sregex_token_iterator());
-    return list;
+    return vec;
 }
 
 std::set<std::string> str_to_set(
@@ -470,15 +470,12 @@ std::vector<std::pair<std::string, int32_t>> fai_to_map(std::string fai_fn) {
 
 sam_hdr_t* lengthmap_to_hdr(
     std::vector<std::pair<std::string, int32_t>> lm, const sam_hdr_t* const hdr_orig) {
-    // std::map<std::string, int32_t> lm, const sam_hdr_t* const hdr_orig) {
     sam_hdr_t* hdr = sam_hdr_dup(hdr_orig);
     // Clear all contig length info in the original header
     sam_hdr_remove_lines(hdr, "SQ", "SN", NULL);
     for (auto& it: lm) {
-    // for (auto it = lm.begin(); it != lm.end(); ++it) {
         std::string name = it.first;
         std::string length = std::to_string(it.second);
-        // std::cerr << name << " " << length << "\n";
         if (sam_hdr_add_line(hdr, "SQ", "SN", name.c_str(), "LN", length.c_str(), NULL) < 0) {
             std::cerr << "Warning: error during updating BAM header\n";
             std::cerr << name << " " << length << "\n";

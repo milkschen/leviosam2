@@ -1,12 +1,12 @@
 MAIN=leviosam
 CXX=g++
-CXX_FLAGS=--std=c++11 -lpthread
+CXX_FLAGS=--std=c++11 -lpthread -L. -lgzstream
 LIB=-lsdsl -lhts -lz
 CFLAGS=-g -Wall -O2
 CLIB=-lz -lhts
 
-OBJS = src/leviosam.o src/bam_aux.o src/bam_md.o src/bed.o src/chain.o src/collate.o src/leviosam_utils.o 
-CDEPS= src/bam.h
+OBJS = src/leviosam.o src/bam_aux.o src/bam_md.o src/bed.o src/chain.o src/collate.o src/leviosam_utils.o src/gzstream.o src/lift_bed.o
+CDEPS= src/bam.h src/gzstream.h
 DEPS = src/leviosam.hpp src/chain.hpp src/chain.hpp src/leviosam_utils.hpp src/collate.hpp src/robin_hood.h src/IITree.h
 OLIB = liblvsam.a
 TESTS = src/leviosam_test.cpp src/chain_test.cpp

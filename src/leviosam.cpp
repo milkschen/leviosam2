@@ -19,6 +19,7 @@
 #include <htslib/kstring.h>
 #include "collate.hpp"
 #include "leviosam.hpp"
+#include "lift_bed.hpp"
 
 KSEQ_INIT(gzFile, gzread)
 ;;
@@ -90,7 +91,7 @@ void read_and_lift(
     sam_hdr_t* hdr_source,
     sam_hdr_t* hdr_dest,
     int chunk_size,
-    const std::map<std::string, std::string> &ref_dict,
+    const std::map<std::string, std::string>* ref_dict,
     int md_flag,
     LevioSamUtils::WriteDeferred* wd
 ){
@@ -131,7 +132,7 @@ void read_and_lift(
                     std::string dest_contig(hdr_dest->target_name[aln_vec[i]->core.tid]);
                     // change ref if needed
                     if (dest_contig != current_contig) {
-                        ref = ref_dict.at(dest_contig);
+                        ref = ref_dict->at(dest_contig);
                         current_contig = dest_contig;
                     }
                     bam_fillmd1(aln_vec[i], ref.data(), md_flag, 1);
@@ -282,14 +283,14 @@ void lift_run(lift_opts args) {
                 &lift_map,
                 &mutex_fread, &mutex_fwrite,
                 sam_fp, out_sam_fp, hdr_orig, hdr, args.chunk_size,
-                ref_dict, args.md_flag, &wd));
+                &ref_dict, args.md_flag, &wd));
         } else {
             threads.push_back(std::thread(
                 read_and_lift<chain::ChainMap>,
                 &chain_map,
                 &mutex_fread, &mutex_fwrite,
                 sam_fp, out_sam_fp, hdr_orig, hdr, args.chunk_size,
-                ref_dict, args.md_flag, &wd));
+                &ref_dict, args.md_flag, &wd));
         }
     }
     for (int j = 0; j < args.threads; j++){
@@ -361,7 +362,7 @@ void print_lift_help_msg(){
     std::cerr << "         ChainMap options (one of -c and -C must be set to perform lift-over using a ChainMap):\n";
     std::cerr << "           -c string If -C is not specified, build a ChainMap from a chain file.\n";
     std::cerr << "           -C string Path to an indexed ChainMap.\n";
-    std::cerr << "           -G INT    Number of allowed CIGAR changes for one alingment. [10]\n";
+    std::cerr << "           -G INT    Number of allowed CIGAR changes for one alingment. [0]\n";
     std::cerr << "\n";
     std::cerr << "         Commit/defer rule options:\n";
     std::cerr << "           Example: `-S mapq,aln_score -M 20 -A 20` commits MQ>=20 and AS>=20 alignments.\n";
@@ -397,6 +398,8 @@ int main(int argc, char** argv) {
     // argument set
     if (!strcmp(argv[optind], "collate")) {
         return collate_run(argc, argv);
+    } else if (!strcmp(argv[optind], "bed")) {
+        return lift_bed_run(argc, argv);
     }
 
     double start_cputime = std::clock();

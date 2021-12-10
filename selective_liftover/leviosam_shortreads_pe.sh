@@ -59,9 +59,7 @@ echo "LevioSAM min MAPQ: ${MAPQ}";
 echo "LevioSAM min AS: ${ALN_SCORE}";
 echo "BED where reads get deferred: ${DEFERRED_DEST_BED}";
 echo "BED where reads get discarded: ${DISCARD_BED}";
-TH=$(( ${THR} * 2/3 ))
-STH=$(( ${THR} - ${TH} ))
-echo "Num. threads: ${THR} (${TH}/${STH})";
+echo "Num. threads: ${THR}";
 
 if [[ ! ${ALN} =~ ^(bowtie2|bwamem)$ ]]; then
     echo "Invalid ${ALN}. Accepted input: bowtie2, bwamem"
@@ -94,7 +92,7 @@ if [ ! -s ${PFX}-committed.bam ]; then
 fi
 
 # Collate
-if [ ! -s ${PFX}-paired-deferred-R1.fq ]; then
+if [ ! -s ${PFX}-paired-deferred-R1.fq.gz ]; then
     if (( ${MEASURE_TIME} > 0)); then
         ${TIME} -v -o collate.time_log \
             ${LEVIOSAM} collate -a ${PFX}-committed.bam -b ${PFX}-deferred.bam -p ${PFX}-paired
@@ -107,15 +105,25 @@ fi
 if [ ! -s ${PFX}-paired-realigned.bam ]; then
     if (( ${MEASURE_TIME} > 0)); then
         if [[ ${ALN} == "bowtie2" ]]; then
-            ${TIME} -v -o aln_paired.time_log bowtie2 --local ${ALN_RG} -p ${THR} -x ${ALN_IDX} -1 ${PFX}-paired-deferred-R1.fq -2 ${PFX}-paired-deferred-R2.fq | samtools view -hb > ${PFX}-paired-realigned.bam
+            ${TIME} -v -o aln_paired.time_log \
+                bowtie2 --local ${ALN_RG} -p ${THR} -x ${ALN_IDX} \
+                -1 ${PFX}-paired-deferred-R1.fq.gz -2 ${PFX}-paired-deferred-R2.fq.gz | \
+                samtools view -hb > ${PFX}-paired-realigned.bam
         else
-            ${TIME} -v -o aln_paired.time_log bwa mem -t ${THR} -R ${ALN_RG} ${ALN_IDX} ${PFX}-paired-deferred-R1.fq ${PFX}-paired-deferred-R2.fq | samtools view -hb > ${PFX}-paired-realigned.bam
+            ${TIME} -v -o aln_paired.time_log \
+                bwa mem -t ${THR} -R ${ALN_RG} ${ALN_IDX} \
+                ${PFX}-paired-deferred-R1.fq.gz ${PFX}-paired-deferred-R2.fq.gz | \
+                samtools view -hb > ${PFX}-paired-realigned.bam
         fi
     else
         if [[ ${ALN} == "bowtie2" ]]; then
-            bowtie2 --local ${ALN_RG} -p ${THR} -x ${ALN_IDX} -1 ${PFX}-paired-deferred-R1.fq -2 ${PFX}-paired-deferred-R2.fq | samtools view -hb > ${PFX}-paired-realigned.bam
+            bowtie2 --local ${ALN_RG} -p ${THR} -x ${ALN_IDX} \
+            -1 ${PFX}-paired-deferred-R1.fq.gz -2 ${PFX}-paired-deferred-R2.fq.gz | \
+            samtools view -hb > ${PFX}-paired-realigned.bam
         else
-            bwa mem -t ${THR} -R ${ALN_RG} ${ALN_IDX} ${PFX}-paired-deferred-R1.fq ${PFX}-paired-deferred-R2.fq | samtools view -hb > ${PFX}-paired-realigned.bam
+            bwa mem -t ${THR} -R ${ALN_RG} ${ALN_IDX} \
+            ${PFX}-paired-deferred-R1.fq.gz ${PFX}-paired-deferred-R2.fq.gz | \
+            samtools view -hb > ${PFX}-paired-realigned.bam
         fi
     fi
 fi
@@ -123,12 +131,9 @@ fi
 # Merge and sort
 if [ ! -s ${PFX}-final.bam ]; then
     if (( ${MEASURE_TIME} > 0)); then
-        ${TIME} -v -o merge.time_log \
-            samtools cat -o ${PFX}-merged.bam ${PFX}-paired-committed.bam ${PFX}-paired-realigned.bam
-        ${TIME} -v -o sort_all.time_log \
-            samtools sort -@ ${THR} -o ${PFX}-final.bam ${PFX}-merged.bam
+        ${TIME} -v -o merge_and_sort.time_log \
+            samtools cat ${PFX}-paired-committed.bam ${PFX}-paired-realigned.bam | samtools sort -@ ${THR} -o ${PFX}-final.bam
     else
-        samtools cat -o ${PFX}-merged.bam ${PFX}-paired-committed.bam ${PFX}-paired-realigned.bam
-        samtools sort -@ ${THR} -o ${PFX}-final.bam ${PFX}-merged.bam
+        samtools cat ${PFX}-paired-committed.bam ${PFX}-paired-realigned.bam | samtools sort -@ ${THR} -o ${PFX}-final.bam
     fi
 fi

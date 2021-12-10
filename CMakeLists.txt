@@ -3,20 +3,17 @@ cmake_minimum_required(VERSION 3.10)
 project(leviosam CXX C)
 
 set(PROJECT_URL "https://github.com/alshai/leviosam")
-set(PROJECT_DESCRIPTION "leviosam: library for moving alignments between aligned genomes")
+set(PROJECT_DESCRIPTION "leviosam: lifting over alignments between genomes")
 set(CMAKE_CXX_STANDARD 11)
 
 find_library(HTS_LIB hts)
 if(NOT HTS_LIB)
     message(FATAL_ERROR "htslib library not found. Please specify -D CMAKE_LIBRARY_PATH and -D CMAKE_INCLUDE_PATH in the CMake command")
-    # message(FATAL_ERROR "htslib library not found. Please specify -D HTS_LIB_DIR and -D HTS_INC_DIR in the CMake command")
 endif()
-message("${HTS_LIB}")
 
 find_library(SDSL_LIB sdsl)
 if(NOT SDSL_LIB)
     message(FATAL_ERROR "libsdsl not found. Please specify -D CMAKE_LIBRARY_PATH and -D CMAKE_INCLUDE_PATH in the CMake command")
-    # message(FATAL_ERROR "sdsl-lite library not found (lib_path= ${SDSL_LIB_DIR}, inc_path= ${SDSL_INC_DIR}). Please specify -D SDSL_LIB_DIR and -D SDSL_INC_DIR in the CMake command")
 endif()
 
 
@@ -71,14 +68,16 @@ endif()
 
 include_directories(${CMAKE_INCLUDE_PATH})
 
-file(GLOB LIB_SOURCES   src/collate.cpp src/chain.cpp src/leviosam_utils.cpp src/bed.cpp
-                        src/bam_md.c src/bam_aux.c)
+file(GLOB LIB_SOURCES   src/lift_bed.cpp src/collate.cpp src/chain.cpp
+                        src/leviosam_utils.cpp src/bed.cpp src/lift_bed.cpp
+                        src/bam_md.c src/bam_aux.c src/gzstream.C)
 file(GLOB LIB_HEADERS   src/leviosam.hpp
-                        src/collate.hpp src/chain.hpp src/leviosam_utils.hpp src/bed.hpp
-                        src/bam.h src/IITree.h)
-add_library(lvsam ${LIB_SOURCES} ${LIB_HEADERS} )
+                        src/lift_bed.hpp src/collate.hpp src/chain.hpp
+                        src/leviosam_utils.hpp src/bed.hpp src/lift_bed.hpp
+                        src/bam.h src/IITree.h src/gzstream.h)
+add_library(lvsam ${LIB_SOURCES} ${LIB_HEADERS})
 
-add_executable(leviosam src/leviosam.cpp )
+add_executable(leviosam src/leviosam.cpp)
 target_link_libraries(leviosam lvsam)
 target_link_libraries(leviosam ${HTS_LIB})
 target_link_libraries(leviosam ${SDSL_LIB})
