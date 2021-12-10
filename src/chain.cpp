@@ -81,16 +81,16 @@ void Interval::load(std::istream& in) {
 }
 
 
-ChainMap::ChainMap(std::ifstream& in, int verbose, int allowed_cigar_changes) :
-    verbose(verbose), allowed_cigar_changes(allowed_cigar_changes){
+ChainMap::ChainMap(std::ifstream& in, int verbose, int allowed_intvl_gaps) :
+    verbose(verbose), allowed_intvl_gaps(allowed_intvl_gaps){
     load(in);
 }
 
 
 ChainMap::ChainMap(
-    std::string fname, int verbose, int allowed_cigar_changes,
+    std::string fname, int verbose, int allowed_intvl_gaps,
     LengthMap& lm
-) : verbose(verbose), allowed_cigar_changes(allowed_cigar_changes),
+) : verbose(verbose), allowed_intvl_gaps(allowed_intvl_gaps),
     length_map(lm) {
     std::ifstream chain_f(fname);
     std::string line;
@@ -866,10 +866,10 @@ bool ChainMap::lift_segment(
                          " to unmapped -- invalid num_sclip_start\n";
         }
         return false;
-    } else if (num_sclip_start > allowed_cigar_changes) {
+    } else if (num_sclip_start > allowed_intvl_gaps) {
         if (verbose >= VERBOSE_INFO) {
             std::cerr << "[I::chain::lift_segment] Set " << bam_get_qname(aln) << 
-                         " to unmapped -- num_sclip_start > " << allowed_cigar_changes << "\n";
+                         " to unmapped -- num_sclip_start > " << allowed_intvl_gaps << "\n";
         }
         return false;
     }
@@ -917,54 +917,31 @@ bool ChainMap::lift_segment(
             }
             return false;
         }
-        // #SCLIP must <= `allowed_cigar_changes`
-        if (num_sclip > allowed_cigar_changes) {
+        // #SCLIP must <= `allowed_intvl_gaps`
+        if (num_sclip > allowed_intvl_gaps) {
             if (verbose >= VERBOSE_INFO) {
                 std::cerr << "[I::chain::lift_segment] Set " << bam_get_qname(aln) << 
                              " to unmapped -- (num_sclip_start+num_sclip_end) > " <<
-                             allowed_cigar_changes << "\n";
+                             allowed_intvl_gaps << "\n";
             }
+            return false;
+        }
+    }
+
+    // If the corresponding intervals of the left and right ends differ,
+    // check if the intervals are legal.
+    // Intervals with too large gap, inconsistent target/strandness will
+    // not pass the check.
+    if (start_sidx != end_sidx) {
+        // Returns true if legal
+        if (!check_multi_intvl_legality(
+            source_contig, aln, start_sidx, end_sidx, allowed_intvl_gaps)
+        ) {
             return false;
         }
     }
 
     auto next_sintvl = interval_map[source_contig][end_sidx];
-    /* If an alignment is overlapped with multiple intervals, check the gap size between the 
-     * intervals. If either
-     *   (1) the offset difference between any adjacent interval pair 
-     *   (2) the total offset difference between the first and the last interval 
-     * is greater than `allowed_cigar_changes`, mark the alignment as unliftable (return false).
-     */
-    if (start_sidx != end_sidx) {
-        // Check the strand between the first and the last intervals
-        if (next_sintvl.strand != start_sintvl.strand) {
-            if (verbose >= VERBOSE_INFO) {
-                std::cerr << "[I::chain::lift_segment] Set " << bam_get_qname(aln) << 
-                             " to unmapped -- intervals have diff strands\n";
-            }
-            return false;
-        }
-        // Check the gap between the first and the last intervals
-        if (std::abs(next_sintvl.offset - start_sintvl.offset) > allowed_cigar_changes) {
-            if (verbose >= VERBOSE_INFO) {
-                std::cerr << "[I::chain::lift_segment] Set " << bam_get_qname(aln) << 
-                             " to unmapped -- 1st-and-last chain gap > " << allowed_cigar_changes << "\n";
-            }
-            return false;
-        }
-        // Check all interval pairs
-        for (auto j = start_sidx; j < end_sidx - 1; j ++) {
-            if (std::abs(interval_map[source_contig][j+1].offset -
-                         interval_map[source_contig][j].offset) > allowed_cigar_changes) {
-                if (verbose >= VERBOSE_INFO) {
-                    std::cerr << "[I::chain::lift_segment] Set " << bam_get_qname(aln) << 
-                                 " to unmapped -- >=1 chain gaps > " << allowed_cigar_changes << "\n";
-                }
-                return false;
-            }
-        }
-    }
-
     // Lift CIGAR
     auto rlen = bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln));
     if (first_seg && lift_cigar(
@@ -1526,6 +1503,56 @@ std::queue<std::tuple<int32_t, int32_t>> ChainMap::get_bp(
         }
     }
     return break_points;
+}
+
+
+/* If an alignment is overlapped with multiple intervals, check the gap size between the 
+ * intervals. If either
+ *   (1) the offset difference between any adjacent interval pair 
+ *   (2) the total offset difference between the first and the last interval 
+ * is greater than `allowed_intvl_gaps`, mark the alignment as unliftable (return false).
+ */
+bool ChainMap::check_multi_intvl_legality(
+    const std::string& s, bam1_t* aln,
+    const int& start_sidx, const int& end_sidx,
+    const int& allowed_intvl_gaps
+) {
+    Interval start_sintvl = interval_map[s][start_sidx];
+    Interval next_sintvl = interval_map[s][end_sidx];
+    // Check the gap between the first and the last intervals
+    if (std::abs(next_sintvl.offset - start_sintvl.offset) > allowed_intvl_gaps) {
+        if (verbose >= VERBOSE_INFO) {
+            std::cerr << "[I::chain::check_multi_intvl_legality] Set " << bam_get_qname(aln) << 
+                         " to unmapped -- 1st-and-last chain gap > " << allowed_intvl_gaps << "\n";
+        }
+        return false;
+    }
+    // Check all interval pairs
+    for (auto j = start_sidx; j < end_sidx; j ++) {
+        if (interval_map[s][j].strand != interval_map[s][j+1].strand) {
+            if (verbose >= VERBOSE_INFO) {
+                std::cerr << "[I::chain::check_multi_intvl_legality] Set " << bam_get_qname(aln) << 
+                             " to unmapped -- intervals not having concordant strandness\n";
+            }
+            return false;
+        }
+        if (interval_map[s][j].target != interval_map[s][j+1].target) {
+            if (verbose >= VERBOSE_INFO) {
+                std::cerr << "[I::chain::check_multi_intvl_legality] Set " << bam_get_qname(aln) << 
+                             " to unmapped -- intervals not having concordant targets\n";
+            }
+            return false;
+        }
+        if (std::abs(interval_map[s][j+1].offset -
+                     interval_map[s][j].offset) > allowed_intvl_gaps) {
+            if (verbose >= VERBOSE_INFO) {
+                std::cerr << "[I::chain::check_multi_intvl_legality] Set " << bam_get_qname(aln) << 
+                             " to unmapped -- >=1 chain gaps > " << allowed_intvl_gaps << "\n";
+            }
+            return false;
+        }
+    }
+    return true;
 }
 
 

@@ -49,12 +49,12 @@ using LengthMap = std::vector<std::pair<std::string, int32_t>>;
 
 class ChainMap {
     public:
-        ChainMap(): verbose(0), allowed_cigar_changes(0) {}
+        ChainMap(): verbose(0), allowed_intvl_gaps(0) {}
         ~ChainMap() {}
         ChainMap(
             std::string fname, int verbose,
-            int allowed_cigar_changes, LengthMap& lm);
-        ChainMap(std::ifstream& in, int verbose, int allowed_cigar_changes);
+            int allowed_intvl_gaps, LengthMap& lm);
+        ChainMap(std::ifstream& in, int verbose, int allowed_intvl_gaps);
         void init_bitvectors(
             std::string source, int source_length,
             std::unordered_map<std::string, sdsl::bit_vector>& start_bv_map,
@@ -125,6 +125,12 @@ class ChainMap {
         );
 
         sam_hdr_t* bam_hdr_from_chainmap(samFile* sam_fp, sam_hdr_t* hdr_orig);
+        
+        bool check_multi_intvl_legality(
+            const std::string& s, bam1_t* aln,
+            const int& start_sidx, const int& end_sidx,
+            const int& allowed_intvl_gaps
+        );
 
         size_t serialize(std::ofstream& out);
         void load(std::ifstream& in);
@@ -135,7 +141,7 @@ class ChainMap {
         void update_flag_unmap(bam1_t* aln, const bool first_seg);
 
         const int verbose;
-        const int allowed_cigar_changes;
+        const int allowed_intvl_gaps;
         IntervalMap interval_map;
         SdVectorMap start_map;
         SdVectorMap end_map;
