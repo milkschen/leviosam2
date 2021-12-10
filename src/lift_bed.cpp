@@ -38,13 +38,13 @@ int lift_bed_record(
     // add it back after lift-over
     hts_pos_t p2 = std::stoi(fields[2]) - 1;
     hts_pos_t op2 = cmap.lift_pos(s, p2, allowed_gaps, false) + 1;
-    // TODO - haven't handled gap between (intvl(p1), intvl(p2))
     
     // Lift contig
     std::string t1 = cmap.lift_contig(s, p1);
     std::string t2 = cmap.lift_contig(s, p2);
     if (op1 < 0 || op2 < 0 || (op2 - op1 <= 0) ||
-        t1 == "*" || t2 == "*" || (t1 != t2)
+        t1 == "*" || t2 == "*" || (t1 != t2) ||
+        (op2 - op1 - p2 + p1 > allowed_gaps) // gap between (intvl(p1), intvl(p2)) is too large
     ) {
         line += ("\t# " + t1 + ":" + std::to_string(op1) + "-" + t2 + ":" + std::to_string(op2) + "\n");
         return 0;
