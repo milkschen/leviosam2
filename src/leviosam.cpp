@@ -143,10 +143,9 @@ void read_and_lift(
         }
         for (int i = 0; i < num_actual_reads; i++) {
             // If a read is committed
-            if (wd->commit_alignment(aln_vec[i]) == true ||
-                wd->exclude_alignment(aln_vec_clone[i]) == true
+            if (wd->commit_aln_dest(aln_vec[i]) == true ||
+                wd->commit_aln_source(aln_vec_clone[i]) == true
             ) {
-            // if (wd->commit_alignment(aln_vec[i]) == true) {
                 // write to file, thread corruption protected by lock_guard
                 std::lock_guard<std::mutex> g_commited(*mutex_fwrite);
                 if (sam_write1(out_sam_fp, hdr_dest, aln_vec[i]) < 0) {

@@ -101,7 +101,7 @@ void WriteDeferred::print_info() {
 
 /* Returns true if an alignment is excluded (committed)
  */
-bool WriteDeferred::exclude_alignment(const bam1_t* const aln) {
+bool WriteDeferred::commit_aln_source(const bam1_t* const aln) {
     // If defer mode is not activated, all reads are committed
     if (!write_deferred)
         return true;
@@ -122,7 +122,7 @@ bool WriteDeferred::exclude_alignment(const bam1_t* const aln) {
 
 /* Returns true if an alignment is committed
  */
-bool WriteDeferred::commit_alignment(
+bool WriteDeferred::commit_aln_dest(
     const bam1_t* const aln
 ) {
     // If defer mode is not activated, all reads are committed

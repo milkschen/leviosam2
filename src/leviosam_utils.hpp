@@ -94,8 +94,8 @@ public:
     void print_info();
     void write_deferred_bam(bam1_t* aln, sam_hdr_t* hdr);
     void write_deferred_bam_orig(bam1_t* aln);
-    bool commit_alignment(const bam1_t* const aln);
-    bool exclude_alignment(const bam1_t* const aln);
+    bool commit_aln_dest(const bam1_t* const aln);
+    bool commit_aln_source(const bam1_t* const aln);
 
     std::mutex mutex_fwrite;
 
