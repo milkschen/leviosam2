@@ -4,7 +4,8 @@ project(leviosam CXX C)
 
 set(PROJECT_URL "https://github.com/alshai/leviosam")
 set(PROJECT_DESCRIPTION "leviosam: lifting over alignments between genomes")
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 14)
+# set(CMAKE_CXX_STANDARD 11)
 
 find_library(HTS_LIB hts)
 if(NOT HTS_LIB)
@@ -69,11 +70,11 @@ endif()
 
 include_directories(${CMAKE_INCLUDE_PATH})
 
-file(GLOB LIB_SOURCES   src/lift_bed.cpp src/collate.cpp src/chain.cpp
+file(GLOB LIB_SOURCES   src/cherry_pick.cpp src/lift_bed.cpp src/collate.cpp src/chain.cpp
                         src/leviosam_utils.cpp src/bed.cpp src/lift_bed.cpp
                         src/bam_md.c src/bam_aux.c src/gzstream.C)
 file(GLOB LIB_HEADERS   src/leviosam.hpp
-                        src/lift_bed.hpp src/collate.hpp src/chain.hpp
+                        src/cherry_pick.hpp src/lift_bed.hpp src/collate.hpp src/chain.hpp
                         src/leviosam_utils.hpp src/bed.hpp src/lift_bed.hpp
                         src/bam.h src/IITree.h src/gzstream.h)
 add_library(lvsam ${LIB_SOURCES} ${LIB_HEADERS})
