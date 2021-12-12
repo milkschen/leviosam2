@@ -177,12 +177,12 @@ int collate_run(int argc, char** argv) {
     }
     if (args.sam_fname == "" || args.outpre == "" ||
         (args.fq_fname == "" && args.deferred_sam_fname == "")) {
-        std::cerr << "Error: required argument missed.\n";
+        std::cerr << "[E::collate_run] required argument missed.\n";
         print_collate_help_msg();
         exit(1);
     }
     if (args.fq_fname != "" && args.deferred_sam_fname != "") {
-        std::cerr << "Error: only one of `-q` and `-b` can be set.\n";
+        std::cerr << "[E::collate_run] only one of `-q` and `-b` can be set.\n";
         print_collate_help_msg();
         exit(1);
     }
