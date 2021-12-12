@@ -14,8 +14,8 @@ TIME=time # GNU time
 MEASURE_TIME=1 # Set to a >0 value to measure time for each step
 FRAC_CLIPPED=0.95
 ISIZE=1000
-DEFERRED_DEST_BED=""
-DISCARD_BED=""
+DEFER_DEST_BED=""
+COMMIT_SOURCE_BED=""
 
 # Default parameters for Bowtie 2 (local)
 # ALN=bowtie2
@@ -35,8 +35,8 @@ do
         A) ALN_SCORE=${OPTARG};;
         b) ALN_IDX=${OPTARG};;
         C) CLFT=${OPTARG};;
-        D) DEFERRED_DEST_BED=${OPTARG};;
-        R) DISCARD_BED=${OPTARG};;
+        D) DEFER_DEST_BED=" -D ${OPTARG}";;
+        R) COMMIT_SOURCE_BED=" -r ${OPTARG}";;
         i) INPUT=${OPTARG};;
         L) LEVIOSAM=${OPTARG};;
         M) MEASURE_TIME=${OPTARG};;
@@ -57,8 +57,8 @@ echo "LevioSAM software: ${LEVIOSAM}";
 echo "LevioSAM index: ${CLFT}";
 echo "LevioSAM min MAPQ: ${MAPQ}";
 echo "LevioSAM min AS: ${ALN_SCORE}";
-echo "BED where reads get deferred: ${DEFERRED_DEST_BED}";
-echo "BED where reads get discarded: ${DISCARD_BED}";
+echo "BED where reads get deferred: ${DEFER_DEST_BED}";
+echo "BED where reads get discarded: ${COMMIT_SOURCE_BED}";
 echo "Num. threads: ${THR}";
 
 if [[ ! ${ALN} =~ ^(bowtie2|bwamem)$ ]]; then
@@ -69,25 +69,14 @@ fi
 # Lifting over using leviosam
 if [ ! -s ${PFX}-committed.bam ]; then
     if (( ${MEASURE_TIME} > 0)); then
-        if [[ ${DEFERRED_DEST_BED} == "" ]]; then
-            ${TIME} -v -o lift.time_log \
-                ${LEVIOSAM} lift -C ${CLFT} -a ${INPUT} -t ${THR} -p ${PFX} -O bam \
-                -S mapq,isize,aln_score,clipped_frac -M ${MAPQ} -A ${ALN_SCORE} -Z ${ISIZE} -L ${FRAC_CLIPPED} -G 0
-        else
-            ${TIME} -v -o lift.time_log \
-                ${LEVIOSAM} lift -C ${CLFT} -a ${INPUT} -t ${THR} -p ${PFX} -O bam \
-                -S mapq,isize,aln_score,clipped_frac -M ${MAPQ} -A ${ALN_SCORE} -Z ${ISIZE} -L ${FRAC_CLIPPED} -G 0 \
-                -D ${DEFERRED_DEST_BED}
-        fi
-    else
-        if [[ ${DEFERRED_DEST_BED} == "" ]]; then
-            ${LEVIOSAM} lift -C ${CLFT} -a ${INPUT} -t ${THR} -p ${PFX} -O bam \
-            -S mapq,isize,aln_score,clipped_frac -M ${MAPQ} -A ${ALN_SCORE} -Z ${ISIZE} -L ${FRAC_CLIPPED} -G 0
-        else
+        ${TIME} -v -o lift.time_log \
             ${LEVIOSAM} lift -C ${CLFT} -a ${INPUT} -t ${THR} -p ${PFX} -O bam \
             -S mapq,isize,aln_score,clipped_frac -M ${MAPQ} -A ${ALN_SCORE} -Z ${ISIZE} -L ${FRAC_CLIPPED} -G 0 \
-            -D ${DEFERRED_DEST_BED}
-        fi
+            ${DEFER_DEST_BED} ${COMMIT_SOURCE_BED}
+    else
+        ${LEVIOSAM} lift -C ${CLFT} -a ${INPUT} -t ${THR} -p ${PFX} -O bam \
+        -S mapq,isize,aln_score,clipped_frac -M ${MAPQ} -A ${ALN_SCORE} -Z ${ISIZE} -L ${FRAC_CLIPPED} -G 0 \
+        ${DEFER_DEST_BED} ${COMMIT_SOURCE_BED}
     fi
 fi
 

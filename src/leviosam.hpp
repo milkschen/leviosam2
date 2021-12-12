@@ -73,8 +73,8 @@ struct lift_opts {
     int min_aln_score = 100;
     BedUtils::Bed bed_defer_source;
     BedUtils::Bed bed_defer_dest;
-    BedUtils::Bed bed_remove_source;
-    BedUtils::Bed bed_remove_dest;
+    BedUtils::Bed bed_commit_source;
+    BedUtils::Bed bed_commit_dest;
 };
 
 
