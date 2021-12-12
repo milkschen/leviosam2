@@ -12,8 +12,8 @@ THR=$(nproc)
 LEVIOSAM=leviosam
 TIME=time # GNU time
 MEASURE_TIME=1 # Set to a >0 value to measure time for each step
-DEFERRED_DEST_BED=""
-DISCARD_BED=""
+DEFER_DEST_BED=""
+COMMIT_SOURCE_BED=""
 ALLOWED_GAPS=500
 ALN=minimap2
 
@@ -23,7 +23,8 @@ do
     case "${flag}" in
         a) ALN=${OPTARG};;
         C) CLFT=${OPTARG};;
-        D) DEFERRED_DEST_BED=${OPTARG};;
+        D) DEFER_DEST_BED=" -D ${OPTARG}";;
+        R) COMMIT_SOURCE_BED=" -r ${OPTARG}";;
         F) REF=${OPTARG};;
         g) ALLOWED_GAPS=${OPTARG};;
         i) INPUT=${OPTARG};;
@@ -31,7 +32,6 @@ do
         M) MEASURE_TIME=${OPTARG};;
         o) PFX=${OPTARG};;
         r) ALN_RG=${OPTARG};;
-        R) DISCARD_BED=${OPTARG};;
         t) THR=${OPTARG};;
         T) TIME=${OPTARG};;
     esac
@@ -45,8 +45,8 @@ echo "Aligner read group: ${ALN_RG}";
 echo "LevioSAM software: ${LEVIOSAM}";
 echo "LevioSAM index: ${CLFT}";
 echo "Allowed gaps: ${ALLOWED_GAPS}";
-echo "BED where reads get deferred: ${DEFERRED_DEST_BED}";
-echo "BED where reads get discarded: ${DISCARD_BED}";
+echo "BED where reads get deferred: ${DEFER_DEST_BED}";
+echo "BED where reads get discarded: ${COMMIT_SOURCE_BED}";
 echo "Num. threads: ${THR}";
 
 if [[ ! ${ALN} =~ ^(minimap2|winnowmap2)$ ]]; then
@@ -59,10 +59,12 @@ if [ ! -s ${PFX}-committed.bam ]; then
     if (( ${MEASURE_TIME} > 0)); then
         ${TIME} -v -o lift.time_log \
             ${LEVIOSAM} lift -C ${CLFT} -a ${INPUT} -t ${THR} -p ${PFX} -O bam \
-            -S lifted -G ${ALLOWED_GAPS}
+            -S lifted -G ${ALLOWED_GAPS} \
+            ${DEFER_DEST_BED} ${COMMIT_SOURCE_BED}
     else
         ${LEVIOSAM} lift -C ${CLFT} -a ${INPUT} -t ${THR} -p ${PFX} -O bam \
-        -S lifted -G ${ALLOWED_GAPS}
+        -S lifted -G ${ALLOWED_GAPS} \
+        ${DEFER_DEST_BED} ${COMMIT_SOURCE_BED}
     fi
 fi
 
