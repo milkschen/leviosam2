@@ -143,8 +143,10 @@ void read_and_lift(
         }
         for (int i = 0; i < num_actual_reads; i++) {
             // If a read is committed
-            // if (LevioSamUtils::commit_alignment(aln_vec[i], wd) == true) {
-            if (wd->commit_alignment(aln_vec[i]) == true) {
+            if (wd->commit_alignment(aln_vec[i]) == true ||
+                wd->exclude_alignment(aln_vec_clone[i]) == true
+            ) {
+            // if (wd->commit_alignment(aln_vec[i]) == true) {
                 // write to file, thread corruption protected by lock_guard
                 std::lock_guard<std::mutex> g_commited(*mutex_fwrite);
                 if (sam_write1(out_sam_fp, hdr_dest, aln_vec[i]) < 0) {
@@ -271,7 +273,7 @@ void lift_run(lift_opts args) {
             args.max_clipped_frac, args.min_aln_score,
             args.out_format, hdr_orig, hdr,
             args.bed_defer_source, args.bed_defer_dest,
-            args.bed_remove_source, args.bed_remove_dest);
+            args.bed_commit_dest, args.bed_commit_dest);
     }
 
     std::vector<std::thread> threads;
@@ -371,6 +373,8 @@ void print_lift_help_msg(){
     std::cerr << "           -A int    Min AS:i to commit (pre-liftover; must with `-S aln_score`). [100]\n";
     std::cerr << "           -Z int    Max TLEN/isize to commit (post-liftover; must with `-S isize`). [1000]\n";
     std::cerr << "           -L float  Min fraction of clipped to commit (post-liftover; must with `-S aln_score`). [0.95]\n";
+    std::cerr << "           -r string Path to a BED file (source coordinates). Reads overlap with the regions are always committed. [none]\n";
+    std::cerr << "           -D string Path to a BED file (dest coordinates). Reads overlap with the regions are always deferred. [none]\n";
     std::cerr << "\n";
     std::cerr << "         The options for serialize can also be used here, if -v/-c is set.\n";
     std::cerr << "\n";
@@ -427,8 +431,8 @@ int main(int argc, char** argv) {
         {"namemap", required_argument, 0, 'n'},
         {"out_format", required_argument, 0, 'O'},
         {"prefix", required_argument, 0, 'p'},
-        {"bed_remove_source", required_argument, 0, 'r'},
-        {"bed_remove_dest", required_argument, 0, 'R'},
+        {"bed_commit_dest", required_argument, 0, 'r'},
+        {"bed_commit_dest", required_argument, 0, 'R'},
         {"sample", required_argument, 0, 's'},
         {"split_mode", required_argument, 0, 'S'},
         {"threads", required_argument, 0, 't'},
@@ -441,7 +445,7 @@ int main(int argc, char** argv) {
     while(
         (c = getopt_long(
             argc, argv,
-            "hma:A:c:C:d:D:f:F:g:G:k:l:L:M:n:O:p:r:R:s:S:t:T:v:V:Z:",
+            "hma:A:c:C:d:D:f:F:g:G:l:L:M:n:O:p:r:R:s:S:t:T:v:V:Z:",
             long_options, &long_index)) != -1) {
         switch (c) {
             case 'h':
@@ -453,9 +457,6 @@ int main(int argc, char** argv) {
                 args.md_flag |= 8;
                 args.md_flag |= 16;
                 break;
-            // case 'u':
-            //     args.write_unliftable = true;
-            //     break;
             case 'a':
                 args.sam_fname = optarg;
                 break;
@@ -469,8 +470,7 @@ int main(int argc, char** argv) {
                 args.chainmap_fname = optarg;
                 break;
             case 'd':
-                std::cerr << "-d is not yet supported\n";
-                exit(1);
+                std::cerr << "[W::main] -d has not been fully tested\n";
                 args.bed_defer_source = BedUtils::Bed(optarg);
                 break;
             case 'D':
@@ -487,11 +487,6 @@ int main(int argc, char** argv) {
                 break;
             case 'G':
                 args.allowed_cigar_changes = atoi(optarg);
-                break;
-            case 'k':
-                std::cerr << "-k is to be deprecated. Please use -F.\n";
-                exit(1);
-                args.length_map = LevioSamUtils::fai_to_map(optarg);
                 break;
             case 'l':
                 args.lift_fname = optarg;
@@ -512,14 +507,11 @@ int main(int argc, char** argv) {
                 args.outpre = optarg;
                 break;
             case 'r':
-                std::cerr << "-r is not yet supported\n";
-                exit(1);
-                args.bed_remove_source = BedUtils::Bed(optarg);
+                args.bed_commit_dest = BedUtils::Bed(optarg);
                 break;
             case 'R':
-                std::cerr << "-R is not yet supported\n";
-                exit(1);
-                args.bed_remove_dest = BedUtils::Bed(optarg);
+                std::cerr << "[W::main] -R has not been fully tested\n";
+                args.bed_commit_dest = BedUtils::Bed(optarg);
                 break;
             case 's':
                 args.sample = optarg;
@@ -578,8 +570,8 @@ int main(int argc, char** argv) {
     if (args.split_mode == "") {
         if (args.bed_defer_source.get_fn() != "" ||
             args.bed_defer_dest.get_fn() != "" ||
-            args.bed_remove_source.get_fn() != "" ||
-            args.bed_remove_source.get_fn() != "") {
+            args.bed_commit_dest.get_fn() != "" ||
+            args.bed_commit_dest.get_fn() != "") {
             std::cerr << "[E::main] `-S` should be set if any among `-d/D/r/R` is set.\n";
             exit(1);
         }

@@ -22,8 +22,8 @@ void WriteDeferred::init(
     sam_hdr_t* ihdr, sam_hdr_t* ohdr,
     const BedUtils::Bed &b_defer_source,
     const BedUtils::Bed &b_defer_dest,
-    const BedUtils::Bed &b_remove_source,
-    const BedUtils::Bed &b_remove_dest
+    const BedUtils::Bed &b_commit_source,
+    const BedUtils::Bed &b_commit_dest
 ) {
     write_deferred = true;
     // split_mode = sm;
@@ -38,8 +38,8 @@ void WriteDeferred::init(
     hdr_orig = ihdr;
     bed_defer_source = b_defer_source;
     bed_defer_dest = b_defer_dest;
-    bed_remove_source = b_defer_source;
-    bed_remove_dest = b_defer_dest;
+    bed_commit_source = b_commit_source;
+    bed_commit_dest = b_commit_dest;
 
     std::string out_mode = (of == "sam")? "w" : "wb";
     std::string out_fn = outpre + "-deferred." + of;
@@ -91,16 +91,36 @@ void WriteDeferred::print_info() {
     if (bed_defer_dest.get_fn().size() > 0){
         std::cerr << " - BED deferred (dest) " << bed_defer_dest.get_fn() << "\n";
     }
-    if (bed_remove_source.get_fn().size() > 0){
-        std::cerr << " - BED removed (source) " << bed_remove_source.get_fn() << "\n";
+    if (bed_commit_source.get_fn().size() > 0){
+        std::cerr << " - BED removed (source) " << bed_commit_source.get_fn() << "\n";
     }
-    if (bed_remove_dest.get_fn().size() > 0){
-        std::cerr << " - BED removed (dest) " << bed_remove_dest.get_fn() << "\n";
+    if (bed_commit_dest.get_fn().size() > 0){
+        std::cerr << " - BED removed (dest) " << bed_commit_dest.get_fn() << "\n";
     }
 }
 
+/* Returns true if an alignment is excluded (committed)
+ */
+bool WriteDeferred::exclude_alignment(const bam1_t* const aln) {
+    // If defer mode is not activated, all reads are committed
+    if (!write_deferred)
+        return true;
 
-/* Returns true if to an alignment can be committed
+    const bam1_core_t* c = &(aln->core);
+    std::string rname = hdr->target_name[c->tid];
+    auto rlen = bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln));
+    size_t pos_end = c->pos + rlen;
+    if (bed_commit_source.intersect(rname, c->pos, pos_end)) {
+        return true;
+    }
+    if (bed_defer_source.intersect(rname, c->pos, pos_end)) {
+        return false;
+    }
+    return false;
+}
+
+
+/* Returns true if an alignment is committed
  */
 bool WriteDeferred::commit_alignment(
     const bam1_t* const aln
@@ -127,6 +147,9 @@ bool WriteDeferred::commit_alignment(
     size_t pos_end = c->pos + rlen;
     if (bed_defer_dest.intersect(rname, c->pos, pos_end)) {
         return false;
+    }
+    if (bed_commit_dest.intersect(rname, c->pos, pos_end)) {
+        return true;
     }
     if (split_modes.find("clipped_frac") != split_modes.end()){
         if (1 - (rlen / c->l_qseq) > max_clipped_frac)

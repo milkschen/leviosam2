@@ -87,14 +87,15 @@ public:
         const std::string of, sam_hdr_t* ihdr, sam_hdr_t* ohdr,
         const BedUtils::Bed &b_defer_source,
         const BedUtils::Bed &b_defer_dest,
-        const BedUtils::Bed &b_remove_source,
-        const BedUtils::Bed &b_remove_dest
+        const BedUtils::Bed &b_commit_source,
+        const BedUtils::Bed &b_commit_dest
     );
 
     void print_info();
     void write_deferred_bam(bam1_t* aln, sam_hdr_t* hdr);
     void write_deferred_bam_orig(bam1_t* aln);
     bool commit_alignment(const bam1_t* const aln);
+    bool exclude_alignment(const bam1_t* const aln);
 
     std::mutex mutex_fwrite;
 
@@ -107,7 +108,7 @@ private:
     std::set<std::string> split_modes;
     int min_mapq, max_isize, min_aln_score, max_hdist;
     float max_clipped_frac;
-    BedUtils::Bed bed_defer_source, bed_defer_dest, bed_remove_source, bed_remove_dest;
+    BedUtils::Bed bed_defer_source, bed_defer_dest, bed_commit_source, bed_commit_dest;
 };
 
 void update_cigar(bam1_t* aln, std::vector<uint32_t> &new_cigar);
