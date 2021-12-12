@@ -35,8 +35,8 @@ do
         A) ALN_SCORE=${OPTARG};;
         b) ALN_IDX=${OPTARG};;
         C) CLFT=${OPTARG};;
-        D) DEFERRED_DEST_BED=${OPTARG};;
-        R) DISCARD_BED=${OPTARG};;
+        D) DEFERRED_DEST_BED=" -D ${OPTARG}";;
+        R) DISCARD_BED=" -r ${OPTARG}";;
         i) INPUT=${OPTARG};;
         L) LEVIOSAM=${OPTARG};;
         M) MEASURE_TIME=${OPTARG};;
@@ -69,25 +69,14 @@ fi
 # Lifting over using leviosam
 if [ ! -s ${PFX}-committed.bam ]; then
     if (( ${MEASURE_TIME} > 0)); then
-        if [[ ${DEFERRED_DEST_BED} == "" ]]; then
-            ${TIME} -v -o lift.time_log \
-                ${LEVIOSAM} lift -C ${CLFT} -a ${INPUT} -t ${THR} -p ${PFX} -O bam \
-                -S mapq,isize,aln_score,clipped_frac -M ${MAPQ} -A ${ALN_SCORE} -Z ${ISIZE} -L ${FRAC_CLIPPED} -G 0
-        else
-            ${TIME} -v -o lift.time_log \
-                ${LEVIOSAM} lift -C ${CLFT} -a ${INPUT} -t ${THR} -p ${PFX} -O bam \
-                -S mapq,isize,aln_score,clipped_frac -M ${MAPQ} -A ${ALN_SCORE} -Z ${ISIZE} -L ${FRAC_CLIPPED} -G 0 \
-                -D ${DEFERRED_DEST_BED}
-        fi
-    else
-        if [[ ${DEFERRED_DEST_BED} == "" ]]; then
-            ${LEVIOSAM} lift -C ${CLFT} -a ${INPUT} -t ${THR} -p ${PFX} -O bam \
-            -S mapq,isize,aln_score,clipped_frac -M ${MAPQ} -A ${ALN_SCORE} -Z ${ISIZE} -L ${FRAC_CLIPPED} -G 0
-        else
+        ${TIME} -v -o lift.time_log \
             ${LEVIOSAM} lift -C ${CLFT} -a ${INPUT} -t ${THR} -p ${PFX} -O bam \
             -S mapq,isize,aln_score,clipped_frac -M ${MAPQ} -A ${ALN_SCORE} -Z ${ISIZE} -L ${FRAC_CLIPPED} -G 0 \
-            -D ${DEFERRED_DEST_BED}
-        fi
+            ${DEFERRED_DEST_BED} ${DISCARD_BED}
+    else
+        ${LEVIOSAM} lift -C ${CLFT} -a ${INPUT} -t ${THR} -p ${PFX} -O bam \
+        -S mapq,isize,aln_score,clipped_frac -M ${MAPQ} -A ${ALN_SCORE} -Z ${ISIZE} -L ${FRAC_CLIPPED} -G 0 \
+        ${DEFERRED_DEST_BED} ${DISCARD_BED}
     fi
 fi
 
