@@ -14,9 +14,7 @@ struct cherry_pick_opts{
     bool paired_end = false;
     std::string cmd = "";
     int rand_seed = 0;
-    int decoy_threshold = 0;
-    std::string decoy_list = "";
-    std::string output_prefix = "";
+    std::string output_fn = "";
     std::string score_tag = "NM";
     int merge_pe_mode = MERGE_PE_SUM;
     std::vector<std::string> inputs;
@@ -49,9 +47,15 @@ int select_best_aln(const std::vector<bool>& pair_indicators,
                     const std::vector<int>& mapqs,
                     int& num_tied_best);
 
-int select_best_aln_paired_end(const std::vector<bam1_t*>& aln1s,
-                               const std::vector<bam1_t*>& aln2s,
-                               const int merge_pe_mode);
+int select_best_aln_single_end(
+    const std::vector<bam1_t*>& aln1s,
+    const std::string& score_tag);
+
+int select_best_aln_paired_end(
+    const std::vector<bam1_t*>& aln1s,
+    const std::vector<bam1_t*>& aln2s,
+    const std::string& score_tag,
+    const int merge_pe_mode);
 
 void cherry_pick_core(
     const std::vector<std::string>& sam_fns,
@@ -59,7 +63,8 @@ void cherry_pick_core(
     const std::vector<samFile*>& sam_fps,
     const std::vector<bam_hdr_t*>& hdrs,
     const bool is_paired_end,
-    samFile* out_fp
+    samFile* out_fp,
+    const std::string& score_tag
 );
 
 void cherry_pick(cherry_pick_opts args);
