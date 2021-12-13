@@ -128,10 +128,20 @@ int select_best_aln_paired_end(const std::vector<bam1_t*>& aln1s,
             // MERGE_PE_SUM mode sums MAPQ and AS. AS is set to 0 for an unaligned read.
             mapqs.push_back(c_aln1.qual + c_aln2.qual);
             int score = 0;
-            score += (c_aln1.flag & BAM_FUNMAP)? INT_MIN / 2 :
-                                                 -bam_aux2i(bam_aux_get(aln1s[i], "NM"));
-            score += (c_aln2.flag & BAM_FUNMAP)? INT_MIN / 2 :
-                                                 -bam_aux2i(bam_aux_get(aln2s[i], "NM"));
+            uint8_t* tag1 = bam_aux_get(aln1s[i], "NM");
+            int score1 = INT_MIN / 2;
+            score += ((c_aln1.flag & BAM_FUNMAP) || (tag1 == NULL))?
+                INT_MIN / 2 : -bam_aux2i(tag1);
+            if (!(c_aln1.flag & BAM_FUNMAP) && (tag1 == NULL)) {
+                std::cerr << "[W::select_best_aln_paired_end] NM tag is missing for read " << bam_get_qname(aln1s[i]) << "\n";
+            }
+
+            uint8_t* tag2 = bam_aux_get(aln2s[i], "NM");
+            score += ((c_aln2.flag & BAM_FUNMAP) || (tag2 == NULL))?
+                INT_MIN / 2 : -bam_aux2i(tag2);
+            if (!(c_aln2.flag & BAM_FUNMAP) && (tag2 == NULL)) {
+                std::cerr << "[W::select_best_aln_paired_end] NM tag is missing for read " << bam_get_qname(aln2s[i]) << "\n";
+            }
             scores.push_back(score);
         } else if (merge_pe_mode == MERGE_PE_MAX) {
             // MERGE_PE_MAX mode takes max MAPQ and AS.
@@ -147,7 +157,7 @@ int select_best_aln_paired_end(const std::vector<bam1_t*>& aln1s,
                     score : -bam_aux2i(bam_aux_get(aln2s[i], "NM"));
             scores.push_back(score);
         } else{
-            std::cerr << "[Error] Invalid merging mode for paired-end alignments "
+            std::cerr << "[E::select_best_aln_paired_end] Invalid merging mode for paired-end alignments "
                       << merge_pe_mode << "\n";
         }
     }
@@ -159,59 +169,26 @@ int select_best_aln_paired_end(const std::vector<bam1_t*>& aln1s,
 }
 
 
-void cherry_pick(cherry_pick_opts args) {
-    if (args.paired_end)
-        std::cerr << "[Paired-end mode]\n";
-    else
-        std::cerr << "[Single-end mode]\n";
-
-    std::srand(args.rand_seed);
-    std::vector<std::string> sam_fns;
-    std::vector<std::string> ids;
-    for (auto& s: args.inputs) {
-        std::regex regexz(":");
-        std::vector<std::string> vec(
-            std::sregex_token_iterator(s.begin(), s.end(), regexz, -1),
-            std::sregex_token_iterator());
-        if (vec.size() != 2) {
-            std::cerr << "[E::cherry_pick] Invalid format: " << s << "\n";
-            exit(1);
-        }
-        ids.push_back(vec[0]);
-        sam_fns.push_back(vec[1]);
-    }
-    for (int i = 0; i < sam_fns.size(); i++) {
-        std::cerr << "File " << i << ": ";
-        std::cerr << sam_fns[i] << " (" << ids[i] << ")\n";
-    }
-
-    std::vector<samFile*> sam_fps;
-    std::vector<bam_hdr_t*> hdrs;
+void cherry_pick_core(
+    const std::vector<std::string>& sam_fns,
+    const std::vector<std::string>& ids,
+    const std::vector<samFile*>& sam_fps,
+    const std::vector<bam_hdr_t*>& hdrs,
+    const bool is_paired_end,
+    samFile* out_fp
+) {
     std::vector<bam1_t*> aln1s, aln2s;
     for (int i = 0; i < sam_fns.size(); i++) {
-        // Read each SAM file listed in `--sam_list`.
-        sam_fps.push_back(sam_open(sam_fns[i].data(), "r"));
-        hdrs.push_back(sam_hdr_read(sam_fps[i]));
-        if (sam_hdr_nref(hdrs[i]) != sam_hdr_nref(hdrs[0])) {
-            std::cerr << "[W::cherry_pick] Num REF in `" << sam_fns[i] << "` differs with `"
-                      << sam_fns[0] << "`. Please check.\n";
-        }
         aln1s.push_back(bam_init1());
-        if (args.paired_end)
+        if (is_paired_end)
             aln2s.push_back(bam_init1());
-    }
-    std::string out_fn = args.output_prefix + ".bam";
-    samFile* out_fp = sam_open(out_fn.data(), "wb");
-    if (sam_hdr_write(out_fp, hdrs[0])) {
-        std::cerr << "[E::cherry_pick] Failed to write SAM header to file " << out_fn << "\n";
-        exit(1);
     }
     bool end = false;
     int num_records = 0;
     while (!end) {
         // If in paired-end mode: read two reads from each of the SAM files in each iteration.
         for (int i = 0; i < sam_fns.size(); i++) {
-            if (args.paired_end) {
+            if (is_paired_end) {
                 while (1) {
                     int read1 = sam_read1(sam_fps[i], hdrs[i], aln1s[i]);
                     if (read1 < 0) {
@@ -236,7 +213,7 @@ void cherry_pick(cherry_pick_opts args) {
                 }
                 // Check read names: they should be identical.
                 if (strcmp(bam_get_qname(aln1s[i]), bam_get_qname(aln2s[i])) != 0) {
-                    std::cerr << "[Error] SAM file should be sorted by read name.\n";
+                    std::cerr << "[E::cherry_pick_core] SAM file should be sorted by read name.\n";
                     std::cerr << "This can be done using `samtools sort -n`\n";
                     std::cerr << "Mismatched reads: " << bam_get_qname(aln1s[i]) <<
                                  " and " << bam_get_qname(aln2s[i]) << "\n";
@@ -257,7 +234,7 @@ void cherry_pick(cherry_pick_opts args) {
             // Check if read names from all files are identical.
             if (i > 0)
                 if (strcmp(bam_get_qname(aln1s[0]), bam_get_qname(aln1s[i])) != 0) {
-                    std::cerr << "[Error] Reads mismatch across SAM files.\n";
+                    std::cerr << "[E::cherry_pick_core] Reads mismatch across SAM files.\n";
                     std::cerr << "Mismatched reads: " << bam_get_qname(aln1s[0]) <<
                                  " and " << bam_get_qname(aln1s[i]) << "\n";
                     exit(1);
@@ -266,7 +243,7 @@ void cherry_pick(cherry_pick_opts args) {
 
         if (end)
             break;
-        if (args.paired_end) {
+        if (is_paired_end) {
             int best_idx = select_best_aln_paired_end(aln1s, aln2s, MERGE_PE_SUM);
             bam_aux_append(
                 aln1s[best_idx], "RF", 'Z', ids[best_idx].length() + 1,
@@ -276,7 +253,7 @@ void cherry_pick(cherry_pick_opts args) {
                 reinterpret_cast<uint8_t*>(const_cast<char*>(ids[best_idx].c_str())));
             if (sam_write1(out_fp, hdrs[0], aln1s[best_idx]) < 0 ||
                 sam_write1(out_fp, hdrs[0], aln2s[best_idx]) < 0) {
-                std::cerr << "[E::cherry_pick] Failed to write to file.\n";
+                std::cerr << "[E::cherry_pick_core] Failed to write to file.\n";
                 std::cerr << bam_get_qname(aln1s[best_idx]);
                 exit(1);
             }
@@ -286,25 +263,74 @@ void cherry_pick(cherry_pick_opts args) {
                 aln1s[best_idx], "RF", 'Z', ids[best_idx].length() + 1,
                 reinterpret_cast<uint8_t*>(const_cast<char*>(ids[best_idx].c_str())));
             if (sam_write1(out_fp, hdrs[0], aln1s[best_idx]) < 0) {
-                std::cerr << "[Error] Failed to write to file.\n";
+                std::cerr << "[E::cherry_pick_core] Failed to write to file.\n";
                 exit(1);
             }
         }
     }
     for (int i = 0; i < sam_fns.size(); i++) {
         bam_destroy1(aln1s[i]);
-        if (args.paired_end)
+        if (is_paired_end)
             bam_destroy1(aln2s[i]);
     }
+
+    if (is_paired_end)
+        std::cerr << "[I::cherry_pick_core] Processed " << num_records << " pairs of reads\n";
+    else
+        std::cerr << "[I::cherry_pick_core] Processed " << num_records << " reads\n";
+}
+
+
+void cherry_pick(cherry_pick_opts args) {
+    if (args.paired_end)
+        std::cerr << "[I::cherry_pick] Paired-end mode\n";
+    else
+        std::cerr << "[I::cherry_pick] Single-end mode\n";
+
+    std::srand(args.rand_seed);
+    std::vector<std::string> sam_fns;
+    std::vector<std::string> ids;
+    for (auto& s: args.inputs) {
+        std::regex regexz(":");
+        std::vector<std::string> vec(
+            std::sregex_token_iterator(s.begin(), s.end(), regexz, -1),
+            std::sregex_token_iterator());
+        if (vec.size() != 2) {
+            std::cerr << "[E::cherry_pick] Invalid format: " << s << "\n";
+            exit(1);
+        }
+        ids.push_back(vec[0]);
+        sam_fns.push_back(vec[1]);
+    }
+    for (int i = 0; i < sam_fns.size(); i++) {
+        std::cerr << "File " << i << ": ";
+        std::cerr << sam_fns[i] << " (" << ids[i] << ")\n";
+    }
+
+    std::vector<samFile*> sam_fps;
+    std::vector<bam_hdr_t*> hdrs;
+    for (int i = 0; i < sam_fns.size(); i++) {
+        // Read each SAM file listed in `--sam_list`.
+        sam_fps.push_back(sam_open(sam_fns[i].data(), "r"));
+        hdrs.push_back(sam_hdr_read(sam_fps[i]));
+        if (sam_hdr_nref(hdrs[i]) != sam_hdr_nref(hdrs[0])) {
+            std::cerr << "[W::cherry_pick] Num REF in `" << sam_fns[i] << "` differs with `"
+                      << sam_fns[0] << "`. Please check.\n";
+        }
+    }
+    std::string out_fn = args.output_prefix + ".bam";
+    samFile* out_fp = sam_open(out_fn.data(), "wb");
+    if (sam_hdr_write(out_fp, hdrs[0])) {
+        std::cerr << "[E::cherry_pick] Failed to write SAM header to file " << out_fn << "\n";
+        exit(1);
+    }
+    cherry_pick_core(sam_fns, ids, sam_fps, hdrs,
+                     args.paired_end, out_fp);
     for (auto& s: sam_fps) {
         sam_close(s);
     }
     sam_close(out_fp);
 
-    if (args.paired_end)
-        std::cerr << "[Completed] Processed " << num_records << " pairs of reads\n";
-    else
-        std::cerr << "[Completed] Processed " << num_records << " reads\n";
 }
 
 
@@ -363,7 +389,7 @@ int cherry_pick_run(int argc, char** argv) {
                 print_cherry_pick_help();
                 exit(1);
             default:
-                std::cerr << "Ignoring option " << c << " \n";
+                std::cerr << "[E::cherry_pick_run] Invalid option " << c << " \n";
                 print_cherry_pick_help();
                 exit(1);
         }
