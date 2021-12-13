@@ -55,6 +55,7 @@ void WriteDeferred::init(
         std::cerr << "[E::WriteDeferred::init] Failed to write sam_hdr for " << out_fn_orig << "\n";
         exit(1);
     }
+    print_info();
 }
 
 
@@ -67,7 +68,7 @@ WriteDeferred::~WriteDeferred() {
 
 
 void WriteDeferred::print_info() {
-    std::cerr << "Alignments don't pass the below filter are deferred:\n";
+    std::cerr << "[I::WriteDeferred::print_info] Alignments don't pass the below filter are deferred:\n";
     std::cerr << " - unlifted\n";
     if (split_modes.find("mapq") != split_modes.end()){
         std::cerr << " - MAPQ (pre-liftover) < " << min_mapq << "\n";
@@ -107,6 +108,9 @@ bool WriteDeferred::commit_aln_source(const bam1_t* const aln) {
         return true;
 
     const bam1_core_t* c = &(aln->core);
+    if (c->flag & BAM_FUNMAP)
+        return false;
+
     std::string rname = hdr->target_name[c->tid];
     auto rlen = bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln));
     size_t pos_end = c->pos + rlen;
