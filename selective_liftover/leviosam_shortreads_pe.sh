@@ -14,6 +14,7 @@ TIME=time # GNU time
 MEASURE_TIME=1 # Set to a >0 value to measure time for each step
 FRAC_CLIPPED=0.95
 ISIZE=1000
+REF=""
 DEFER_DEST_BED=""
 COMMIT_SOURCE_BED=""
 
@@ -28,7 +29,7 @@ MAPQ=30
 ALN_SCORE=100
 
 
-while getopts a:A:b:C:D:i:L:M:o:q:r:R:t:T: flag
+while getopts a:A:b:C:D:f:i:L:M:o:q:r:R:t:T: flag
 do
     case "${flag}" in
         a) ALN=${OPTARG};;
@@ -36,13 +37,14 @@ do
         b) ALN_IDX=${OPTARG};;
         C) CLFT=${OPTARG};;
         D) DEFER_DEST_BED=" -D ${OPTARG}";;
-        R) COMMIT_SOURCE_BED=" -r ${OPTARG}";;
+        f) REF=${OPTARG};;
         i) INPUT=${OPTARG};;
         L) LEVIOSAM=${OPTARG};;
         M) MEASURE_TIME=${OPTARG};;
         o) PFX=${OPTARG};;
         q) MAPQ=${OPTARG};;
         r) ALN_RG=${OPTARG};;
+        R) COMMIT_SOURCE_BED=" -r ${OPTARG}";;
         t) THR=${OPTARG};;
         T) TIME=${OPTARG};;
     esac
@@ -53,6 +55,7 @@ echo "Output prefix: ${PFX}";
 echo "Aligner: ${ALN}";
 echo "Aligner indexes prefix: ${ALN_IDX}";
 echo "Aligner read group: ${ALN_RG}";
+echo "Targer reference: ${REF}";
 echo "LevioSAM software: ${LEVIOSAM}";
 echo "LevioSAM index: ${CLFT}";
 echo "LevioSAM min MAPQ: ${MAPQ}";
@@ -72,10 +75,12 @@ if [ ! -s ${PFX}-committed.bam ]; then
         ${TIME} -v -o lift.time_log \
             ${LEVIOSAM} lift -C ${CLFT} -a ${INPUT} -t ${THR} -p ${PFX} -O bam \
             -S mapq,isize,aln_score,clipped_frac -M ${MAPQ} -A ${ALN_SCORE} -Z ${ISIZE} -L ${FRAC_CLIPPED} -G 0 \
+            -m -f ${REF} \
             ${DEFER_DEST_BED} ${COMMIT_SOURCE_BED}
     else
         ${LEVIOSAM} lift -C ${CLFT} -a ${INPUT} -t ${THR} -p ${PFX} -O bam \
         -S mapq,isize,aln_score,clipped_frac -M ${MAPQ} -A ${ALN_SCORE} -Z ${ISIZE} -L ${FRAC_CLIPPED} -G 0 \
+        -m -f ${REF} \
         ${DEFER_DEST_BED} ${COMMIT_SOURCE_BED}
     fi
 fi
