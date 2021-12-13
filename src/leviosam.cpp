@@ -64,7 +64,7 @@ void serialize_run(lift_opts args) {
             args.name_map, args.length_map));
         std::ofstream o(fn_index, std::ios::binary);
         l.serialize(o);
-        std::cerr << "levioSAM VcfMap saved to " << fn_index << "\n";
+        std::cerr << "[I::serialize_run] levioSAM VcfMap saved to " << fn_index << "\n";
     // ChainMap
     } else if (args.chain_fname != "") {
         std::string fn_index = args.outpre + ".clft";
@@ -73,7 +73,7 @@ void serialize_run(lift_opts args) {
             args.allowed_cigar_changes, args.length_map);
         std::ofstream o(fn_index, std::ios::binary);
         cfp.serialize(o);
-        std::cerr << "levioSAM ChainMap saved to " << fn_index << "\n";
+        std::cerr << "[I::serialize_run] levioSAM ChainMap saved to " << fn_index << "\n";
     } else {
         std::cerr << "[E::serialize_run] Cannot build a levioSAM index. Please set -v or -c properly\n";
         print_serialize_help_msg();
@@ -172,7 +172,7 @@ void read_and_lift(
 
 /* Load a FASTA file and return a map */
 std::map<std::string, std::string> load_fasta(std::string ref_name) {
-    std::cerr << "Loading FASTA...";
+    std::cerr << "[I::load_fasta] Loading FASTA...";
     std::map<std::string, std::string> fmap;
     gzFile fp = gzopen(ref_name.data(), "r");
     kseq_t *seq;
@@ -190,13 +190,13 @@ std::map<std::string, std::string> load_fasta(std::string ref_name) {
 void lift_run(lift_opts args) {
     chain::ChainMap chain_map = [&] {
         if (args.chainmap_fname != "") {
-            std::cerr << "Loading levioSAM index...";
+            std::cerr << "[I::lift_run] Loading levioSAM index...";
             std::ifstream in(args.chainmap_fname, std::ios::binary);
             return chain::ChainMap(
                 in, args.verbose, args.allowed_cigar_changes
             );
         } else if (args.chain_fname != ""){
-            std::cerr << "Building levioSAM index...";
+            std::cerr << "[I::lift_run] Building levioSAM index...";
             if (args.length_map.size() == 0){
                 std::cerr << "[E::lift_run] No length map is found. Please set -F properly.\n";
                 print_serialize_help_msg();
@@ -211,12 +211,12 @@ void lift_run(lift_opts args) {
     }();
     lift::LiftMap lift_map = [&]{
         if (args.lift_fname != "") {
-            std::cerr << "Loading levioSAM index...";
+            std::cerr << "[I::lift_run] Loading levioSAM index...";
             std::ifstream in(args.lift_fname, std::ios::binary);
             return lift::LiftMap(in);
         // if "-l" not specified, then create a levioSAM
         } else if (args.vcf_fname != "") {
-            std::cerr << "Building levioSAM index...";
+            std::cerr << "[I::lift_run] Building levioSAM index...";
             return lift::LiftMap(
                 lift::lift_from_vcf(
                     args.vcf_fname, args.sample, args.haplotype,
@@ -476,10 +476,10 @@ int main(int argc, char** argv) {
                 break;
             case 'd':
                 std::cerr << "[W::main] -d has not been fully tested\n";
-                args.bed_defer_source = BedUtils::Bed(optarg);
+                args.bed_defer_source.init(optarg);
                 break;
             case 'D':
-                args.bed_defer_dest = BedUtils::Bed(optarg);
+                args.bed_defer_dest.init(optarg);
                 break;
             case 'f':
                 args.ref_name = optarg;
@@ -512,11 +512,11 @@ int main(int argc, char** argv) {
                 args.outpre = optarg;
                 break;
             case 'r':
-                args.bed_commit_dest = BedUtils::Bed(optarg);
+                args.bed_commit_source.init(optarg);
                 break;
             case 'R':
                 std::cerr << "[W::main] -R has not been fully tested\n";
-                args.bed_commit_dest = BedUtils::Bed(optarg);
+                args.bed_commit_dest.init(optarg);
                 break;
             case 's':
                 args.sample = optarg;
@@ -591,8 +591,8 @@ int main(int argc, char** argv) {
     double cpu_duration = (std::clock() - start_cputime) / (double)CLOCKS_PER_SEC;
     std::chrono::duration<double> wall_duration = (std::chrono::system_clock::now() - start_walltime);
     std::cerr << "\n";
-    std::cerr << "Finished in " << cpu_duration << " CPU seconds, or " << 
-                                   wall_duration.count() << " wall clock seconds\n";
+    std::cerr << "[I::main] Finished in " << cpu_duration << " CPU seconds, or "
+              << wall_duration.count() << " wall clock seconds\n";
     return 0;
 }
 
