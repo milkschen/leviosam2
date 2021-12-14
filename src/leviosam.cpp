@@ -273,7 +273,7 @@ void lift_run(lift_opts args) {
             args.max_clipped_frac, args.min_aln_score,
             args.out_format, hdr_orig, hdr,
             args.bed_defer_source, args.bed_defer_dest,
-            args.bed_commit_dest, args.bed_commit_dest);
+            args.bed_commit_source, args.bed_commit_dest);
     }
 
     std::vector<std::thread> threads;
@@ -436,7 +436,7 @@ int main(int argc, char** argv) {
         {"namemap", required_argument, 0, 'n'},
         {"out_format", required_argument, 0, 'O'},
         {"prefix", required_argument, 0, 'p'},
-        {"bed_commit_dest", required_argument, 0, 'r'},
+        {"bed_commit_source", required_argument, 0, 'r'},
         {"bed_commit_dest", required_argument, 0, 'R'},
         {"sample", required_argument, 0, 's'},
         {"split_mode", required_argument, 0, 'S'},
@@ -575,7 +575,7 @@ int main(int argc, char** argv) {
     if (args.split_mode == "") {
         if (args.bed_defer_source.get_fn() != "" ||
             args.bed_defer_dest.get_fn() != "" ||
-            args.bed_commit_dest.get_fn() != "" ||
+            args.bed_commit_source.get_fn() != "" ||
             args.bed_commit_dest.get_fn() != "") {
             std::cerr << "[E::main] `-S` should be set if any among `-d/D/r/R` is set.\n";
             exit(1);
