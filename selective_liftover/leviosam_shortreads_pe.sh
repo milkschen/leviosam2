@@ -14,7 +14,6 @@ TIME=time # GNU time
 MEASURE_TIME=1 # Set to a >0 value to measure time for each step
 FRAC_CLIPPED=0.95
 ISIZE=1000
-REF=""
 DEFER_DEST_BED=""
 COMMIT_SOURCE_BED=""
 
@@ -122,12 +121,20 @@ if [ ! -s ${PFX}-paired-realigned.bam ]; then
     fi
 fi
 
+# Reference flow-style merging
+if [ ! -s ${PFX}-paired-deferred-cherry_picked.bam ]; then
+    samtools sort -@ ${THR} -n -o ${PFX}-paired-realigned-sorted_n.bam ${PFX}-paired-realigned.bam
+    samtools sort -@ ${THR} -n -o ${PFX}-paired-deferred-sorted_n.bam ${PFX}-paired-deferred.bam
+    ${LEVIOSAM} cherry_pick -s source:${PFX}-paired-deferred.bam -s target:${PFX}-paired-realigned.bam \
+        -m -o ${PFX}-paired-deferred-cherry_picked.bam
+fi
+
 # Merge and sort
 if [ ! -s ${PFX}-final.bam ]; then
     if (( ${MEASURE_TIME} > 0)); then
         ${TIME} -v -o merge_and_sort.time_log \
-            samtools cat ${PFX}-paired-committed.bam ${PFX}-paired-realigned.bam | samtools sort -@ ${THR} -o ${PFX}-final.bam
+            samtools cat ${PFX}-paired-committed.bam ${PFX}-paired-deferred-cherry_picked | samtools sort -@ ${THR} -o ${PFX}-final.bam
     else
-        samtools cat ${PFX}-paired-committed.bam ${PFX}-paired-realigned.bam | samtools sort -@ ${THR} -o ${PFX}-final.bam
+        samtools cat ${PFX}-paired-committed.bam ${PFX}-paired-deferred-cherry_picked | samtools sort -@ ${THR} -o ${PFX}-final.bam
     fi
 fi
