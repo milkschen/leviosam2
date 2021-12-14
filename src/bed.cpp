@@ -41,7 +41,7 @@ void Bed::init(const std::string& fn) {
         bed_f.close();
     }
     auto contig_cnt = index();
-    std::cerr << "[I::Bed] Read " << cnt << " BED records from " << contig_cnt << " contigs.\n";
+    std::cerr << "[I::Bed] Read " << cnt << " BED records (" << contig_cnt << " contigs) from " << fn << "\n";
 }
 
 

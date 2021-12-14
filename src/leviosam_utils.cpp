@@ -68,7 +68,7 @@ WriteDeferred::~WriteDeferred() {
 
 
 void WriteDeferred::print_info() {
-    std::cerr << "[I::WriteDeferred::print_info] Alignments don't pass the below filter are deferred:\n";
+    std::cerr << "[I::WriteDeferred::print_info] Alignments with any of the below features are deferred:\n";
     std::cerr << " - unlifted\n";
     if (split_modes.find("mapq") != split_modes.end()){
         std::cerr << " - MAPQ (pre-liftover) < " << min_mapq << "\n";
@@ -78,7 +78,7 @@ void WriteDeferred::print_info() {
         std::cerr << " - TLEN/isize (post-liftover) == 0\n";
     }
     if (split_modes.find("clipped_frac") != split_modes.end()){
-        std::cerr << " - Fraction of clipped bases (post-liftover) < " << max_clipped_frac << "\n";
+        std::cerr << " - Fraction of clipped bases (post-liftover) >= " << max_clipped_frac << "\n";
     }
     if (split_modes.find("aln_score") != split_modes.end()){
         std::cerr << " - AS:i (pre-liftover) < " << min_aln_score << "\n";
@@ -87,16 +87,16 @@ void WriteDeferred::print_info() {
         std::cerr << " - NM:i (post-liftover) > " << max_hdist << "\n";
     }
     if (bed_defer_source.get_fn().size() > 0){
-        std::cerr << " - BED deferred (source) " << bed_defer_source.get_fn() << "\n";
+        std::cerr << " - In BED deferred (source) " << bed_defer_source.get_fn() << "\n";
     }
     if (bed_defer_dest.get_fn().size() > 0){
-        std::cerr << " - BED deferred (dest) " << bed_defer_dest.get_fn() << "\n";
+        std::cerr << " - In BED deferred (dest) " << bed_defer_dest.get_fn() << "\n";
     }
     if (bed_commit_source.get_fn().size() > 0){
-        std::cerr << " - BED removed (source) " << bed_commit_source.get_fn() << "\n";
+        std::cerr << " - Not in BED commit (source) " << bed_commit_source.get_fn() << "\n";
     }
     if (bed_commit_dest.get_fn().size() > 0){
-        std::cerr << " - BED removed (dest) " << bed_commit_dest.get_fn() << "\n";
+        std::cerr << " - Not in BED commit (dest) " << bed_commit_dest.get_fn() << "\n";
     }
 }
 
