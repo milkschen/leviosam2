@@ -48,20 +48,26 @@ void collate_core(
     int cnt = 0;
     while (sam_read1(csam_fp, chdr, aln) > 0) {
         bam1_core_t c = aln->core;
+        bool primary = true;
         if ((c.flag & BAM_FSECONDARY) || // Secondary alignment - no SEQ field
             (c.flag & BAM_FQCFAIL) || // not passing filters
             (c.flag & BAM_FDUP) || // PCR or optinal duplicate
             (c.flag & BAM_FSUPPLEMENTARY)) { // supplementary alignment
-            if (sam_write1(out_csam_fp, chdr, aln) < 0) {
-                std::cerr << "[Error] Failed to write record " << 
-                    bam_get_qname(aln) << "\n";
-                exit(1);
-            }
+            primary = false;
+            // if (sam_write1(out_csam_fp, chdr, aln) < 0) {
+            //     std::cerr << "[Error] Failed to write record " << 
+            //         bam_get_qname(aln) << "\n";
+            //     exit(1);
+            // }
         } 
         std::string qname = bam_get_qname(aln);
         auto search = reads.find(qname);
         bool write_to_fastq = false;
         if (search != reads.end()){
+            // If a read is not primary but in the defer group, skip it
+            if (!primary)
+                continue;
+
             LevioSamUtils::FastqRecord fq = LevioSamUtils::FastqRecord(aln);
             // Write the paired records to FASTQ
             if (c.flag & BAM_FREAD1) { // first segment
@@ -71,31 +77,34 @@ void collate_core(
                 search->second.write(out_r1_fp, qname);
                 fq.write(out_r2_fp, qname);
             } else {
-                std::cerr << "Error: Read " << qname << " is not paired-end. Exit.\n";
+                std::cerr << "[E::collate_core] Read " << qname << " is not paired-end. Exit.\n";
                 exit(1);
             }
             // Also write the records to a BAM file
             if (sam_write1(out_dsam_fp, dhdr, aln) < 0 ||
                 sam_write1(out_dsam_fp, dhdr, search->second.aln) < 0) {
-                std::cerr << "[Error] Failed to write record " << bam_get_qname(aln) <<
+                std::cerr << "[E::collate_core] Failed to write record " << bam_get_qname(aln) <<
                     " to the deferred BAM file\n";
                 exit(1);
             }
             reads.erase(search);
             write_to_fastq = true;
             cnt += 1;
-        }
-        if (write_to_fastq == false) { // write to BAM
+        } else { // read not found in defer, write to committed BAM
+        // if (write_to_fastq == false) { // write to BAM
             if (sam_write1(out_csam_fp, chdr, aln) < 0) {
-                std::cerr << "[Error] Failed to write record " << bam_get_qname(aln) << 
+                std::cerr << "[E::collate_core] Failed to write record " << bam_get_qname(aln) << 
                     " to the committed BAM file\n";
                 exit(1);
             }
         }
     }
     
-    std::cerr << "Extract " << cnt << " reads from BAM\n";
-    std::cerr << "Num. remaining records in the map = " << reads.size() << " (expected to be 0)\n";
+    std::cerr << "[I::collate_core] Extract " << cnt << " reads from BAM\n";
+    if (reads.size() != 0) {
+        std::cerr << "[W::collate_core] Num. remaining records in the map = "
+                  << reads.size() << " (expected to be 0)\n";
+    }
 }
 
 
