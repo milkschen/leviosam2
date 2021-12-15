@@ -63,9 +63,22 @@ echo "BED where reads get deferred: ${DEFER_DEST_BED}";
 echo "BED where reads get discarded: ${COMMIT_SOURCE_BED}";
 echo "Num. threads: ${THR}";
 
+if [[ ${INPUT} == "" ]]; then
+    echo "Input is not set properly"
+    exit 1
+fi
+if [[ ${PFX} == "" ]]; then
+    echo "Prefix is not set properly"
+    exit 1
+fi
+if [[ ${REF} == "" ]]; then
+    echo "Reference (source) is not set properly"
+    exit 1
+fi
+
 if [[ ! ${ALN} =~ ^(bowtie2|bwamem)$ ]]; then
     echo "Invalid ${ALN}. Accepted input: bowtie2, bwamem"
-    exit
+    exit 1
 fi
 
 # Lifting over using leviosam
@@ -122,10 +135,14 @@ if [ ! -s ${PFX}-paired-realigned.bam ]; then
 fi
 
 # Reference flow-style merging
-if [ ! -s ${PFX}-paired-deferred-cherry_picked.bam ]; then
+if [ ! -s ${PFX}-paired-realigned-sorted_n.bam ]; then
     samtools sort -@ ${THR} -n -o ${PFX}-paired-realigned-sorted_n.bam ${PFX}-paired-realigned.bam
+fi
+if [ ! -s ${PFX}-paired-deferred-sorted_n.bam ]; then
     samtools sort -@ ${THR} -n -o ${PFX}-paired-deferred-sorted_n.bam ${PFX}-paired-deferred.bam
-    ${LEVIOSAM} cherry_pick -s source:${PFX}-paired-deferred.bam -s target:${PFX}-paired-realigned.bam \
+fi
+if [ ! -s ${PFX}-paired-deferred-cherry_picked.bam ]; then
+    ${LEVIOSAM} cherry_pick -s source:${PFX}-paired-deferred-sorted_n.bam -s target:${PFX}-paired-realigned-sorted_n.bam \
         -m -o ${PFX}-paired-deferred-cherry_picked.bam
 fi
 
