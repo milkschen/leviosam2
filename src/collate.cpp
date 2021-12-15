@@ -14,10 +14,7 @@
 #include <getopt.h>
 #include <iostream>
 #include <stdio.h>
-#include <htslib/sam.h>
 #include "collate.hpp"
-#include "gzstream.h"
-#include "leviosam_utils.hpp"
 #include "version.hpp"
 
 
@@ -36,8 +33,98 @@ void print_collate_help_msg() {
 }
 
 
+/* Read a SAM/BAM file, write properly paired alignements to a BAM file
+ * and return the rest as a fastq_map
+ */
+fastq_map read_deferred_bam(
+    samFile* dsam_fp, samFile* out_dsam_fp, sam_hdr_t* hdr,
+    ogzstream& out_r1_fp, ogzstream& out_r2_fp
+) {
+    fastq_map reads1, reads2;
+    bam1_t* aln = bam_init1();
+
+    while (sam_read1(dsam_fp, hdr, aln) > 0) {
+        bam1_core_t c = aln->core;
+        // The following categories of reads are excluded by this method
+        if ((c.flag & BAM_FSECONDARY) || // Secondary alignment - no SEQ field
+            (c.flag & BAM_FQCFAIL) || // not passing filters
+            (c.flag & BAM_FDUP) || // PCR or optinal duplicate
+            (c.flag & BAM_FSUPPLEMENTARY)) { // supplementary alignment
+            continue;
+        }
+        std::string qname = bam_get_qname(aln);
+        LevioSamUtils::FastqRecord fq = LevioSamUtils::FastqRecord(aln);
+        if (c.flag & BAM_FREAD1) { // first segment
+            auto search = reads2.find(qname);
+            if (search != reads2.end()) {
+                if (sam_write1(out_dsam_fp, hdr, search->second.aln) < 0  ||
+                    sam_write1(out_dsam_fp, hdr, aln) < 0) {
+                    std::cerr << "[Error] Failed to write record " << qname << "\n";
+                    exit(1);
+                }
+                fq.write(out_r1_fp, qname);
+                search->second.write(out_r2_fp, qname);
+                reads2.erase(search);
+            } else {
+                reads1.emplace(std::make_pair(qname, fq));
+            }
+        } else if (c.flag & BAM_FREAD2) { // second segment
+            auto search = reads1.find(qname);
+            if (search != reads1.end()) {
+                if (sam_write1(out_dsam_fp, hdr, aln) < 0 ||
+                    sam_write1(out_dsam_fp, hdr, search->second.aln) < 0) {
+                    std::cerr << "[Error] Failed to write record " << qname << "\n";
+                    exit(1);
+                }
+                search->second.write(out_r1_fp, qname);
+                fq.write(out_r2_fp, qname);
+                reads1.erase(search);
+            } else {
+                reads2.emplace(std::make_pair(qname, fq));
+            }
+        } else {
+            std::cerr << "[Error] Alignment " << qname << " is not paired.\n";
+            exit(1);
+        }
+    }
+    std::cerr << "Num. unpaired reads1: " << reads1.size() << "\n";
+    std::cerr << "Num. unpaired reads2: " << reads2.size() << "\n";
+    for (auto& r: reads2) {
+        reads1.emplace(std::make_pair(r.first, r.second.aln));
+    }
+    std::cerr << "Num. merged unpaired: " << reads1.size() << "\n";
+    return reads1;
+}
+
+
+/* Read a single-end FASTQ file and return a fastq_map */
+fastq_map read_unpaired_fq(const std::string& fq_fname) {
+    fastq_map reads;
+    std::ifstream fastq_fp(fq_fname);
+    std::string line;
+    int i = 0;
+    std::string name, seq;
+    while (getline (fastq_fp, line)) {
+        if (i % 4 == 0) {
+            name = line.substr(1);
+        } else if (i % 4 == 1) {
+            seq = line;
+        } else if (i % 4 == 3) {
+            reads.emplace(
+                std::make_pair(name, LevioSamUtils::FastqRecord(seq, line)));
+            name = "";
+            seq = "";
+        }
+        i++;
+    }
+    std::cerr << "Number of singletons: " << reads.size() << "\n";
+    fastq_fp.close();
+    return reads;
+}
+
+
 void collate_core(
-    LevioSamUtils::fastq_map &reads,
+    fastq_map &reads,
     bam_hdr_t* chdr,
     bam_hdr_t* dhdr,
     samFile* csam_fp, samFile* out_csam_fp,
@@ -132,9 +219,9 @@ void collate(collate_opts args) {
     }
 
     // Core operation
-    LevioSamUtils::fastq_map reads = (args.fq_fname != "")?
-        LevioSamUtils::read_unpaired_fq(args.fq_fname) :
-        LevioSamUtils::read_deferred_bam(dsam_fp, out_dsam_fp, dhdr, out_r1_fp, out_r2_fp);
+    fastq_map reads = (args.fq_fname != "")?
+        read_unpaired_fq(args.fq_fname) :
+        read_deferred_bam(dsam_fp, out_dsam_fp, dhdr, out_r1_fp, out_r2_fp);
     collate_core(
         reads, chdr, dhdr, csam_fp, out_csam_fp, out_dsam_fp, out_r1_fp, out_r2_fp);
 
