@@ -150,8 +150,8 @@ fi
 if [ ! -s ${PFX}-final.bam ]; then
     if (( ${MEASURE_TIME} > 0)); then
         ${TIME} -v -o merge_and_sort.time_log \
-            samtools cat ${PFX}-paired-committed.bam ${PFX}-paired-deferred-cherry_picked | samtools sort -@ ${THR} -o ${PFX}-final.bam
+            samtools cat ${PFX}-paired-committed.bam ${PFX}-paired-deferred-cherry_picked.bam | samtools sort -@ ${THR} -o ${PFX}-final.bam
     else
-        samtools cat ${PFX}-paired-committed.bam ${PFX}-paired-deferred-cherry_picked | samtools sort -@ ${THR} -o ${PFX}-final.bam
+        samtools cat ${PFX}-paired-committed.bam ${PFX}-paired-deferred-cherry_picked.bam | samtools sort -@ ${THR} -o ${PFX}-final.bam
     fi
 fi
