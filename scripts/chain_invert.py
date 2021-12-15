@@ -20,7 +20,7 @@ def parse_args():
     return args
 
 
-def change_sides(in_fn: str, out_fn: str) -> None:
+def invert(in_fn: str, out_fn: str) -> None:
     f = open(in_fn, 'r')
     fo = open(out_fn, 'w')
     for line in f:
@@ -59,11 +59,9 @@ def change_sides(in_fn: str, out_fn: str) -> None:
                 chain_list += [fields[0], fields[2], fields[1]]
             else:
                 chain_list += [fields[0], fields[1], fields[2]]
-            # print(f'{changed_str}', file=fo)
         elif len(fields) == 1 and fields[0] != '':
             l = int(fields[0])
             chain_list.append(fields[0])
-            # print(fields[0], file=fo)
             if strand == '-':
                 chain_list = chain_list[::-1]
             for i in range(int(len(chain_list) / 3)):
@@ -78,4 +76,4 @@ if __name__ == '__main__':
 
     print('Input chain:', args.chain, file=sys.stderr)
     print('Output chain (verbose):', args.out, file=sys.stderr)
-    change_sides(in_fn=args.chain, out_fn=args.out)
+    invert(in_fn=args.chain, out_fn=args.out)
