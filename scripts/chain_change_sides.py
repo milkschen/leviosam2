@@ -1,4 +1,6 @@
-
+'''
+Switch the source and target reference of a chain file
+'''
 import argparse
 import sys
 import re
@@ -46,16 +48,28 @@ def change_sides(in_fn: str, out_fn: str) -> None:
                 changed[9] = '-'
             changed_str = ' '.join(changed)
             print(f'{changed_str}', file=fo)
+            chain_list = []
         elif len(fields) == 3:
             l = int(fields[0])
             ds = int(fields[1])
             dd = int(fields[2])
             changed = [fields[0], fields[2], fields[1]]
             changed_str = ' '.join(changed)
-            print(f'{changed_str}', file=fo)
+            if strand == '+':
+                chain_list += [fields[0], fields[2], fields[1]]
+            else:
+                chain_list += [fields[0], fields[1], fields[2]]
+            # print(f'{changed_str}', file=fo)
         elif len(fields) == 1 and fields[0] != '':
             l = int(fields[0])
-            print(fields[0], file=fo)
+            chain_list.append(fields[0])
+            # print(fields[0], file=fo)
+            if strand == '-':
+                chain_list = chain_list[::-1]
+            for i in range(int(len(chain_list) / 3)):
+                p = ' '.join(chain_list[i*3: (i+1)*3])
+                print(p, file=fo)
+            print(chain_list[-1], file=fo)
             print('', file=fo)
 
 
