@@ -1,32 +1,35 @@
 set -xp 
 
-DIR_LEVIOSAM="/home/cnaechy1/data_blangme2/naechyun/levioSAM/" #$(pwd)
+DIR_LEVIOSAM="/home/cnaechy1/data_blangme2/naechyun/levioSAM" #$(pwd)
 # Inputs
-CHAIN="/home/cnaechy1/data_blangme2/fasta/chain/chm13_v1.1_hg2Y-grch38.chain"
+
+# GRCh38
+# CHAIN="/home/cnaechy1/data_blangme2/fasta/chain/chm13_v1.1_hg2Y-grch38.chain"
+# SOURCE_FA="/home/cnaechy1/data_blangme2/fasta/chm13_v1.1-hg2Y/chm13.v1.1-hg002_Y.fasta"
+# DEST_FA="/home/cnaechy1/data_blangme2/fasta/grch38/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna"
+# # DEST_KMER_IDX needs to be consistent with `k`. Can leave this empty
+# DEST_KMER_IDX=" -W /home/cnaechy1/data_blangme2/fasta/grch38/repetitive_k19.txt"
+# PFX="chm13_v1.1_hg2Y-grch38"
+
+# hg19
+CHAIN="/home/cnaechy1/data_blangme2/fasta/chain/chm13_v1.1_hg2Y-hg19.chain"
 SOURCE_FA="/home/cnaechy1/data_blangme2/fasta/chm13_v1.1-hg2Y/chm13.v1.1-hg002_Y.fasta"
-DEST_FA="/home/cnaechy1/data_blangme2/fasta/grch38/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna"
+DEST_FA="/home/cnaechy1/data_blangme2/fasta/grch37/hg19.fa"
 # DEST_KMER_IDX needs to be consistent with `k`. Can leave this empty
-DEST_KMER_IDX=" -W /home/cnaechy1/data_blangme2/fasta/grch38/repetitive_k19.txt"
-PFX="chm13_v1.1_hg2Y-grch38"
+DEST_KMER_IDX=""
+PFX="chm13_v1.1_hg2Y-hg19"
 MIN_SEG_SIZE="5000"
 
 # Resulting files
-DEST_BED="grch38.bed"
 SOURCE_BED="chm13.v1.1-hg002_Y.bed"
-DEST_CHAIN=""
-
 
 python ${DIR_LEVIOSAM}/scripts/verbosify_chain.py -c ${CHAIN} -o ${CHAIN}.annotated -b ${PFX}
-
-# python ${DIR_LEVIOSAM}/scripts/fai_to_bed.py -f ${DEST_FA}.fai -o ${DEST_BED}
-# bedtools sort -i ${PFX}-dest.bed | bedtools merge -i stdin > ${PFX}-dest-sorted_merged.bed
-# bedtools subtract -a ${DEST_BED} -b ${PFX}-dest-sorted_merged.bed > ${PFX}-dest-unliftable.bed
-# python ${DIR_LEVIOSAM}/scripts/filter_bed_by_size.py -b ${PFX}-dest-unliftable.bed \
-#     -o ${PFX}-dest-unliftable-s_${MIN_SEG_SIZE}.bed -s ${MIN_SEG_SIZE}
-
 python ${DIR_LEVIOSAM}/scripts/fai_to_bed.py -f ${SOURCE_FA}.fai -o ${SOURCE_BED}
-bedtools sort -i ${PFX}-source.bed | bedtools merge -i stdin > ${PFX}-source-sorted_merged.bed
-bedtools subtract -a ${SOURCE_BED} -b ${PFX}-source-sorted_merged.bed > ${PFX}-source-unliftable.bed
+bedtools sort -i ${PFX}-source.bed | \
+    bedtools merge -i stdin | \
+    bedtools subtract -a ${SOURCE_BED} -b stdin > ${PFX}-source-unliftable.bed
+# bedtools sort -i ${PFX}-source.bed | bedtools merge -i stdin > ${PFX}-source-sorted_merged.bed
+# bedtools subtract -a ${SOURCE_BED} -b ${PFX}-source-sorted_merged.bed > ${PFX}-source-unliftable.bed
 python ${DIR_LEVIOSAM}/scripts/filter_bed_by_size.py -b ${PFX}-source-unliftable.bed \
     -o ${PFX}-source-unliftable-s_${MIN_SEG_SIZE}.bed -s ${MIN_SEG_SIZE}
 
