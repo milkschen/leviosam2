@@ -111,10 +111,12 @@ bool WriteDeferred::commit_aln_source(const bam1_t* const aln) {
     if (c->flag & BAM_FUNMAP)
         return false;
 
-    std::string rname = hdr->target_name[c->tid];
+    std::string rname = hdr_orig->target_name[c->tid];
     auto rlen = bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln));
     size_t pos_end = c->pos + rlen;
     if (bed_commit_source.intersect(rname, c->pos, pos_end)) {
+        // DEBUG
+        // std::cerr << "[D::WriteDeferred::commit_aln_source] " << rname << ":" << c->pos << "\n";
         return true;
     }
     if (bed_defer_source.intersect(rname, c->pos, pos_end)) {
