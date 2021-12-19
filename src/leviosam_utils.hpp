@@ -21,7 +21,14 @@
 #include "bed.hpp"
 #include "gzstream.h"
 
+#define SPLIT_MIN_MAPQ          30
+#define SPLIT_MAX_ISIZE         1000
+#define SPLIT_MAX_CLIPPED_FRAC  0.95
+#define SPLIT_MIN_AS            100
+#define SPLIT_MAX_NM            5
+
 const int8_t seq_comp_table[16] = { 0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15 };
+
 
 namespace LevioSamUtils {
 
@@ -66,11 +73,22 @@ public:
 
 class WriteDeferred {
 public:
-    WriteDeferred() {
-        write_deferred = false;
-    };
+    WriteDeferred() : write_deferred(false) {};
+    // {
+    //     write_deferred = false;
+    // };
     ~WriteDeferred();
 
+    void init(
+        const std::string outpre,
+        const std::vector<std::pair<std::string, float>>& split_rules,
+        const std::string of,
+        sam_hdr_t* ihdr, sam_hdr_t* ohdr,
+        const BedUtils::Bed &b_defer_source,
+        const BedUtils::Bed &b_defer_dest,
+        const BedUtils::Bed &b_commit_source,
+        const BedUtils::Bed &b_commit_dest
+    );
     void init(
         const std::string outpre, const std::string sm,
         const int mapq, const int isize,
@@ -97,8 +115,11 @@ private:
     sam_hdr_t* hdr;
     sam_hdr_t* hdr_orig;
     std::set<std::string> split_modes;
-    int min_mapq, max_isize, min_aln_score, max_hdist;
-    float max_clipped_frac;
+    int min_mapq = SPLIT_MIN_MAPQ;
+    int max_isize = SPLIT_MAX_ISIZE;
+    int min_aln_score = SPLIT_MIN_AS;
+    int max_hdist = SPLIT_MAX_NM;
+    float max_clipped_frac = SPLIT_MAX_CLIPPED_FRAC;
     BedUtils::Bed bed_defer_source, bed_defer_dest, bed_commit_source, bed_commit_dest;
 };
 

@@ -14,6 +14,7 @@ TIME=time # GNU time
 MEASURE_TIME=1 # Set to a >0 value to measure time for each step
 FRAC_CLIPPED=0.95
 ISIZE=1000
+HDIST=5
 DEFER_DEST_BED=""
 COMMIT_SOURCE_BED=""
 
@@ -28,7 +29,7 @@ MAPQ=30
 ALN_SCORE=100
 
 
-while getopts a:A:b:C:D:f:i:L:M:o:q:r:R:t:T: flag
+while getopts a:A:b:C:D:f:H:i:L:M:o:q:r:R:t:T: flag
 do
     case "${flag}" in
         a) ALN=${OPTARG};;
@@ -37,6 +38,7 @@ do
         C) CLFT=${OPTARG};;
         D) DEFER_DEST_BED=" -D ${OPTARG}";;
         f) REF=${OPTARG};;
+        H) HDIST=${OPTARG};;
         i) INPUT=${OPTARG};;
         L) LEVIOSAM=${OPTARG};;
         M) MEASURE_TIME=${OPTARG};;
@@ -86,12 +88,14 @@ if [ ! -s ${PFX}-committed.bam ]; then
     if (( ${MEASURE_TIME} > 0)); then
         ${TIME} -v -o lift.time_log \
             ${LEVIOSAM} lift -C ${CLFT} -a ${INPUT} -t ${THR} -p ${PFX} -O bam \
-            -S mapq,isize,aln_score,clipped_frac -M ${MAPQ} -A ${ALN_SCORE} -Z ${ISIZE} -L ${FRAC_CLIPPED} -G 0 \
+            -S mapq:${MAPQ} -S isize:${ISIZE} -S aln_score:${ALN_SCORE} \
+            -S clipped_frac:${FRAC_CLIPPED} -S hdist:${HDIST} -G 0 \
             -m -f ${REF} \
             ${DEFER_DEST_BED} ${COMMIT_SOURCE_BED}
     else
         ${LEVIOSAM} lift -C ${CLFT} -a ${INPUT} -t ${THR} -p ${PFX} -O bam \
-        -S mapq,isize,aln_score,clipped_frac -M ${MAPQ} -A ${ALN_SCORE} -Z ${ISIZE} -L ${FRAC_CLIPPED} -G 0 \
+        -S mapq:${MAPQ} -S isize:${ISIZE} -S aln_score:${ALN_SCORE} \
+        -S clipped_frac:${FRAC_CLIPPED} -S hdist:${HDIST} -G 0 \
         -m -f ${REF} \
         ${DEFER_DEST_BED} ${COMMIT_SOURCE_BED}
     fi

@@ -26,6 +26,56 @@ KSEQ_INIT(gzFile, gzread)
 ;;
 
 
+bool check_split_rule(std::string rule) {
+    auto cnt = std::count(
+        LevioSamUtils::DEFER_OPT.begin(),
+        LevioSamUtils::DEFER_OPT.end(),
+        rule);
+    if (cnt != 1) {
+        std::cerr << "[E::check_split_rule] " << rule << " is not a valid filtering option\n";
+        std::cerr << "Valid options:\n";
+        for (auto& opt: LevioSamUtils::DEFER_OPT) {
+            std::cerr << " - " << opt << "\n";
+        }
+        return false;
+    }
+    return true;
+}
+
+
+bool add_split_rule(
+    std::vector<std::pair<std::string, float>>& split_rules,
+    std::string s
+) {
+    std::string delim(":");
+    auto start = 0U;
+    auto end = s.find(delim);
+    int cnt = 0;
+    std::string key;
+    float value;
+    while (end != std::string::npos)
+    {
+        if (cnt == 0) {
+            key = s.substr(start, end - start);
+            if (check_split_rule(key) == false) {
+                return false;
+            }
+            std::cerr << "[I::add_split_rule] Adding rule `" << key;
+            value = std::stof(s.substr(end - start + 1, end));
+            std::cerr << ":" << value << "`\n";
+            split_rules.push_back(std::make_pair(key, value));
+        } else {
+            std::cerr << "[E::add_split_rule] Invalid split rule: " << s << "\n";
+            return false;
+        }
+        start = end + delim.length();
+        end = s.find(delim, start);
+        cnt += 1;
+    }
+    return true;
+}
+
+
 NameMap parse_name_map(const char* fname) {
     NameMap names;
     FILE* fp = fopen(fname, "r");
@@ -242,7 +292,7 @@ void lift_run(lift_opts args) {
         sam_open("-", "r") : sam_open(args.sam_fname.data(), "r");
     std::string out_mode = (args.out_format == "sam")? "w" : "wb";
     // if split, append "-committed" after `outpre`
-    std::string out_sam_fname = (args.split_mode == "")?
+    std::string out_sam_fname = (args.split_rules.size() == 0)?
         args.outpre + "." + args.out_format :
         args.outpre + "-committed." + args.out_format;
     samFile* out_sam_fp = (args.outpre == "-" || args.outpre == "")?
@@ -266,11 +316,9 @@ void lift_run(lift_opts args) {
     }
 
     LevioSamUtils::WriteDeferred wd;
-    if (args.split_mode != "") {
+    if (args.split_rules.size() != 0) {
         wd.init(
-            args.outpre, args.split_mode,
-            args.min_mapq, args.max_isize,
-            args.max_clipped_frac, args.min_aln_score,
+            args.outpre, args.split_rules,
             args.out_format, hdr_orig, hdr,
             args.bed_defer_source, args.bed_defer_dest,
             args.bed_commit_source, args.bed_commit_dest);
@@ -369,7 +417,7 @@ void print_lift_help_msg(){
     std::cerr << "         Commit/defer rule options:\n";
     std::cerr << "           Example: `-S mapq,aln_score -M 20 -A 20` commits MQ>=20 and AS>=20 alignments.\n";
     std::cerr << "           -S string Split the aligned reads with an indicator. Options: mapq, aln_score, isize, clipped_frac. [none]\n";
-    std::cerr << "           -M int    Min MAPQ to commit (pre-liftover; must with `-S mapq`). [10]\n";
+    std::cerr << "           -M int    Min MAPQ to commit (pre-liftover; must with `-S mapq`). [30]\n";
     std::cerr << "           -A int    Min AS:i to commit (pre-liftover; must with `-S aln_score`). [100]\n";
     std::cerr << "           -Z int    Max TLEN/isize to commit (post-liftover; must with `-S isize`). [1000]\n";
     std::cerr << "           -L float  Min fraction of clipped to commit (post-liftover; must with `-S aln_score`). [0.95]\n";
@@ -466,6 +514,7 @@ int main(int argc, char** argv) {
                 args.sam_fname = optarg;
                 break;
             case 'A':
+                // TODO - deprecated
                 args.min_aln_score = atoi(optarg);
                 break;
             case 'c':
@@ -497,9 +546,11 @@ int main(int argc, char** argv) {
                 args.lift_fname = optarg;
                 break;
             case 'L':
+                // TODO - deprecated
                 args.max_clipped_frac = atof(optarg);
                 break;
             case 'M':
+                // TODO - deprecated
                 args.min_mapq = atoi(optarg);
                 break;
             case 'n':
@@ -522,7 +573,9 @@ int main(int argc, char** argv) {
                 args.sample = optarg;
                 break;
             case 'S':
-                args.split_mode = optarg;
+                if (add_split_rule(args.split_rules, optarg) == false) {
+                    exit(1);
+                }
                 break;
             case 't':
                 args.threads = atoi(optarg);
@@ -537,6 +590,7 @@ int main(int argc, char** argv) {
                 args.vcf_fname = optarg;
                 break;
             case 'Z':
+                // TODO - deprecated
                 args.max_isize = atoi(optarg);
                 break;
             default:
@@ -554,25 +608,16 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
-    if (args.split_mode != "") {
-        // std::vector<std::string> split_options {"lifted", "mapq", "clipped_frac", "isize", "aln_score"};
-        std::vector<std::string> sm = LevioSamUtils::str_to_vector(args.split_mode, ",");
-        for (auto& m: sm) {
-            auto cnt = std::count(
-                LevioSamUtils::DEFER_OPT.begin(),
-                LevioSamUtils::DEFER_OPT.end(),
-                m);
-            if (cnt != 1) {
-                std::cerr << "[E::main] " << m << " is not a valid filtering option\n";
-                std::cerr << "Valid options:\n";
-                for (auto& opt: LevioSamUtils::DEFER_OPT) {
-                    std::cerr << " - " << opt << "\n";
-                }
+    for (auto& r: args.split_rules) {
+        if (r.first == "hdist") {
+            if (args.ref_name == "") {
+                std::cerr << "[E::main] Option `-f` must be set when `-S hdist` is used\n";
+                print_lift_help_msg();
                 exit(1);
             }
         }
     }
-    if (args.split_mode == "") {
+    if (args.split_rules.size() == 0) {
         if (args.bed_defer_source.get_fn() != "" ||
             args.bed_defer_dest.get_fn() != "" ||
             args.bed_commit_source.get_fn() != "" ||

@@ -15,6 +15,57 @@
 namespace LevioSamUtils {
 
 void WriteDeferred::init(
+    const std::string outpre,
+    const std::vector<std::pair<std::string, float>>& split_rules,
+    const std::string of,
+    sam_hdr_t* ihdr, sam_hdr_t* ohdr,
+    const BedUtils::Bed &b_defer_source,
+    const BedUtils::Bed &b_defer_dest,
+    const BedUtils::Bed &b_commit_source,
+    const BedUtils::Bed &b_commit_dest
+) {
+    write_deferred = true;
+    std::string rules_str("");
+    for (auto& r: split_rules) {
+        split_modes.emplace(r.first);
+        if (r.first == "mapq") {
+            min_mapq = r.second;
+        } else if (r.first == "clipped_frac") {
+            max_clipped_frac = r.second;
+        } else if (r.first == "isize") {
+            max_isize = r.second;
+        } else if (r.first == "aln_score") {
+            min_aln_score = r.second;
+        } else if (r.first == "hdist") {
+            max_hdist = r.second;
+        }
+    }
+    hdr = ohdr;
+    hdr_orig = ihdr;
+    bed_defer_source = b_defer_source;
+    bed_defer_dest = b_defer_dest;
+    bed_commit_source = b_commit_source;
+    bed_commit_dest = b_commit_dest;
+
+    std::string out_mode = (of == "sam")? "w" : "wb";
+    std::string out_fn = outpre + "-deferred." + of;
+    out_fp = sam_open(out_fn.data(), out_mode.data());
+    if (sam_hdr_write(out_fp, ohdr) < 0) {
+        std::cerr << "[E::WriteDeferred::init] Failed to write sam_hdr for " << out_fn << "\n";
+        exit(1);
+    }
+
+    std::string out_fn_orig = outpre + "-unliftable." + of;
+    out_fp_orig = sam_open(out_fn_orig.data(), out_mode.data());
+    if (sam_hdr_write(out_fp_orig, hdr_orig) < 0) {
+        std::cerr << "[E::WriteDeferred::init] Failed to write sam_hdr for " << out_fn_orig << "\n";
+        exit(1);
+    }
+    print_info();
+}
+
+
+void WriteDeferred::init(
     const std::string outpre, const std::string sm,
     const int mapq, const int isize,
     const float clipped_frac, const int aln_score,
