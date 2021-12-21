@@ -74,9 +74,6 @@ public:
 class WriteDeferred {
 public:
     WriteDeferred() : write_deferred(false) {};
-    // {
-    //     write_deferred = false;
-    // };
     ~WriteDeferred();
 
     void init(
@@ -84,16 +81,6 @@ public:
         const std::vector<std::pair<std::string, float>>& split_rules,
         const std::string of,
         sam_hdr_t* ihdr, sam_hdr_t* ohdr,
-        const BedUtils::Bed &b_defer_source,
-        const BedUtils::Bed &b_defer_dest,
-        const BedUtils::Bed &b_commit_source,
-        const BedUtils::Bed &b_commit_dest
-    );
-    void init(
-        const std::string outpre, const std::string sm,
-        const int mapq, const int isize,
-        const float clipped_frac, const int aln_score,
-        const std::string of, sam_hdr_t* ihdr, sam_hdr_t* ohdr,
         const BedUtils::Bed &b_defer_source,
         const BedUtils::Bed &b_defer_dest,
         const BedUtils::Bed &b_commit_source,

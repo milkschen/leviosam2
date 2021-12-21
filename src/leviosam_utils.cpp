@@ -65,51 +65,6 @@ void WriteDeferred::init(
 }
 
 
-void WriteDeferred::init(
-    const std::string outpre, const std::string sm,
-    const int mapq, const int isize,
-    const float clipped_frac, const int aln_score,
-    const std::string of,
-    sam_hdr_t* ihdr, sam_hdr_t* ohdr,
-    const BedUtils::Bed &b_defer_source,
-    const BedUtils::Bed &b_defer_dest,
-    const BedUtils::Bed &b_commit_source,
-    const BedUtils::Bed &b_commit_dest
-) {
-    write_deferred = true;
-    // split_mode = sm;
-    split_modes = str_to_set(sm, ",");
-    min_mapq = mapq;
-    max_isize = isize;
-    max_clipped_frac = clipped_frac;
-    min_aln_score = aln_score;
-    // TODO
-    max_hdist = 5;
-    hdr = ohdr;
-    hdr_orig = ihdr;
-    bed_defer_source = b_defer_source;
-    bed_defer_dest = b_defer_dest;
-    bed_commit_source = b_commit_source;
-    bed_commit_dest = b_commit_dest;
-
-    std::string out_mode = (of == "sam")? "w" : "wb";
-    std::string out_fn = outpre + "-deferred." + of;
-    out_fp = sam_open(out_fn.data(), out_mode.data());
-    if (sam_hdr_write(out_fp, ohdr) < 0) {
-        std::cerr << "[E::WriteDeferred::init] Failed to write sam_hdr for " << out_fn << "\n";
-        exit(1);
-    }
-
-    std::string out_fn_orig = outpre + "-unliftable." + of;
-    out_fp_orig = sam_open(out_fn_orig.data(), out_mode.data());
-    if (sam_hdr_write(out_fp_orig, hdr_orig) < 0) {
-        std::cerr << "[E::WriteDeferred::init] Failed to write sam_hdr for " << out_fn_orig << "\n";
-        exit(1);
-    }
-    print_info();
-}
-
-
 WriteDeferred::~WriteDeferred() {
     if (write_deferred) {
         sam_close(out_fp);
@@ -162,12 +117,18 @@ bool WriteDeferred::commit_aln_source(const bam1_t* const aln) {
     if (c->flag & BAM_FUNMAP)
         return false;
 
+    if (split_modes.find("mapq") != split_modes.end()){
+        if (c->qual < min_mapq)
+            return false;
+    }
+    if (split_modes.find("aln_score") != split_modes.end()){
+        if (bam_aux2i(bam_aux_get(aln, "AS")) < min_aln_score)
+            return false;
+    }
     std::string rname = hdr_orig->target_name[c->tid];
     auto rlen = bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln));
     size_t pos_end = c->pos + rlen;
     if (bed_commit_source.intersect(rname, c->pos, pos_end)) {
-        // DEBUG
-        // std::cerr << "[D::WriteDeferred::commit_aln_source] " << rname << ":" << c->pos << "\n";
         return true;
     }
     if (bed_defer_source.intersect(rname, c->pos, pos_end)) {
@@ -190,10 +151,6 @@ bool WriteDeferred::commit_aln_dest(
 
     if (c->flag & BAM_FUNMAP)
         return false;
-    if (split_modes.find("mapq") != split_modes.end()){
-        if (c->qual < min_mapq)
-            return false;
-    }
     if (split_modes.find("isize") != split_modes.end()){
         if (c->isize == 0 || c->isize > max_isize || c->isize < -max_isize)
             return false;
@@ -210,10 +167,6 @@ bool WriteDeferred::commit_aln_dest(
     }
     if (split_modes.find("clipped_frac") != split_modes.end()){
         if (1 - (rlen / c->l_qseq) > max_clipped_frac)
-            return false;
-    }
-    if (split_modes.find("aln_score") != split_modes.end()){
-        if (bam_aux2i(bam_aux_get(aln, "AS")) < min_aln_score)
             return false;
     }
     if (split_modes.find("hdist") != split_modes.end()){
