@@ -13,7 +13,18 @@
 
 namespace BedUtils {
 
+
+Bed::Bed() {};
+
+
 Bed::Bed(const std::string &fn) {
+    init(fn);
+}
+
+
+/* Initiate a BED object
+ */
+void Bed::init(const std::string& fn) {
     bed_fn = fn;
     is_valid = true;
     std::ifstream bed_f(fn);
@@ -30,7 +41,7 @@ Bed::Bed(const std::string &fn) {
         bed_f.close();
     }
     auto contig_cnt = index();
-    std::cerr << "Read " << cnt << " BED records from " << contig_cnt << " contigs.\n";
+    std::cerr << "[I::Bed] Read " << cnt << " BED records (" << contig_cnt << " contigs) from " << fn << "\n";
 }
 
 

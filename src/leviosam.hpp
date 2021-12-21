@@ -27,8 +27,6 @@
 #include "version.hpp"
 
 
-// #define VERSION "0.5.1-dev"
-
 #define VERBOSE_CLEAN 0
 #define VERBOSE_INFO  1
 #define VERBOSE_DEBUG 2
@@ -59,6 +57,8 @@ struct lift_opts {
     std::string cmd = "";
     std::string haplotype = "0";
     std::string split_mode = "";
+    // TODO
+    std::vector<std::pair<std::string, float>> split_rules;
     int allowed_cigar_changes = 0;
     int threads = 1;
     int chunk_size = 256;
@@ -67,7 +67,8 @@ struct lift_opts {
     LengthMap length_map;
     int md_flag = 0;
     std::string ref_name = "";
-    int min_mapq = 10;
+    int min_mapq = 30;
+    int max_hdist = 5;
     int max_isize = 1000;
     float max_clipped_frac = 0.95;
     int min_aln_score = 100;
@@ -94,6 +95,11 @@ struct lift_opts {
 void print_main_help_msg();
 void print_lift_help_msg();
 void print_serialize_help_msg();
+
+bool check_split_rule(std::string rule);
+bool add_split_rule(
+    std::vector<std::pair<std::string, float>>& split_rules,
+    std::string s);
 
 namespace lift {
 // Serialization

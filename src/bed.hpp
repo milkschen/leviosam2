@@ -12,8 +12,9 @@ using BedMap = robin_hood::unordered_map<std::string, IITree<std::size_t, bool>>
 
 class Bed {
     public:
-        Bed() {};
-        Bed(const std::string &fn);
+        Bed();
+        Bed(const std::string& fn);
+        void init(const std::string& fn);
 
         int index();
         bool add_interval(const std::string &line);

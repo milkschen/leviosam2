@@ -15,9 +15,8 @@
 namespace LevioSamUtils {
 
 void WriteDeferred::init(
-    const std::string outpre, const std::string sm,
-    const int mapq, const int isize,
-    const float clipped_frac, const int aln_score,
+    const std::string outpre,
+    const std::vector<std::pair<std::string, float>>& split_rules,
     const std::string of,
     sam_hdr_t* ihdr, sam_hdr_t* ohdr,
     const BedUtils::Bed &b_defer_source,
@@ -26,14 +25,21 @@ void WriteDeferred::init(
     const BedUtils::Bed &b_commit_dest
 ) {
     write_deferred = true;
-    // split_mode = sm;
-    split_modes = str_to_set(sm, ",");
-    min_mapq = mapq;
-    max_isize = isize;
-    max_clipped_frac = clipped_frac;
-    min_aln_score = aln_score;
-    // TODO
-    max_hdist = 5;
+    std::string rules_str("");
+    for (auto& r: split_rules) {
+        split_modes.emplace(r.first);
+        if (r.first == "mapq") {
+            min_mapq = r.second;
+        } else if (r.first == "clipped_frac") {
+            max_clipped_frac = r.second;
+        } else if (r.first == "isize") {
+            max_isize = r.second;
+        } else if (r.first == "aln_score") {
+            min_aln_score = r.second;
+        } else if (r.first == "hdist") {
+            max_hdist = r.second;
+        }
+    }
     hdr = ohdr;
     hdr_orig = ihdr;
     bed_defer_source = b_defer_source;
@@ -55,6 +61,7 @@ void WriteDeferred::init(
         std::cerr << "[E::WriteDeferred::init] Failed to write sam_hdr for " << out_fn_orig << "\n";
         exit(1);
     }
+    print_info();
 }
 
 
@@ -67,7 +74,7 @@ WriteDeferred::~WriteDeferred() {
 
 
 void WriteDeferred::print_info() {
-    std::cerr << "Alignments don't pass the below filter are deferred:\n";
+    std::cerr << "[I::WriteDeferred::print_info] Alignments with any of the below features are deferred:\n";
     std::cerr << " - unlifted\n";
     if (split_modes.find("mapq") != split_modes.end()){
         std::cerr << " - MAPQ (pre-liftover) < " << min_mapq << "\n";
@@ -77,7 +84,7 @@ void WriteDeferred::print_info() {
         std::cerr << " - TLEN/isize (post-liftover) == 0\n";
     }
     if (split_modes.find("clipped_frac") != split_modes.end()){
-        std::cerr << " - Fraction of clipped bases (post-liftover) < " << max_clipped_frac << "\n";
+        std::cerr << " - Fraction of clipped bases (post-liftover) >= " << max_clipped_frac << "\n";
     }
     if (split_modes.find("aln_score") != split_modes.end()){
         std::cerr << " - AS:i (pre-liftover) < " << min_aln_score << "\n";
@@ -86,16 +93,16 @@ void WriteDeferred::print_info() {
         std::cerr << " - NM:i (post-liftover) > " << max_hdist << "\n";
     }
     if (bed_defer_source.get_fn().size() > 0){
-        std::cerr << " - BED deferred (source) " << bed_defer_source.get_fn() << "\n";
+        std::cerr << " - In BED deferred (source) " << bed_defer_source.get_fn() << "\n";
     }
     if (bed_defer_dest.get_fn().size() > 0){
-        std::cerr << " - BED deferred (dest) " << bed_defer_dest.get_fn() << "\n";
+        std::cerr << " - In BED deferred (dest) " << bed_defer_dest.get_fn() << "\n";
     }
     if (bed_commit_source.get_fn().size() > 0){
-        std::cerr << " - BED removed (source) " << bed_commit_source.get_fn() << "\n";
+        std::cerr << " - Not in BED commit (source) " << bed_commit_source.get_fn() << "\n";
     }
     if (bed_commit_dest.get_fn().size() > 0){
-        std::cerr << " - BED removed (dest) " << bed_commit_dest.get_fn() << "\n";
+        std::cerr << " - Not in BED commit (dest) " << bed_commit_dest.get_fn() << "\n";
     }
 }
 
@@ -107,7 +114,18 @@ bool WriteDeferred::commit_aln_source(const bam1_t* const aln) {
         return true;
 
     const bam1_core_t* c = &(aln->core);
-    std::string rname = hdr->target_name[c->tid];
+    if (c->flag & BAM_FUNMAP)
+        return false;
+
+    if (split_modes.find("mapq") != split_modes.end()){
+        if (c->qual < min_mapq)
+            return false;
+    }
+    if (split_modes.find("aln_score") != split_modes.end()){
+        if (bam_aux2i(bam_aux_get(aln, "AS")) < min_aln_score)
+            return false;
+    }
+    std::string rname = hdr_orig->target_name[c->tid];
     auto rlen = bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln));
     size_t pos_end = c->pos + rlen;
     if (bed_commit_source.intersect(rname, c->pos, pos_end)) {
@@ -133,10 +151,6 @@ bool WriteDeferred::commit_aln_dest(
 
     if (c->flag & BAM_FUNMAP)
         return false;
-    if (split_modes.find("mapq") != split_modes.end()){
-        if (c->qual < min_mapq)
-            return false;
-    }
     if (split_modes.find("isize") != split_modes.end()){
         if (c->isize == 0 || c->isize > max_isize || c->isize < -max_isize)
             return false;
@@ -153,10 +167,6 @@ bool WriteDeferred::commit_aln_dest(
     }
     if (split_modes.find("clipped_frac") != split_modes.end()){
         if (1 - (rlen / c->l_qseq) > max_clipped_frac)
-            return false;
-    }
-    if (split_modes.find("aln_score") != split_modes.end()){
-        if (bam_aux2i(bam_aux_get(aln, "AS")) < min_aln_score)
             return false;
     }
     if (split_modes.find("hdist") != split_modes.end()){
@@ -335,96 +345,6 @@ int FastqRecord::write(ogzstream& out_fq, std::string name) {
     out_fq << seq_str << "\n+\n";
     out_fq << qual_str << "\n";
     return 1;
-}
-
-
-/* Read a SAM/BAM file, write properly paired alignements to a BAM file
- * and return the rest as a fastq_map
- */
-fastq_map read_deferred_bam(
-    samFile* dsam_fp, samFile* out_dsam_fp, sam_hdr_t* hdr,
-    ogzstream& out_r1_fp, ogzstream& out_r2_fp
-) {
-    fastq_map reads1, reads2;
-    bam1_t* aln = bam_init1();
-
-    while (sam_read1(dsam_fp, hdr, aln) > 0) {
-        bam1_core_t c = aln->core;
-        // The following categories of reads are excluded by this method
-        if ((c.flag & BAM_FSECONDARY) || // Secondary alignment - no SEQ field
-            (c.flag & BAM_FQCFAIL) || // not passing filters
-            (c.flag & BAM_FDUP) || // PCR or optinal duplicate
-            (c.flag & BAM_FSUPPLEMENTARY)) { // supplementary alignment
-            continue;
-        }
-        std::string qname = bam_get_qname(aln);
-        FastqRecord fq = FastqRecord(aln);
-        if (c.flag & BAM_FREAD1) { // first segment
-            auto search = reads2.find(qname);
-            if (search != reads2.end()) {
-                if (sam_write1(out_dsam_fp, hdr, search->second.aln) < 0  ||
-                    sam_write1(out_dsam_fp, hdr, aln) < 0) {
-                    std::cerr << "[Error] Failed to write record " << qname << "\n";
-                    exit(1);
-                }
-                fq.write(out_r1_fp, qname);
-                search->second.write(out_r2_fp, qname);
-                reads2.erase(search);
-            } else {
-                reads1.emplace(std::make_pair(qname, fq));
-            }
-        } else if (c.flag & BAM_FREAD2) { // second segment
-            auto search = reads1.find(qname);
-            if (search != reads1.end()) {
-                if (sam_write1(out_dsam_fp, hdr, aln) < 0 ||
-                    sam_write1(out_dsam_fp, hdr, search->second.aln) < 0) {
-                    std::cerr << "[Error] Failed to write record " << qname << "\n";
-                    exit(1);
-                }
-                search->second.write(out_r1_fp, qname);
-                fq.write(out_r2_fp, qname);
-                reads1.erase(search);
-            } else {
-                reads2.emplace(std::make_pair(qname, fq));
-            }
-        } else {
-            std::cerr << "[Error] Alignment " << qname << " is not paired.\n";
-            exit(1);
-        }
-    }
-    std::cerr << "Num. unpaired reads1: " << reads1.size() << "\n";
-    std::cerr << "Num. unpaired reads2: " << reads2.size() << "\n";
-    for (auto& r: reads2) {
-        reads1.emplace(std::make_pair(r.first, r.second.aln));
-    }
-    std::cerr << "Num. merged unpaired: " << reads1.size() << "\n";
-    return reads1;
-}
-
-
-/* Read a single-end FASTQ file and return a fastq_map */
-fastq_map read_unpaired_fq(const std::string& fq_fname) {
-    fastq_map reads;
-    std::ifstream fastq_fp(fq_fname);
-    std::string line;
-    int i = 0;
-    std::string name, seq;
-    while (getline (fastq_fp, line)) {
-        if (i % 4 == 0) {
-            name = line.substr(1);
-        } else if (i % 4 == 1) {
-            seq = line;
-        } else if (i % 4 == 3) {
-            reads.emplace(
-                std::make_pair(name, FastqRecord(seq, line)));
-            name = "";
-            seq = "";
-        }
-        i++;
-    }
-    std::cerr << "Number of singletons: " << reads.size() << "\n";
-    fastq_fp.close();
-    return reads;
 }
 
 

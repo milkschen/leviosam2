@@ -14,6 +14,7 @@ TIME=time # GNU time
 MEASURE_TIME=1 # Set to a >0 value to measure time for each step
 FRAC_CLIPPED=0.95
 ISIZE=1000
+HDIST=5
 DEFER_DEST_BED=""
 COMMIT_SOURCE_BED=""
 
@@ -28,7 +29,7 @@ MAPQ=30
 ALN_SCORE=100
 
 
-while getopts a:A:b:C:D:i:L:M:o:q:r:R:t:T: flag
+while getopts a:A:b:C:D:f:H:i:L:M:o:q:r:R:t:T: flag
 do
     case "${flag}" in
         a) ALN=${OPTARG};;
@@ -36,13 +37,15 @@ do
         b) ALN_IDX=${OPTARG};;
         C) CLFT=${OPTARG};;
         D) DEFER_DEST_BED=" -D ${OPTARG}";;
-        R) COMMIT_SOURCE_BED=" -r ${OPTARG}";;
+        f) REF=${OPTARG};;
+        H) HDIST=${OPTARG};;
         i) INPUT=${OPTARG};;
         L) LEVIOSAM=${OPTARG};;
         M) MEASURE_TIME=${OPTARG};;
         o) PFX=${OPTARG};;
         q) MAPQ=${OPTARG};;
         r) ALN_RG=${OPTARG};;
+        R) COMMIT_SOURCE_BED=" -r ${OPTARG}";;
         t) THR=${OPTARG};;
         T) TIME=${OPTARG};;
     esac
@@ -53,6 +56,7 @@ echo "Output prefix: ${PFX}";
 echo "Aligner: ${ALN}";
 echo "Aligner indexes prefix: ${ALN_IDX}";
 echo "Aligner read group: ${ALN_RG}";
+echo "Targer reference: ${REF}";
 echo "LevioSAM software: ${LEVIOSAM}";
 echo "LevioSAM index: ${CLFT}";
 echo "LevioSAM min MAPQ: ${MAPQ}";
@@ -61,9 +65,22 @@ echo "BED where reads get deferred: ${DEFER_DEST_BED}";
 echo "BED where reads get discarded: ${COMMIT_SOURCE_BED}";
 echo "Num. threads: ${THR}";
 
+if [[ ${INPUT} == "" ]]; then
+    echo "Input is not set properly"
+    exit 1
+fi
+if [[ ${PFX} == "" ]]; then
+    echo "Prefix is not set properly"
+    exit 1
+fi
+if [[ ${REF} == "" ]]; then
+    echo "Reference (source) is not set properly"
+    exit 1
+fi
+
 if [[ ! ${ALN} =~ ^(bowtie2|bwamem)$ ]]; then
     echo "Invalid ${ALN}. Accepted input: bowtie2, bwamem"
-    exit
+    exit 1
 fi
 
 # Lifting over using leviosam
@@ -71,11 +88,15 @@ if [ ! -s ${PFX}-committed.bam ]; then
     if (( ${MEASURE_TIME} > 0)); then
         ${TIME} -v -o lift.time_log \
             ${LEVIOSAM} lift -C ${CLFT} -a ${INPUT} -t ${THR} -p ${PFX} -O bam \
-            -S mapq,isize,aln_score,clipped_frac -M ${MAPQ} -A ${ALN_SCORE} -Z ${ISIZE} -L ${FRAC_CLIPPED} -G 0 \
+            -S mapq:${MAPQ} -S isize:${ISIZE} -S aln_score:${ALN_SCORE} \
+            -S clipped_frac:${FRAC_CLIPPED} -S hdist:${HDIST} -G 0 \
+            -m -f ${REF} \
             ${DEFER_DEST_BED} ${COMMIT_SOURCE_BED}
     else
         ${LEVIOSAM} lift -C ${CLFT} -a ${INPUT} -t ${THR} -p ${PFX} -O bam \
-        -S mapq,isize,aln_score,clipped_frac -M ${MAPQ} -A ${ALN_SCORE} -Z ${ISIZE} -L ${FRAC_CLIPPED} -G 0 \
+        -S mapq:${MAPQ} -S isize:${ISIZE} -S aln_score:${ALN_SCORE} \
+        -S clipped_frac:${FRAC_CLIPPED} -S hdist:${HDIST} -G 0 \
+        -m -f ${REF} \
         ${DEFER_DEST_BED} ${COMMIT_SOURCE_BED}
     fi
 fi
@@ -117,12 +138,24 @@ if [ ! -s ${PFX}-paired-realigned.bam ]; then
     fi
 fi
 
+# Reference flow-style merging
+if [ ! -s ${PFX}-paired-realigned-sorted_n.bam ]; then
+    samtools sort -@ ${THR} -n -o ${PFX}-paired-realigned-sorted_n.bam ${PFX}-paired-realigned.bam
+fi
+if [ ! -s ${PFX}-paired-deferred-sorted_n.bam ]; then
+    samtools sort -@ ${THR} -n -o ${PFX}-paired-deferred-sorted_n.bam ${PFX}-paired-deferred.bam
+fi
+if [ ! -s ${PFX}-paired-deferred-cherry_picked.bam ]; then
+    ${LEVIOSAM} cherry_pick -s source:${PFX}-paired-deferred-sorted_n.bam -s target:${PFX}-paired-realigned-sorted_n.bam \
+        -m -o ${PFX}-paired-deferred-cherry_picked.bam
+fi
+
 # Merge and sort
 if [ ! -s ${PFX}-final.bam ]; then
     if (( ${MEASURE_TIME} > 0)); then
         ${TIME} -v -o merge_and_sort.time_log \
-            samtools cat ${PFX}-paired-committed.bam ${PFX}-paired-realigned.bam | samtools sort -@ ${THR} -o ${PFX}-final.bam
+            samtools cat ${PFX}-paired-committed.bam ${PFX}-paired-deferred-cherry_picked.bam | samtools sort -@ ${THR} -o ${PFX}-final.bam
     else
-        samtools cat ${PFX}-paired-committed.bam ${PFX}-paired-realigned.bam | samtools sort -@ ${THR} -o ${PFX}-final.bam
+        samtools cat ${PFX}-paired-committed.bam ${PFX}-paired-deferred-cherry_picked.bam | samtools sort -@ ${THR} -o ${PFX}-final.bam
     fi
 fi
