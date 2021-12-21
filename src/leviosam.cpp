@@ -47,14 +47,17 @@ bool add_split_rule(
     std::vector<std::pair<std::string, float>>& split_rules,
     std::string s
 ) {
+    if (s == "lifted") {
+        split_rules.push_back(std::make_pair(s, 1));
+        return true;
+    }
     std::string delim(":");
     auto start = 0U;
     auto end = s.find(delim);
     int cnt = 0;
     std::string key;
     float value;
-    while (end != std::string::npos)
-    {
+    while (end != std::string::npos) {
         if (cnt == 0) {
             key = s.substr(start, end - start);
             if (check_split_rule(key) == false) {
@@ -515,6 +518,7 @@ int main(int argc, char** argv) {
                 break;
             case 'A':
                 // TODO - deprecated
+                std::cerr << "[W::main] -A will be deprecated\n";
                 args.min_aln_score = atoi(optarg);
                 break;
             case 'c':
@@ -547,10 +551,12 @@ int main(int argc, char** argv) {
                 break;
             case 'L':
                 // TODO - deprecated
+                std::cerr << "[W::main] -L will be deprecated\n";
                 args.max_clipped_frac = atof(optarg);
                 break;
             case 'M':
                 // TODO - deprecated
+                std::cerr << "[W::main] -M will be deprecated\n";
                 args.min_mapq = atoi(optarg);
                 break;
             case 'n':
@@ -591,6 +597,7 @@ int main(int argc, char** argv) {
                 break;
             case 'Z':
                 // TODO - deprecated
+                std::cerr << "[W::main] -Z will be deprecated\n";
                 args.max_isize = atoi(optarg);
                 break;
             default:
