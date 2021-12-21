@@ -512,8 +512,9 @@ void ChainMap::lift_cigar_core_one_run(
             if (next_q_offset <= next_bp)
                 std::cerr << "  have not reach next_bp: " << cigar_op_len << bam_cigar_opchr(cigar_op) << "\n";
         }
-        // Have not reached the next breakpoint
-        if (next_q_offset <= next_bp){
+        // Push the current CIGAR OP and advance if have not reached the next breakpoint or
+        // there are no remaining breakpoints
+        if (next_q_offset <= next_bp || break_points.size() == 0){
             push_cigar(new_cigar, cigar_op_len, cigar_op, false);
             query_offset += cigar_op_len;
         // Split one CIGAR chunk into two parts and insert lift-over bases there
@@ -770,7 +771,6 @@ int32_t ChainMap::get_num_clipped(
 ) {
     if ((sidx <= -1) || (eidx <= -1) || (sidx < eidx)) {
         return -1;
-    // TODO
     // Special case: `sidx == 0 && eidx == 0` -> first interval for a contig
     // We can treat this as the `sidx>eidx` case
     } else if (sidx == eidx && eidx != 0) {
@@ -839,6 +839,9 @@ bool ChainMap::lift_segment(
         if ((c->flag & BAM_FMUNMAP) || (c->mtid < 0))
             return false;
     }
+    if (verbose >= VERBOSE_DEBUG) {
+        std::cerr << "\n[D::lift_segment] " << bam_get_qname(aln) << "\n";
+    }
 
     int start_sidx = 0;
     int start_eidx = 0;
@@ -856,7 +859,7 @@ bool ChainMap::lift_segment(
     int32_t num_sclip_start = get_num_clipped(
         pos, true, source_contig, start_sidx, start_eidx);
     if (verbose >= VERBOSE_DEBUG) {
-        std::cerr << "\n" << bam_get_qname(aln) << "\n";
+        // std::cerr << "\n" << bam_get_qname(aln) << "\n";
         debug_print_interval_queries(
             first_seg, true, source_contig, pos, start_sidx, start_eidx);
     }
