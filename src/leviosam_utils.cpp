@@ -117,14 +117,6 @@ bool WriteDeferred::commit_aln_source(const bam1_t* const aln) {
     if (c->flag & BAM_FUNMAP)
         return false;
 
-    if (split_modes.find("mapq") != split_modes.end()){
-        if (c->qual < min_mapq)
-            return false;
-    }
-    if (split_modes.find("aln_score") != split_modes.end()){
-        if (bam_aux2i(bam_aux_get(aln, "AS")) < min_aln_score)
-            return false;
-    }
     std::string rname = hdr_orig->target_name[c->tid];
     auto rlen = bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln));
     size_t pos_end = c->pos + rlen;
@@ -133,6 +125,14 @@ bool WriteDeferred::commit_aln_source(const bam1_t* const aln) {
     }
     if (bed_defer_source.intersect(rname, c->pos, pos_end)) {
         return false;
+    }
+    if (split_modes.find("mapq") != split_modes.end()){
+        if (c->qual < min_mapq)
+            return false;
+    }
+    if (split_modes.find("aln_score") != split_modes.end()){
+        if (bam_aux2i(bam_aux_get(aln, "AS")) < min_aln_score)
+            return false;
     }
     return false;
 }
