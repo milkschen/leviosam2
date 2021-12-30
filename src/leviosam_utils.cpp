@@ -120,19 +120,13 @@ bool WriteDeferred::commit_aln_source(const bam1_t* const aln) {
     std::string rname = hdr_orig->target_name[c->tid];
     auto rlen = bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln));
     size_t pos_end = c->pos + rlen;
+    // The commit regions need to be considered ahead of other rules,
+    // i.e. a low MAPQ read in a commit region should be committed
     if (bed_commit_source.intersect(rname, c->pos, pos_end)) {
         return true;
     }
     if (bed_defer_source.intersect(rname, c->pos, pos_end)) {
         return false;
-    }
-    if (split_modes.find("mapq") != split_modes.end()){
-        if (c->qual < min_mapq)
-            return false;
-    }
-    if (split_modes.find("aln_score") != split_modes.end()){
-        if (bam_aux2i(bam_aux_get(aln, "AS")) < min_aln_score)
-            return false;
     }
     return false;
 }
@@ -151,6 +145,17 @@ bool WriteDeferred::commit_aln_dest(
 
     if (c->flag & BAM_FUNMAP)
         return false;
+    // MAPQ and AS are pre-lift-over values, but we need to put the logic here since
+    // our commit-defer decision is based on (commit_aln_source | commit_aln_dest)
+    if (split_modes.find("mapq") != split_modes.end()){
+        if (c->qual < min_mapq)
+            return false;
+    }
+    if (split_modes.find("aln_score") != split_modes.end()){
+        if (bam_aux2i(bam_aux_get(aln, "AS")) < min_aln_score)
+            return false;
+    }
+    // End MAPQ and AS
     if (split_modes.find("isize") != split_modes.end()){
         if (c->isize == 0 || c->isize > max_isize || c->isize < -max_isize)
             return false;
