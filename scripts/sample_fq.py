@@ -56,5 +56,7 @@ def sample_fq(args):
 
 if __name__ == '__main__':
     args = parse_args()
+    if args.read1 is None:
+        exit(1)
     sample_fq(args)
 
