@@ -10,11 +10,12 @@ python collect_perf.py -a bt2_all.time_log -l lift.time_log -l collate.time_log 
 
 Nae-Chyun Chen
 Johns Hopkins University
-2021
+2021-2022
 '''
 import argparse
 import os
 import pandas as pd
+import sys
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -22,9 +23,15 @@ def parse_args():
         '-a', '--aln-log',
         help='Paths to the GNU time log for full alignment.')
     parser.add_argument(
+        '-an', '--aln-name', default='aln',
+        help='Label of the full alignment experiment [aln].')
+    parser.add_argument(
         '-l', '--leviosam-logs',
         action='append', required=True,
         help='Paths to GNU time logs for the levioSAM pipeline.')
+    parser.add_argument(
+        '-ln', '--leviosam-name', default='leviosam',
+        help='Label of the levioSAM experiment [leviosam].')
     parser.add_argument(
         '-o', '--output',
         help='Path to the output TSV file.'
@@ -51,7 +58,7 @@ def collect_perf_core(f, ls_perf) -> None:
             elif len(wt) == 2:
                 wall_time = 60 * float(wt[0]) + float(wt[1])
             else:
-                print('error - invalid wall time format')
+                print('error - invalid wall time format', file=sys.stderr)
                 exit(1)
         elif line.count('Maximum resident set size (kbytes):') > 0:
             max_rss = int(line.split('):')[1])
@@ -63,7 +70,7 @@ def collect_perf_core(f, ls_perf) -> None:
 
 
 def collect_perf_list(logs_list, cols):
-    print(logs_list)
+    print(logs_list, file=sys.stderr)
     ls_perf = []
     for log in logs_list:
         f = open(log, 'r')
@@ -89,13 +96,20 @@ def collect_perf(args):
             'CPU time (s)', 'Wall time (s)', 'Max RSS (KB)']
 
     df_l = collect_perf_list(args.leviosam_logs, cols=COLS)
-    df_l = summarize_df(df=df_l, cols=COLS)
-    print(df_l)
+    df_l['Method'] = args.aln_name
+    # df_l = summarize_df(df=df_l, cols=COLS)
+    # print(df_l)
 
     df_a = collect_perf_list([args.aln_log], cols=COLS)
-    df_a = summarize_df(df=df_a, cols=COLS)
-    print(df_a)
+    df_a['Method'] = args.leviosam_name
+    # df_a = summarize_df(df=df_a, cols=COLS)
+    # print(df_a)
 
+    df = pd.concat([df_l, df_a])
+    if args.output:
+        df.to_csv(args.output, sep='\t', index=False)
+    else:
+        print(df)
 
 if __name__ == '__main__':
     args = parse_args()
