@@ -207,9 +207,15 @@ void read_and_lift(
                         bam_get_qname(aln_vec[i]) << "\n";
                     exit(1);
                 }
-            } else {
+            }
+
+            // If force-commit, only write the original alignment to `unliftable`
+            // If defer, write to both `unliftable` and `defer`
+            if (wd->commit_aln_dest(aln_vec[i]) == false) {
                 std::lock_guard<std::mutex> g_deferred(wd->mutex_fwrite);
-                wd->write_deferred_bam(aln_vec[i], hdr_dest);
+                if (wd->commit_aln_source(aln_vec_clone[i]) == false) {
+                    wd->write_deferred_bam(aln_vec[i], hdr_dest);
+                }
                 wd->write_deferred_bam_orig(aln_vec_clone[i]);
             }
         }
