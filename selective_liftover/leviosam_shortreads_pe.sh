@@ -93,33 +93,12 @@ if [ ! -s ${PFX}-committed.bam ]; then
     ${TT} ${LEVIOSAM} lift -C ${CLFT} -a ${INPUT} -t ${THR} -p ${PFX} -O bam \
     -S mapq:${MAPQ} -S isize:${ISIZE} -S aln_score:${ALN_SCORE} \
     -S clipped_frac:${FRAC_CLIPPED} -S hdist:${HDIST} -G 0 \
-    -m -f ${REF} \
-    # ${DEFER_DEST_BED} ${COMMIT_SOURCE_BED}
-    # if (( ${MEASURE_TIME} > 0)); then
-    #     ${TIME} -v -o lift.time_log \
-    #         ${LEVIOSAM} lift -C ${CLFT} -a ${INPUT} -t ${THR} -p ${PFX} -O bam \
-    #         -S mapq:${MAPQ} -S isize:${ISIZE} -S aln_score:${ALN_SCORE} \
-    #         -S clipped_frac:${FRAC_CLIPPED} -S hdist:${HDIST} -G 0 \
-    #         -m -f ${REF} \
-    #         ${DEFER_DEST_BED} ${COMMIT_SOURCE_BED}
-    # else
-    #     ${LEVIOSAM} lift -C ${CLFT} -a ${INPUT} -t ${THR} -p ${PFX} -O bam \
-    #     -S mapq:${MAPQ} -S isize:${ISIZE} -S aln_score:${ALN_SCORE} \
-    #     -S clipped_frac:${FRAC_CLIPPED} -S hdist:${HDIST} -G 0 \
-    #     -m -f ${REF} \
-    #     ${DEFER_DEST_BED} ${COMMIT_SOURCE_BED}
-    # fi
+    -m -f ${REF}
 fi
 
 # Collate
 if [ ! -s ${PFX}-paired-deferred-R1.fq.gz ]; then
     ${TT} ${LEVIOSAM} collate -a ${PFX}-committed.bam -b ${PFX}-deferred.bam -p ${PFX}-paired
-    # if (( ${MEASURE_TIME} > 0)); then
-    #     ${TIME} -v -o collate.time_log \
-    #         ${LEVIOSAM} collate -a ${PFX}-committed.bam -b ${PFX}-deferred.bam -p ${PFX}-paired
-    # else
-    #     ${LEVIOSAM} collate -a ${PFX}-committed.bam -b ${PFX}-deferred.bam -p ${PFX}-paired
-    # fi
 fi
 
 # Re-align deferred reads
@@ -133,29 +112,6 @@ if [ ! -s ${PFX}-paired-realigned.bam ]; then
         ${PFX}-paired-deferred-R1.fq.gz ${PFX}-paired-deferred-R2.fq.gz | \
         ${TT} samtools view -hb > ${PFX}-paired-realigned.bam
     fi
-    # if (( ${MEASURE_TIME} > 0)); then
-    #     if [[ ${ALN} == "bowtie2" ]]; then
-    #         ${TIME} -v -o aln_paired.time_log \
-    #             bowtie2 --local ${ALN_RG} -p ${THR} -x ${ALN_IDX} \
-    #             -1 ${PFX}-paired-deferred-R1.fq.gz -2 ${PFX}-paired-deferred-R2.fq.gz | \
-    #             samtools view -hb > ${PFX}-paired-realigned.bam
-    #     else
-    #         ${TIME} -v -o aln_paired.time_log \
-    #             bwa mem -t ${THR} -R ${ALN_RG} ${ALN_IDX} \
-    #             ${PFX}-paired-deferred-R1.fq.gz ${PFX}-paired-deferred-R2.fq.gz | \
-    #             samtools view -hb > ${PFX}-paired-realigned.bam
-    #     fi
-    # else
-    #     if [[ ${ALN} == "bowtie2" ]]; then
-    #         bowtie2 --local ${ALN_RG} -p ${THR} -x ${ALN_IDX} \
-    #         -1 ${PFX}-paired-deferred-R1.fq.gz -2 ${PFX}-paired-deferred-R2.fq.gz | \
-    #         samtools view -hb > ${PFX}-paired-realigned.bam
-    #     else
-    #         bwa mem -t ${THR} -R ${ALN_RG} ${ALN_IDX} \
-    #         ${PFX}-paired-deferred-R1.fq.gz ${PFX}-paired-deferred-R2.fq.gz | \
-    #         samtools view -hb > ${PFX}-paired-realigned.bam
-    #     fi
-    # fi
 fi
 
 # Reference flow-style merging
@@ -174,10 +130,4 @@ fi
 if [ ! -s ${PFX}-final.bam ]; then
     ${TT} samtools cat ${PFX}-paired-committed.bam ${PFX}-paired-deferred-cherry_picked.bam | \
         ${TT} samtools sort -@ ${THR} -o ${PFX}-final.bam
-    # if (( ${MEASURE_TIME} > 0)); then
-    #     ${TIME} -v -o merge_and_sort.time_log \
-    #         samtools cat ${PFX}-paired-committed.bam ${PFX}-paired-deferred-cherry_picked.bam | samtools sort -@ ${THR} -o ${PFX}-final.bam
-    # else
-    #     samtools cat ${PFX}-paired-committed.bam ${PFX}-paired-deferred-cherry_picked.bam | samtools sort -@ ${THR} -o ${PFX}-final.bam
-    # fi
 fi
