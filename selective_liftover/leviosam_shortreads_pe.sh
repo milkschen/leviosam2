@@ -121,13 +121,13 @@ fi
 if [ ! -s ${PFX}-paired-deferred-sorted_n.bam ]; then
     ${TT} samtools sort -@ ${THR} -n -o ${PFX}-paired-deferred-sorted_n.bam ${PFX}-paired-deferred.bam
 fi
-if [ ! -s ${PFX}-paired-deferred-cherry_picked.bam ]; then
-    ${TT} ${LEVIOSAM} cherry_pick -s source:${PFX}-paired-deferred-sorted_n.bam -s target:${PFX}-paired-realigned-sorted_n.bam \
-        -m -o ${PFX}-paired-deferred-cherry_picked.bam
+if [ ! -s ${PFX}-paired-deferred-reconciled.bam ]; then
+    ${TT} ${LEVIOSAM} reconcile -s source:${PFX}-paired-deferred-sorted_n.bam -s target:${PFX}-paired-realigned-sorted_n.bam \
+        -m -o ${PFX}-paired-deferred-reconciled.bam
 fi
 
 # Merge and sort
 if [ ! -s ${PFX}-final.bam ]; then
-    ${TT} samtools cat ${PFX}-paired-committed.bam ${PFX}-paired-deferred-cherry_picked.bam | \
+    ${TT} samtools cat ${PFX}-paired-committed.bam ${PFX}-paired-deferred-reconciled.bam | \
         ${TT} samtools sort -@ ${THR} -o ${PFX}-final.bam
 fi
