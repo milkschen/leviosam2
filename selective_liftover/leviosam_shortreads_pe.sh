@@ -93,7 +93,7 @@ if [ ! -s ${PFX}-committed.bam ]; then
     ${TT} ${LEVIOSAM} lift -C ${CLFT} -a ${INPUT} -t ${THR} -p ${PFX} -O bam \
     -S mapq:${MAPQ} -S isize:${ISIZE} -S aln_score:${ALN_SCORE} \
     -S clipped_frac:${FRAC_CLIPPED} -S hdist:${HDIST} -G 0 \
-    -m -f ${REF}
+    -m -f ${REF} ${DEFER_DEST_BED} ${COMMIT_SOURCE_BED}
 fi
 
 # Collate
