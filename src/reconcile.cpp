@@ -8,7 +8,7 @@
 #include <limits.h>
 #include <string.h>
 
-#include "cherry_pick.hpp"
+#include "reconcile.hpp"
 #include "leviosam_utils.hpp"
 
 /* Fill the zipped vector with pairs consisting of the corresponding elements of
@@ -183,7 +183,7 @@ int select_best_aln_paired_end(
 }
 
 
-void cherry_pick_core(
+void reconcile_core(
     const std::vector<std::string>& sam_fns,
     const std::vector<std::string>& ids,
     const std::vector<samFile*>& sam_fps,
@@ -228,7 +228,7 @@ void cherry_pick_core(
                 }
                 // Check read names: they should be identical.
                 if (strcmp(bam_get_qname(aln1s[i]), bam_get_qname(aln2s[i])) != 0) {
-                    std::cerr << "[E::cherry_pick_core] SAM file should be sorted by read name.\n";
+                    std::cerr << "[E::reconcile_core] SAM file should be sorted by read name.\n";
                     std::cerr << "This can be done using `samtools sort -n`\n";
                     std::cerr << "Mismatched reads: " << bam_get_qname(aln1s[i]) <<
                                  " and " << bam_get_qname(aln2s[i]) << "\n";
@@ -249,7 +249,7 @@ void cherry_pick_core(
             // Check if read names from all files are identical.
             if (i > 0)
                 if (strcmp(bam_get_qname(aln1s[0]), bam_get_qname(aln1s[i])) != 0) {
-                    std::cerr << "[E::cherry_pick_core] Reads mismatch across SAM files.\n";
+                    std::cerr << "[E::reconcile_core] Reads mismatch across SAM files.\n";
                     std::cerr << "Mismatched reads: " << bam_get_qname(aln1s[0]) <<
                                  " and " << bam_get_qname(aln1s[i]) << "\n";
                     exit(1);
@@ -268,7 +268,7 @@ void cherry_pick_core(
                 reinterpret_cast<uint8_t*>(const_cast<char*>(ids[best_idx].c_str())));
             if (sam_write1(out_fp, hdrs[0], aln1s[best_idx]) < 0 ||
                 sam_write1(out_fp, hdrs[0], aln2s[best_idx]) < 0) {
-                std::cerr << "[E::cherry_pick_core] Failed to write to file.\n";
+                std::cerr << "[E::reconcile_core] Failed to write to file.\n";
                 std::cerr << bam_get_qname(aln1s[best_idx]);
                 exit(1);
             }
@@ -278,7 +278,7 @@ void cherry_pick_core(
                 aln1s[best_idx], "RF", 'Z', ids[best_idx].length() + 1,
                 reinterpret_cast<uint8_t*>(const_cast<char*>(ids[best_idx].c_str())));
             if (sam_write1(out_fp, hdrs[0], aln1s[best_idx]) < 0) {
-                std::cerr << "[E::cherry_pick_core] Failed to write to file.\n";
+                std::cerr << "[E::reconcile_core] Failed to write to file.\n";
                 exit(1);
             }
         }
@@ -290,17 +290,17 @@ void cherry_pick_core(
     }
 
     if (is_paired_end)
-        std::cerr << "[I::cherry_pick_core] Processed " << num_records << " pairs of reads\n";
+        std::cerr << "[I::reconcile_core] Processed " << num_records << " pairs of reads\n";
     else
-        std::cerr << "[I::cherry_pick_core] Processed " << num_records << " reads\n";
+        std::cerr << "[I::reconcile_core] Processed " << num_records << " reads\n";
 }
 
 
-void cherry_pick(cherry_pick_opts args) {
+void reconcile(reconcile_opts args) {
     if (args.paired_end)
-        std::cerr << "[I::cherry_pick] Paired-end mode\n";
+        std::cerr << "[I::reconcile] Paired-end mode\n";
     else
-        std::cerr << "[I::cherry_pick] Single-end mode\n";
+        std::cerr << "[I::reconcile] Single-end mode\n";
 
     std::srand(args.rand_seed);
     std::vector<std::string> sam_fns;
@@ -311,7 +311,7 @@ void cherry_pick(cherry_pick_opts args) {
             std::sregex_token_iterator(s.begin(), s.end(), regexz, -1),
             std::sregex_token_iterator());
         if (vec.size() != 2) {
-            std::cerr << "[E::cherry_pick] Invalid format: " << s << "\n";
+            std::cerr << "[E::reconcile] Invalid format: " << s << "\n";
             exit(1);
         }
         ids.push_back(vec[0]);
@@ -329,7 +329,7 @@ void cherry_pick(cherry_pick_opts args) {
         sam_fps.push_back(sam_open(sam_fns[i].data(), "r"));
         hdrs.push_back(sam_hdr_read(sam_fps[i]));
         if (sam_hdr_nref(hdrs[i]) != sam_hdr_nref(hdrs[0])) {
-            std::cerr << "[W::cherry_pick] Num REF in `" << sam_fns[i] << "` differs with `"
+            std::cerr << "[W::reconcile] Num REF in `" << sam_fns[i] << "` differs with `"
                       << sam_fns[0] << "`. Please check.\n";
         }
     }
@@ -340,10 +340,10 @@ void cherry_pick(cherry_pick_opts args) {
     }
     samFile* out_fp = sam_open(out_fn.data(), out_mode.data());
     if (sam_hdr_write(out_fp, hdrs[0])) {
-        std::cerr << "[E::cherry_pick] Failed to write SAM header to file " << out_fn << "\n";
+        std::cerr << "[E::reconcile] Failed to write SAM header to file " << out_fn << "\n";
         exit(1);
     }
-    cherry_pick_core(sam_fns, ids, sam_fps, hdrs,
+    reconcile_core(sam_fns, ids, sam_fps, hdrs,
                      args.paired_end, out_fp, args.score_tag);
     for (auto& s: sam_fps) {
         sam_close(s);
@@ -353,9 +353,9 @@ void cherry_pick(cherry_pick_opts args) {
 }
 
 
-static void print_cherry_pick_help(){
+static void print_reconcile_help(){
     std::cerr << "\n";
-    std::cerr << "Usage: leviosam cherry_pick [options] -s <label:input> -o <out>\n";
+    std::cerr << "Usage: leviosam reconcile [options] -s <label:input> -o <out>\n";
     std::cerr << "\n";
     std::cerr << "  -s <string:string>  Input label and file; separated by a colon, e.g.\n";
     std::cerr << "                      `-s foo:foo.bam -s bar:bar.bam`\n";
@@ -368,9 +368,9 @@ static void print_cherry_pick_help(){
 }
 
 
-int cherry_pick_run(int argc, char** argv) {
+int reconcile_run(int argc, char** argv) {
     int c;
-    cherry_pick_opts args;
+    reconcile_opts args;
     args.cmd = LevioSamUtils::make_cmd(argc, argv);
     static struct option long_options[]{
         {"paired_end", no_argument, 0, 'm'},
@@ -398,20 +398,20 @@ int cherry_pick_run(int argc, char** argv) {
                 args.score_tag = optarg;
                 break;
             case 'h':
-                print_cherry_pick_help();
+                print_reconcile_help();
                 exit(1);
             default:
-                std::cerr << "[E::cherry_pick_run] Invalid option " << c << " \n";
-                print_cherry_pick_help();
+                std::cerr << "[E::reconcile_run] Invalid option " << c << " \n";
+                print_reconcile_help();
                 exit(1);
         }
     }
     if (args.inputs.size() == 0) {
-        std::cerr << "[E::cherry_pick_run] required argument missed.\n";
-        print_cherry_pick_help();
+        std::cerr << "[E::reconcile_run] required argument missed.\n";
+        print_reconcile_help();
         exit(1);
     }
-    cherry_pick(args);
+    reconcile(args);
 
     return 0;
 }

@@ -20,7 +20,7 @@
 #include "collate.hpp"
 #include "leviosam.hpp"
 #include "lift_bed.hpp"
-#include "cherry_pick.hpp"
+#include "reconcile.hpp"
 
 KSEQ_INIT(gzFile, gzread)
 ;;
@@ -454,7 +454,7 @@ void print_main_help_msg(){
     std::cerr << "          lift        Lift alignments.\n";
     std::cerr << "          collate     Collate lifted paired-end alignments to make reads properly paired.\n";
     std::cerr << "          bed         Lift BED intervals.\n";
-    std::cerr << "          cherry_pick Select better alignments.\n";
+    std::cerr << "          reconcile   Reconcile alignments.\n";
     std::cerr << "Options:  -h          Print detailed usage.\n";
     std::cerr << "          -V          Verbose level [0].\n";
     std::cerr << "\n";
@@ -472,8 +472,8 @@ int main(int argc, char** argv) {
         return collate_run(argc, argv);
     } else if (!strcmp(argv[optind], "bed")) {
         return lift_bed_run(argc, argv);
-    } else if (!strcmp(argv[optind], "cherry_pick")) {
-        return cherry_pick_run(argc, argv);
+    } else if (!strcmp(argv[optind], "reconcile")) {
+        return reconcile_run(argc, argv);
     }
 
     double start_cputime = std::clock();

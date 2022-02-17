@@ -1,5 +1,5 @@
-#ifndef CHERRY_PICK_H__
-#define CHERRY_PICK_H__
+#ifndef RECONCILE_H__
+#define RECONCILE_H__
 #include <tuple>
 #include <vector>
 
@@ -10,7 +10,7 @@ const int MERGE_PE_SUM = 0;
 const int MERGE_PE_MAX = 1;
 // const int MERGE_PE_PAIR_TLEN_THRESHOLD = 2000;
 
-struct cherry_pick_opts{
+struct reconcile_opts{
     bool paired_end = false;
     std::string cmd = "";
     int rand_seed = 0;
@@ -57,7 +57,7 @@ int select_best_aln_paired_end(
     const std::string& score_tag,
     const int merge_pe_mode);
 
-void cherry_pick_core(
+void reconcile_core(
     const std::vector<std::string>& sam_fns,
     const std::vector<std::string>& ids,
     const std::vector<samFile*>& sam_fps,
@@ -67,10 +67,10 @@ void cherry_pick_core(
     const std::string& score_tag
 );
 
-void cherry_pick(cherry_pick_opts args);
+void reconcile(reconcile_opts args);
 
-int cherry_pick_run(int argc, char** argv);
+int reconcile_run(int argc, char** argv);
 
-static void print_cherry_pick_help();
+static void print_reconcile_help();
 
-#endif /* CHERRY_PICK_H__ */
+#endif /* RECONCILE_H__ */
