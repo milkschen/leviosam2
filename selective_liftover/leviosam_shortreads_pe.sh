@@ -126,8 +126,12 @@ if [ ! -s ${PFX}-paired-deferred-reconciled.bam ]; then
         -m -o ${PFX}-paired-deferred-reconciled.bam
 fi
 
-# Merge and sort
+# Merge, sort, and clean
 if [ ! -s ${PFX}-final.bam ]; then
     ${TT} samtools cat ${PFX}-paired-committed.bam ${PFX}-paired-deferred-reconciled.bam | \
         ${TT} samtools sort -@ ${THR} -o ${PFX}-final.bam
+    rm ${PFX}-paired-deferred.bam ${PFX}-paired-deferred-sorted_n.bam 
+    rm ${PFX}-paired-realigned.bam ${PFX}-paired-realigned-sorted_n.bam
+    rm ${PFX}-paired-deferred-reconciled.bam
+    rm ${PFX}-paired-committed.bam ${PFX}-deferred.bam
 fi
