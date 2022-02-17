@@ -34,10 +34,6 @@ def parse_args():
         '-o', '--out', default='',
         help='Path to the ouput BED file. ['': print to sys.stdout]'
     )
-    # parser.add_argument(
-    #     '--test', action='store_true',
-    #     help='Testing mode'
-    # )
     args = parser.parse_args()
     return args
 
