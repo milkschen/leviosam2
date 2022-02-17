@@ -199,6 +199,7 @@ bool ChainMap::interval_map_sanity_check() {
             if (v[i].source_end > v[i+1].source_start) {
                 std::cerr << "Error: " << itr.first << "\n";
                 v[i].debug_print_interval();
+                v[i+1].debug_print_interval();
                 return false;
             }
         }
