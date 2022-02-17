@@ -54,41 +54,54 @@ if [[ ! ${ALN} =~ ^(minimap2|winnowmap2)$ ]]; then
     exit
 fi
 
+TT=""
+if (( ${MEASURE_TIME} > 0 )); then
+    TT="${TIME} -v -ao leviosam.time_log "
+fi
+
 # Lifting over using leviosam
 if [ ! -s ${PFX}-committed.bam ]; then
-    if (( ${MEASURE_TIME} > 0)); then
-        ${TIME} -v -o lift.time_log \
-            ${LEVIOSAM} lift -C ${CLFT} -a ${INPUT} -t ${THR} -p ${PFX} -O bam \
-            -S lifted -G ${ALLOWED_GAPS} \
-            ${DEFER_DEST_BED} ${COMMIT_SOURCE_BED}
-    else
-        ${LEVIOSAM} lift -C ${CLFT} -a ${INPUT} -t ${THR} -p ${PFX} -O bam \
-        -S lifted -G ${ALLOWED_GAPS} \
-        ${DEFER_DEST_BED} ${COMMIT_SOURCE_BED}
-    fi
+    ${TT} ${LEVIOSAM} lift -C ${CLFT} -a ${INPUT} -t ${THR} -p ${PFX} -O bam \
+    -S lifted -G ${ALLOWED_GAPS} \
+    ${DEFER_DEST_BED} ${COMMIT_SOURCE_BED}
+    # if (( ${MEASURE_TIME} > 0)); then
+    #     ${TIME} -v -o lift.time_log \
+    #         ${LEVIOSAM} lift -C ${CLFT} -a ${INPUT} -t ${THR} -p ${PFX} -O bam \
+    #         -S lifted -G ${ALLOWED_GAPS} \
+    #         ${DEFER_DEST_BED} ${COMMIT_SOURCE_BED}
+    # else
+    #     ${LEVIOSAM} lift -C ${CLFT} -a ${INPUT} -t ${THR} -p ${PFX} -O bam \
+    #     -S lifted -G ${ALLOWED_GAPS} \
+    #     ${DEFER_DEST_BED} ${COMMIT_SOURCE_BED}
+    # fi
 fi
 
 # Convert deferred reads to FASTQ
 if [ ! -s ${PFX}-deferred.fq.gz ]; then
-    samtools fastq ${PFX}-deferred.bam | bgzip > ${PFX}-deferred.fq.gz
+    ${TT} samtools fastq ${PFX}-deferred.bam | \
+    ${TT} bgzip > ${PFX}-deferred.fq.gz
 fi
 
 # Re-align deferred reads
 if [ ! -s ${PFX}-realigned.bam ]; then
-    if (( ${MEASURE_TIME} > 0)); then
-        ${TIME} -v -o aln_deferred.time_log ${ALN} -ax asm20 -t ${THR} ${REF} ${PFX}-deferred.fq.gz | samtools view -hbo ${PFX}-realigned.bam
-    else
-        ${ALN} -ax asm20 -t ${THR} ${REF} ${PFX}-deferred.fq.gz | samtools view -hbo ${PFX}-realigned.bam
-    fi
+    ${TT} ${ALN} -ax asm20 -t ${THR} ${REF} ${PFX}-deferred.fq.gz | \
+    ${TT} samtools view -hbo ${PFX}-realigned.bam
+    # if (( ${MEASURE_TIME} > 0)); then
+    #     ${TIME} -v -o aln_deferred.time_log ${ALN} -ax asm20 -t ${THR} ${REF} ${PFX}-deferred.fq.gz | samtools view -hbo ${PFX}-realigned.bam
+    # else
+    #     ${ALN} -ax asm20 -t ${THR} ${REF} ${PFX}-deferred.fq.gz | samtools view -hbo ${PFX}-realigned.bam
+    # fi
 fi
 
 # Merge and sort
 if [ ! -s ${PFX}-final.bam ]; then
-    if (( ${MEASURE_TIME} > 0)); then
-        ${TIME} -v -o merge_and_sort.time_log \
-            samtools cat ${PFX}-committed.bam ${PFX}-realigned.bam | samtools sort -@ ${THR} -o ${PFX}-final.bam
-    else
-        samtools cat ${PFX}-committed.bam ${PFX}-realigned.bam | samtools sort -@ ${THR} -o ${PFX}-final.bam
-    fi
+    ${TT} samtools cat ${PFX}-committed.bam ${PFX}-realigned.bam | \
+    ${TT} samtools sort -@ ${THR} -o ${PFX}-final.bam
+    # if (( ${MEASURE_TIME} > 0)); then
+    #     ${TIME} -v -o merge_and_sort.time_log \
+    #         samtools cat ${PFX}-committed.bam ${PFX}-realigned.bam | samtools sort -@ ${THR} -o ${PFX}-final.bam
+    # else
+    #     samtools cat ${PFX}-committed.bam ${PFX}-realigned.bam | samtools sort -@ ${THR} -o ${PFX}-final.bam
+    # fi
 fi
 
