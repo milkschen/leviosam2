@@ -112,8 +112,9 @@ private:
 
 void update_cigar(bam1_t* aln, std::vector<uint32_t> &new_cigar);
 void debug_print_cigar(uint32_t* cigar, size_t n_cigar);
-void remove_mn_md_tag(bam1_t* aln);
-static std::string get_read(const bam1_t *rec);
+void remove_nm_md_tag(bam1_t* aln);
+std::string get_read(const bam1_t *rec);
+std::string get_read_as_is(const bam1_t *rec);
 
 std::vector<std::string> str_to_vector(
     const std::string str, const std::string regex_str);
