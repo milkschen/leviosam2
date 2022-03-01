@@ -171,7 +171,7 @@ bool WriteDeferred::commit_aln_dest(
         return true;
     }
     if (split_modes.find("clipped_frac") != split_modes.end()){
-        if (1 - (rlen / c->l_qseq) > max_clipped_frac)
+        if (1.0 - (rlen / c->l_qseq) > max_clipped_frac)
             return false;
     }
     if (split_modes.find("hdist") != split_modes.end()){
