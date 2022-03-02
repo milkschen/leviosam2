@@ -23,6 +23,7 @@
 #include "leviosam.hpp"
 #include "lift_bed.hpp"
 #include "reconcile.hpp"
+#include "yaml.hpp"
 
 KSEQ_INIT(gzFile, gzread)
 ;;
@@ -234,23 +235,38 @@ void read_and_lift(
                     bam_fillmd1(aln_vec[i], ref.data(), args.md_flag, 1);
                     // TODO KSW
                     uint8_t* nm_ptr = bam_aux_get(aln_vec[i], "NM");
-                    if (nm_ptr != NULL) {
+                    if (nm_ptr != NULL &&
+                        !(aln_vec[i]->core.flag & BAM_FUNMAP) &&
+                        !(aln_vec[i]->core.flag & BAM_FSECONDARY) &&
+                        !(aln_vec[i]->core.flag & BAM_FSUPPLEMENTARY)
+                    ) {
                         if (bam_aux2i(nm_ptr) > args.allowed_cigar_changes) {
-                            // std::cerr << bam_aux2i(nm_ptr) << " " << aln_vec[i]->core.l_qseq << "\n";
                             std::string ref_seq = ref.substr(
                                 aln_vec[i]->core.pos,
                                 bam_cigar2rlen(aln_vec[i]->core.n_cigar,
                                                bam_get_cigar(aln_vec[i])));
                             std::string q_seq = LevioSamUtils::get_read_as_is(aln_vec[i]);
                             std::vector<uint32_t> new_cigar;
-                            if (args.realign_preset == "pacbio") {
-                                new_cigar = Aln::align_extd2(
-                                    ref_seq.data(), q_seq.data(), 1, -2, 2, 1, 2, 1, -1, -1, 0, 0);
-                            } else if (args.realign_preset == "illumina") {
+                            std::cerr << bam_get_qname(aln_vec[i]) << " " << aln_vec[i]->core.flag << " " << bam_aux2i(nm_ptr) << " " << aln_vec[i]->core.l_qseq << "\n";
+                            // We perform global alignment for local sequences and
+                            // thus an alignment with a high number of clipped bases
+                            // might not re-align well
+                            new_cigar = Aln::align_ksw2(
+                                ref_seq.data(), q_seq.data(), args.aln_opts);
+                            // if (args.aln_opts.engine == "ksw_extd2_sse") {
+                            //     //DEBUG
+                            //     std::cerr << bam_aux2i(nm_ptr) << " " << aln_vec[i]->core.l_qseq << "\n";
+                            //     new_cigar = Aln::align_extd2(
+                            //         ref_seq.data(), q_seq.data(), args.aln_opts);
+                            // } else if (args.aln_opts.engine == "ksw_extz") {
+                            //     new_cigar = Aln::align_extz(
+                            //         ref_seq.data(), q_seq.data(), args.aln_opts);
+                            // }
+                            if (new_cigar.size() > 0) {
+                                LevioSamUtils::update_cigar(aln_vec[i], new_cigar);
+                                // Redo fillmd after re-align
+                                bam_fillmd1(aln_vec[i], ref.data(), args.md_flag, 1);
                             }
-                            LevioSamUtils::update_cigar(aln_vec[i], new_cigar);
-                            // Redo fillmd after re-align
-                            bam_fillmd1(aln_vec[i], ref.data(), args.md_flag, 1);
                         }
                     }
                     // END TODO KSW
@@ -502,12 +518,6 @@ void print_lift_help_msg(){
     std::cerr << "                       * hdist         INT   Max NM:i (Hamming dist.) to commit (post-liftover). `-m` and `-f` must be set. [5]\n";
     std::cerr << "                       * clipped_frac  FLOAT Min fraction of clipped to commit (post-liftover). [0.95]\n";
     std::cerr << "           Example: `-S mapq:20 -S aln_score:20` commits MQ>=20 and AS>=20 alignments.\n";
-    // std::cerr << "           Example: `-S mapq,aln_score -M 20 -A 20` commits MQ>=20 and AS>=20 alignments.\n";
-    // std::cerr << "           -S string Split the aligned reads with an indicator. Options: mapq, aln_score, isize, clipped_frac. [none]\n";
-    // std::cerr << "           -M int    Min MAPQ to commit (pre-liftover; must with `-S mapq`). [30]\n";
-    // std::cerr << "           -A int    Min AS:i to commit (pre-liftover; must with `-S aln_score`). [100]\n";
-    // std::cerr << "           -Z int    Max TLEN/isize to commit (post-liftover; must with `-S isize`). [1000]\n";
-    // std::cerr << "           -L float  Min fraction of clipped to commit (post-liftover; must with `-S aln_score`). [0.95]\n";
     std::cerr << "           -r string Path to a BED file (source coordinates). Reads overlap with the regions are always committed. [none]\n";
     std::cerr << "           -D string Path to a BED file (dest coordinates). Reads overlap with the regions are always deferred. [none]\n";
     std::cerr << "\n";
@@ -554,9 +564,7 @@ int main(int argc, char** argv) {
     args.cmd = LevioSamUtils::make_cmd(argc,argv);
     static struct option long_options[] {
         {"md", no_argument, 0, 'm'},
-        // {"write_unliftable", no_argument, 0, 'u'},
         {"sam", required_argument, 0, 'a'},
-        {"min_aln_score", required_argument, 0, 'A'},
         {"bed_defer_source", required_argument, 0, 'd'},
         {"bed_defer_dest", required_argument, 0, 'D'},
         {"chain", required_argument, 0, 'c'},
@@ -566,8 +574,6 @@ int main(int argc, char** argv) {
         {"haplotype", required_argument, 0, 'g'},
         {"allowed_cigar_changes", required_argument, 0, 'G'},
         {"leviosam", required_argument, 0, 'l'},
-        {"max_clipped_frac", required_argument, 0, 'L'},
-        {"min_mapq", required_argument, 0, 'M'},
         {"namemap", required_argument, 0, 'n'},
         {"out_format", required_argument, 0, 'O'},
         {"prefix", required_argument, 0, 'p'},
@@ -579,14 +585,14 @@ int main(int argc, char** argv) {
         {"chunk_size", required_argument, 0, 'T'},
         {"vcf", required_argument, 0, 'v'},
         {"verbose", required_argument, 0, 'V'},
-        {"realign_preset", required_argument, 0, 'x'},
-        {"max_isize", required_argument, 0, 'Z'}
+        {"realign_yaml", required_argument, 0, 'x'},
+        // {"realign", no_argument, 0, 'X'}
     };
     int long_index = 0;
     while(
         (c = getopt_long(
             argc, argv,
-            "hma:A:c:C:d:D:f:F:g:G:l:L:M:n:O:p:r:R:s:S:t:T:v:V:x:Z:",
+            "hma:c:C:d:D:f:F:g:G:l:n:O:p:r:R:s:S:t:T:v:V:x:",
             long_options, &long_index)) != -1) {
         switch (c) {
             case 'h':
@@ -600,11 +606,6 @@ int main(int argc, char** argv) {
                 break;
             case 'a':
                 args.sam_fname = optarg;
-                break;
-            case 'A':
-                // TODO - deprecated
-                std::cerr << "[W::main] -A will be deprecated\n";
-                args.min_aln_score = atoi(optarg);
                 break;
             case 'c':
                 args.chain_fname = optarg;
@@ -633,16 +634,6 @@ int main(int argc, char** argv) {
                 break;
             case 'l':
                 args.lift_fname = optarg;
-                break;
-            case 'L':
-                // TODO - deprecated
-                std::cerr << "[W::main] -L will be deprecated\n";
-                args.max_clipped_frac = atof(optarg);
-                break;
-            case 'M':
-                // TODO - deprecated
-                std::cerr << "[W::main] -M will be deprecated\n";
-                args.min_mapq = atoi(optarg);
                 break;
             case 'n':
                 args.name_map = parse_name_map(optarg);
@@ -681,12 +672,7 @@ int main(int argc, char** argv) {
                 args.vcf_fname = optarg;
                 break;
             case 'x':
-                args.realign_preset = optarg;
-                break;
-            case 'Z':
-                // TODO - deprecated
-                std::cerr << "[W::main] -Z will be deprecated\n";
-                args.max_isize = atoi(optarg);
+                args.realign_yaml = optarg;
                 break;
             default:
                 fprintf(stderr, "ignoring option %c\n", c);
@@ -719,6 +705,26 @@ int main(int argc, char** argv) {
             args.bed_commit_dest.get_fn() != "") {
             std::cerr << "[E::main] `-S` should be set if any among `-d/D/r/R` is set.\n";
             exit(1);
+        }
+    }
+    if (args.realign_yaml != "") {
+        if (args.ref_name == "") {
+            std::cerr << "[E::main] Option `-f` must be set when `-x` is not empty\n";
+            exit(1);
+        } else {
+            // std::ifstream f_realign_yaml(args.realign_yaml);
+            // if (!f_realign_yaml.is_open()) {
+            //     std::cerr << "[E::main] Could not open YAML file `"
+            //          << args.realign_yaml << "`" << "\n";
+            //     exit(1);
+            // }
+            std::string yaml = Yaml::file_get_contents<std::string>(args.realign_yaml);
+            ryml::Tree realign_tree = ryml::parse_in_arena(ryml::to_csubstr(yaml));
+            args.aln_opts.deserialize_realn(realign_tree);
+            args.aln_opts.print_parameters();
+            // Aln::deserialize_realn(realign_tree, args.aln_opts);
+
+            // f_realign_yaml.close();
         }
     }
 

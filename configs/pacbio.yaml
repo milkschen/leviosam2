@@ -1,0 +1,12 @@
+alignment:
+    engine: "ksw_extd2_sse"
+    flag: 0
+    a: 0
+    b: 4
+    q: 6
+    q2: 26
+    e: 2
+    e2: 1
+    w: 601 # w = bw * 1.5 + 1
+    zdrop: 400
+    end_bonus: -1

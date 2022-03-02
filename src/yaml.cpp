@@ -16,7 +16,7 @@ template<class CharContainer>
 size_t file_get_contents(const std::string& filename, CharContainer *v)
 {
     ::FILE *fp = ::fopen(filename.data(), "rb");
-    C4_CHECK_MSG(fp != nullptr, "could not open file");
+    C4_CHECK_MSG(fp != nullptr, "[E::yaml::file_get_contents] Could not open file %s", filename);
     ::fseek(fp, 0, SEEK_END);
     long sz = ::ftell(fp);
     v->resize(static_cast<typename CharContainer::size_type>(sz));
@@ -37,6 +37,19 @@ CharContainer file_get_contents(const std::string& filename)
     CharContainer cc;
     file_get_contents(filename, &cc);
     return cc;
+}
+
+std::string read_yaml_raw(std::ifstream &f) {
+    return std::string(
+        (std::istreambuf_iterator<char>(f)),
+        std::istreambuf_iterator<char>());
+}
+
+std::string read_yaml_raw(const std::string& fn) {
+    std::ifstream f(fn);
+    return std::string(
+        (std::istreambuf_iterator<char>(f)),
+        std::istreambuf_iterator<char>());
 }
 
 ryml::Tree parse_yaml(const std::string& filename) {
