@@ -185,10 +185,7 @@ void read_and_lift(
     samFile* out_sam_fp,
     sam_hdr_t* hdr_source,
     sam_hdr_t* hdr_dest,
-    // const int& chunk_size,
-    // const int& allowed_cigar_changes,
     const std::map<std::string, std::string>* ref_dict,
-    // const int& md_flag,
     LevioSamUtils::WriteDeferred* wd,
     const lift_opts& args
 ){
@@ -240,32 +237,30 @@ void read_and_lift(
                         !(aln_vec[i]->core.flag & BAM_FSECONDARY) &&
                         !(aln_vec[i]->core.flag & BAM_FSUPPLEMENTARY)
                     ) {
-                        if (bam_aux2i(nm_ptr) > args.allowed_cigar_changes) {
+                        if (bam_aux2i(nm_ptr) > args.aln_opts.nm_threshold) {
                             std::string ref_seq = ref.substr(
                                 aln_vec[i]->core.pos,
                                 bam_cigar2rlen(aln_vec[i]->core.n_cigar,
                                                bam_get_cigar(aln_vec[i])));
                             std::string q_seq = LevioSamUtils::get_read_as_is(aln_vec[i]);
                             std::vector<uint32_t> new_cigar;
-                            std::cerr << bam_get_qname(aln_vec[i]) << " " << aln_vec[i]->core.flag << " " << bam_aux2i(nm_ptr) << " " << aln_vec[i]->core.l_qseq << "\n";
                             // We perform global alignment for local sequences and
                             // thus an alignment with a high number of clipped bases
                             // might not re-align well
-                            new_cigar = Aln::align_ksw2(
-                                ref_seq.data(), q_seq.data(), args.aln_opts);
-                            // if (args.aln_opts.engine == "ksw_extd2_sse") {
-                            //     //DEBUG
-                            //     std::cerr << bam_aux2i(nm_ptr) << " " << aln_vec[i]->core.l_qseq << "\n";
-                            //     new_cigar = Aln::align_extd2(
-                            //         ref_seq.data(), q_seq.data(), args.aln_opts);
-                            // } else if (args.aln_opts.engine == "ksw_extz") {
-                            //     new_cigar = Aln::align_extz(
-                            //         ref_seq.data(), q_seq.data(), args.aln_opts);
-                            // }
-                            if (new_cigar.size() > 0) {
+                            int new_score = 0;
+                            if (Aln::align_ksw2(
+                                ref_seq.data(), q_seq.data(), args.aln_opts,
+                                new_cigar, new_score) > 0) {
                                 LevioSamUtils::update_cigar(aln_vec[i], new_cigar);
                                 // Redo fillmd after re-align
                                 bam_fillmd1(aln_vec[i], ref.data(), args.md_flag, 1);
+                                bam_aux_append(aln_vec[i], "LR", 'i', 4, (uint8_t *) &new_score);
+                            } else {
+                                std::cerr << "[W::read_and_lift] Zero-length new cigar for " << 
+                                    bam_get_qname(aln_vec[i]) <<
+                                    "; flag = " << aln_vec[i]->core.flag <<
+                                    "; NM:i = " << bam_aux2i(nm_ptr) <<
+                                    "; l_qseq = " << aln_vec[i]->core.l_qseq << "\n";
                             }
                         }
                     }
@@ -712,19 +707,12 @@ int main(int argc, char** argv) {
             std::cerr << "[E::main] Option `-f` must be set when `-x` is not empty\n";
             exit(1);
         } else {
-            // std::ifstream f_realign_yaml(args.realign_yaml);
-            // if (!f_realign_yaml.is_open()) {
-            //     std::cerr << "[E::main] Could not open YAML file `"
-            //          << args.realign_yaml << "`" << "\n";
-            //     exit(1);
-            // }
             std::string yaml = Yaml::file_get_contents<std::string>(args.realign_yaml);
             ryml::Tree realign_tree = ryml::parse_in_arena(ryml::to_csubstr(yaml));
             args.aln_opts.deserialize_realn(realign_tree);
-            args.aln_opts.print_parameters();
-            // Aln::deserialize_realn(realign_tree, args.aln_opts);
-
-            // f_realign_yaml.close();
+            if (args.verbose >= VERBOSE_INFO) {
+                args.aln_opts.print_parameters();
+            }
         }
     }
 

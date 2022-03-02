@@ -1,6 +1,7 @@
 alignment:
     engine: "ksw_extd2_sse"
-    flag: 0
+    nm_threshold: 200
+    flag: 0x08 # KSW_EZ_APPROX_MAX
     a: 0
     b: 4
     q: 6

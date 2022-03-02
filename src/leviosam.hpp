@@ -65,15 +65,8 @@ struct lift_opts {
     int chunk_size = 256;
     int verbose = 0;
     int md_flag = 0;
-    // int min_mapq = 30;
-    // int max_hdist = 5;
-    // int max_isize = 1000;
-    // float max_clipped_frac = 0.95;
-    // int min_aln_score = 100;
     std::string ref_name = "";
     std::string realign_yaml = "";
-    // bool realign = false;
-    // ryml::Tree realign_params;
     Aln::AlnOpts aln_opts;
     NameMap name_map;
     LengthMap length_map;
