@@ -70,13 +70,67 @@ endif()
 
 include_directories(${CMAKE_INCLUDE_PATH})
 
+
+# From https://cmake.org/pipermail/cmake/2010-March/036115.html
+set (SSE_COMPILE_FLAGS "")
+option(AIM_USE_SSE "Use SSE2/3 Instructions where possible." OFF)
+if (AIM_USE_SSE)
+  if (NOT MSVC)
+    set(CMAKE_REQUIRED_C_FLAGS_SAVE ${CMAKE_REQUIRED_C_FLAGS})
+    set(CMAKE_REQUIRED_C_FLAGS ${CMAKE_REQUIRED_C_FLAGS} "-msse3")
+    CHECK_INCLUDE_FILE("pmmintrin.h" HAVE_SSE3_H)
+    set(CMAKE_REQUIRED_C_FLAGS ${CMAKE_REQUIRED_C_FLAGS_SAVE})
+    if (HAVE_SSE3_H)
+        set(HAVE_SSE2_H 1)
+        if (CMAKE_COMPILER_IS_GNUCC)
+          #  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -msse3")
+          #  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse3")
+            set (SSE_COMPILE_FLAGS "-msse3")
+        endif()
+    else()
+        set (HAVE_SSE3_H 0)
+    endif()
+
+    if (NOT HAVE_SSE3_H)
+        set(CMAKE_REQUIRED_C_FLAGS_SAVE ${CMAKE_REQUIRED_C_FLAGS})
+        set(CMAKE_REQUIRED_C_FLAGS ${CMAKE_REQUIRED_C_FLAGS} "-msse2")
+        CHECK_INCLUDE_FILE("emmintrin.h" HAVE_SSE2_H)
+        set(CMAKE_REQUIRED_C_FLAGS ${CMAKE_REQUIRED_C_FLAGS_SAVE})
+        if(HAVE_SSE2_H)
+            if (CMAKE_COMPILER_IS_GNUCC)
+               # set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -msse2")
+               # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse2")
+                set (SSE_COMPILE_FLAGS "-msse2")
+            endif()
+        else()
+           set (HAVE_SSE2_H 0)
+        endif()
+    endif()
+  else()
+    set(CMAKE_REQUIRED_C_FLAGS_SAVE ${CMAKE_REQUIRED_C_FLAGS})
+    set(CMAKE_REQUIRED_C_FLAGS ${CMAKE_REQUIRED_C_FLAGS} "/arch:SSE2")
+    CHECK_INCLUDE_FILE("intrin.h" HAVE_INTRIN_H)
+    set(CMAKE_REQUIRED_C_FLAGS ${CMAKE_REQUIRED_C_FLAGS_SAVE})
+    if (HAVE_INTRIN_H)
+        #set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /arch:SSE2")
+        #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /arch:SSE2")
+        set (SSE_COMPILE_FLAGS " /arch:SSE2 ")
+    else()
+        set (HAVE_INTRIN_H 0)
+    endif()
+  endif()
+endif()
+
+
 file(GLOB LIB_SOURCES   src/reconcile.cpp src/lift_bed.cpp src/collate.cpp src/chain.cpp
                         src/leviosam_utils.cpp src/bed.cpp src/lift_bed.cpp src/aln.cpp
-                        src/ksw2_extd2_sse.c src/ksw2_extz.c
+                        src/yaml.cpp
+                        src/ksw2_extd2_sse.c src/ksw2_extz2_sse.c src/ksw2_extz.c
                         src/bam_md.c src/bam_aux.c src/gzstream.C)
 file(GLOB LIB_HEADERS   src/leviosam.hpp
                         src/reconcile.hpp src/lift_bed.hpp src/collate.hpp src/chain.hpp
                         src/leviosam_utils.hpp src/bed.hpp src/lift_bed.hpp src/aln.hpp
+                        src/yaml.hpp src/rapidyaml.hpp
                         src/ksw.h
                         src/bam.h src/IITree.h src/gzstream.h)
 add_library(lvsam ${LIB_SOURCES} ${LIB_HEADERS})
