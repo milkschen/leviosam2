@@ -4,18 +4,31 @@
 namespace Aln {
 
 void AlnOpts::deserialize_realn(ryml::Tree realign_tree) {
-    realign_tree["alignment"]["engine"] >> engine;
-    realign_tree["alignment"]["flag"] >> flag;
-    realign_tree["alignment"]["nm_threshold"] >> nm_threshold;
-    realign_tree["alignment"]["a"] >> a;
-    realign_tree["alignment"]["b"] >> b;
-    realign_tree["alignment"]["q"] >> q;
-    realign_tree["alignment"]["e"] >> e;
-    realign_tree["alignment"]["q2"] >> q2;
-    realign_tree["alignment"]["e2"] >> e2;
-    realign_tree["alignment"]["w"] >> w;
-    realign_tree["alignment"]["zdrop"] >> zdrop;
-    realign_tree["alignment"]["end_bonus"] >> end_bonus;
+    if (realign_tree["alignment"].has_child("engine"))
+        realign_tree["alignment"]["engine"] >> engine;
+    if (realign_tree["alignment"].has_child("flag"))
+        realign_tree["alignment"]["flag"] >> flag;
+    if (realign_tree["alignment"].has_child("nm_threshold"))
+        realign_tree["alignment"]["nm_threshold"] >> nm_threshold;
+    if (realign_tree["alignment"]["a"].has_key())
+    if (realign_tree["alignment"].has_child("a"))
+        realign_tree["alignment"]["a"] >> a;
+    if (realign_tree["alignment"].has_child("b"))
+        realign_tree["alignment"]["b"] >> b;
+    if (realign_tree["alignment"].has_child("q"))
+        realign_tree["alignment"]["q"] >> q;
+    if (realign_tree["alignment"].has_child("e"))
+        realign_tree["alignment"]["e"] >> e;
+    if (realign_tree["alignment"].has_child("q2"))
+        realign_tree["alignment"]["q2"] >> q2;
+    if (realign_tree["alignment"].has_child("e2"))
+        realign_tree["alignment"]["e2"] >> e2;
+    if (realign_tree["alignment"].has_child("w"))
+        realign_tree["alignment"]["w"] >> w;
+    if (realign_tree["alignment"].has_child("zdrop"))
+        realign_tree["alignment"]["zdrop"] >> zdrop;
+    if (realign_tree["alignment"].has_child("end_bonus"))
+        realign_tree["alignment"]["end_bonus"] >> end_bonus;
 }
 
 void AlnOpts::print_parameters() {

@@ -230,7 +230,6 @@ void read_and_lift(
                         current_contig = dest_contig;
                     }
                     bam_fillmd1(aln_vec[i], ref.data(), args.md_flag, 1);
-                    // TODO KSW
                     uint8_t* nm_ptr = bam_aux_get(aln_vec[i], "NM");
                     if (nm_ptr != NULL &&
                         !(aln_vec[i]->core.flag & BAM_FUNMAP) &&
@@ -255,8 +254,8 @@ void read_and_lift(
                                 // Redo fillmd after re-align
                                 bam_fillmd1(aln_vec[i], ref.data(), args.md_flag, 1);
                                 bam_aux_append(aln_vec[i], "LR", 'i', 4, (uint8_t *) &new_score);
-                            } else {
-                                std::cerr << "[W::read_and_lift] Zero-length new cigar for " << 
+                            } else if (args.verbose >= VERBOSE_INFO) {
+                                std::cerr << "[I::read_and_lift] Zero-length new cigar for " << 
                                     bam_get_qname(aln_vec[i]) <<
                                     "; flag = " << aln_vec[i]->core.flag <<
                                     "; NM:i = " << bam_aux2i(nm_ptr) <<
@@ -264,7 +263,6 @@ void read_and_lift(
                             }
                         }
                     }
-                    // END TODO KSW
                 }
             } else { // strip MD and NM tags if md_flag not set bc the liftover invalidates them
                 LevioSamUtils::remove_nm_md_tag(aln_vec[i]);
@@ -710,9 +708,10 @@ int main(int argc, char** argv) {
             std::string yaml = Yaml::file_get_contents<std::string>(args.realign_yaml);
             ryml::Tree realign_tree = ryml::parse_in_arena(ryml::to_csubstr(yaml));
             args.aln_opts.deserialize_realn(realign_tree);
-            if (args.verbose >= VERBOSE_INFO) {
-                args.aln_opts.print_parameters();
-            }
+            args.aln_opts.print_parameters();
+            // if (args.verbose >= VERBOSE_INFO) {
+            //     args.aln_opts.print_parameters();
+            // }
         }
     }
 
