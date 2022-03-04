@@ -12,11 +12,13 @@ THR=$(nproc)
 LEVIOSAM=leviosam
 TIME=time # GNU time
 MEASURE_TIME=1 # Set to a >0 value to measure time for each step
+ALLOWED_GAPS=0
 FRAC_CLIPPED=0.95
 ISIZE=1000
 HDIST=5
 DEFER_DEST_BED=""
 COMMIT_SOURCE_BED=""
+REALN_CONFIG=""
 
 # Default parameters for Bowtie 2 (local)
 # ALN=bowtie2
@@ -29,7 +31,7 @@ MAPQ=30
 ALN_SCORE=100
 
 
-while getopts a:A:b:C:D:f:H:i:L:M:o:q:r:R:t:T: flag
+while getopts a:A:b:C:D:f:H:g:G:i:L:M:o:q:r:R:t:T:x: flag
 do
     case "${flag}" in
         a) ALN=${OPTARG};;
@@ -39,6 +41,8 @@ do
         D) DEFER_DEST_BED=" -D ${OPTARG}";;
         f) REF=${OPTARG};;
         H) HDIST=${OPTARG};;
+        g) ALLOWED_GAPS=${OPTARG};;
+        G) ALLOWED_GAPS=${OPTARG};; # to be deprecated
         i) INPUT=${OPTARG};;
         L) LEVIOSAM=${OPTARG};;
         M) MEASURE_TIME=${OPTARG};;
@@ -48,22 +52,25 @@ do
         R) COMMIT_SOURCE_BED=" -r ${OPTARG}";;
         t) THR=${OPTARG};;
         T) TIME=${OPTARG};;
+        x) REALN_CONFIG=" -x ${OPTARG}";;
     esac
 done
 
-echo "Input BAM: ${INPUT}";
-echo "Output prefix: ${PFX}";
-echo "Aligner: ${ALN}";
-echo "Aligner indexes prefix: ${ALN_IDX}";
-echo "Aligner read group: ${ALN_RG}";
-echo "Targer reference: ${REF}";
-echo "LevioSAM software: ${LEVIOSAM}";
-echo "LevioSAM index: ${CLFT}";
-echo "LevioSAM min MAPQ: ${MAPQ}";
-echo "LevioSAM min AS: ${ALN_SCORE}";
-echo "BED where reads get deferred: ${DEFER_DEST_BED}";
-echo "BED where reads get discarded: ${COMMIT_SOURCE_BED}";
-echo "Num. threads: ${THR}";
+# echo "Input BAM: ${INPUT}";
+# echo "Output prefix: ${PFX}";
+# echo "Aligner: ${ALN}";
+# echo "Aligner indexes prefix: ${ALN_IDX}";
+# echo "Aligner read group: ${ALN_RG}";
+# echo "Targer reference: ${REF}";
+# echo "LevioSAM software: ${LEVIOSAM}";
+# echo "LevioSAM index: ${CLFT}";
+# echo "Allowed gaps: ${ALLOWED_GAPS}";
+# echo "Re-alignment config: ${REALN_CONFIG}";
+# echo "LevioSAM min MAPQ: ${MAPQ}";
+# echo "LevioSAM min AS: ${ALN_SCORE}";
+# echo "BED where reads get deferred: ${DEFER_DEST_BED}";
+# echo "BED where reads get discarded: ${COMMIT_SOURCE_BED}";
+# echo "Num. threads: ${THR}";
 
 if [[ ${INPUT} == "" ]]; then
     echo "Input is not set properly"
@@ -92,7 +99,8 @@ fi
 if [ ! -s ${PFX}-committed.bam ]; then
     ${TT} ${LEVIOSAM} lift -C ${CLFT} -a ${INPUT} -t ${THR} -p ${PFX} -O bam \
     -S mapq:${MAPQ} -S isize:${ISIZE} -S aln_score:${ALN_SCORE} \
-    -S clipped_frac:${FRAC_CLIPPED} -S hdist:${HDIST} -G 0 \
+    -S clipped_frac:${FRAC_CLIPPED} -S hdist:${HDIST} -G ${ALLOWED_GAPS} \
+    ${REALN_CONFIG} \
     -m -f ${REF} ${DEFER_DEST_BED} ${COMMIT_SOURCE_BED}
 fi
 
@@ -130,8 +138,8 @@ fi
 if [ ! -s ${PFX}-final.bam ]; then
     ${TT} samtools cat ${PFX}-paired-committed.bam ${PFX}-paired-deferred-reconciled.bam | \
         ${TT} samtools sort -@ ${THR} -o ${PFX}-final.bam
-    rm ${PFX}-paired-deferred.bam ${PFX}-paired-deferred-sorted_n.bam 
-    rm ${PFX}-paired-realigned.bam ${PFX}-paired-realigned-sorted_n.bam
-    rm ${PFX}-paired-deferred-reconciled.bam
-    rm ${PFX}-paired-committed.bam ${PFX}-deferred.bam
+    # rm ${PFX}-paired-deferred.bam ${PFX}-paired-deferred-sorted_n.bam 
+    # rm ${PFX}-paired-realigned.bam ${PFX}-paired-realigned-sorted_n.bam
+    # rm ${PFX}-paired-deferred-reconciled.bam
+    # rm ${PFX}-paired-committed.bam ${PFX}-deferred.bam
 fi
