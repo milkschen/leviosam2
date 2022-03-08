@@ -41,19 +41,6 @@ do
     esac
 done
 
-echo "Input BAM: ${INPUT}";
-echo "Output prefix: ${PFX}";
-echo "Aligner: ${ALN}";
-echo "Reference: ${REF}";
-echo "Aligner read group: ${ALN_RG}";
-echo "LevioSAM software: ${LEVIOSAM}";
-echo "LevioSAM index: ${CLFT}";
-echo "Allowed gaps: ${ALLOWED_GAPS}";
-echo "Re-alignment config: ${REALN_CONFIG}";
-echo "BED where reads get deferred: ${DEFER_DEST_BED}";
-echo "BED where reads get discarded: ${COMMIT_SOURCE_BED}";
-echo "Num. threads: ${THR}";
-
 if [[ ! ${ALN} =~ ^(minimap2|winnowmap2)$ ]]; then
     echo "Invalid ${ALN}. Accepted input: minimap2, winnowmap2"
     exit
