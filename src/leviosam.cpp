@@ -676,7 +676,8 @@ int main(int argc, char** argv) {
             std::cerr << "[E::main] Option `-f` must be set when `-x` is not empty\n";
             exit(1);
         } else {
-            std::string yaml = Yaml::file_get_contents<std::string>(args.realign_yaml);
+            const char *fc = args.realign_yaml.c_str();
+            std::string yaml = Yaml::file_get_contents<std::string>(fc);
             ryml::Tree realign_tree = ryml::parse_in_arena(ryml::to_csubstr(yaml));
             args.aln_opts.deserialize_realn(realign_tree);
             args.aln_opts.print_parameters();
