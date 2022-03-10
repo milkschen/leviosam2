@@ -171,7 +171,7 @@ bool WriteDeferred::commit_aln_dest(
         return true;
     }
     if (split_modes.find("clipped_frac") != split_modes.end()){
-        if (1 - (rlen / c->l_qseq) > max_clipped_frac)
+        if (1.0 - (rlen / c->l_qseq) > max_clipped_frac)
             return false;
     }
     if (split_modes.find("hdist") != split_modes.end()){
@@ -247,7 +247,7 @@ void debug_print_cigar(
 
 
 /* Remove MN:i and MD:z tags from an alignment (bam1_t) object */
-void remove_mn_md_tag(bam1_t* aln) {
+void remove_nm_md_tag(bam1_t* aln) {
     uint8_t* ptr = NULL;
     if ((ptr = bam_aux_get(aln, "MD")) != NULL) {
         bam_aux_del(aln, ptr);
@@ -261,7 +261,7 @@ void remove_mn_md_tag(bam1_t* aln) {
 /* Return the read, reverse complemented if necessary
    Adapted from: https://github.com/samtools/samtools/blob/develop/bam_fastq.c 
 */
-static std::string get_read(const bam1_t *rec){
+std::string get_read(const bam1_t *rec){
     int len = rec->core.l_qseq + 1;
     char *seq = (char *)bam_get_seq(rec);
     std::string read = "";
@@ -275,6 +275,50 @@ static std::string get_read(const bam1_t *rec){
     if (rec->core.flag & BAM_FREVERSE)
         std::reverse(read.begin(), read.end());
     return read;
+}
+
+
+/* Return the read, regardless of reverse complement status */
+std::string get_read_as_is(const bam1_t *rec){
+    int len = rec->core.l_qseq + 1;
+    char *seq = (char *)bam_get_seq(rec);
+    std::string read = "";
+
+    for (int n = 0; n < rec->core.l_qseq; n++) {
+        read.append(1, seq_nt16_str[bam_seqi(seq, n)]);
+    }
+    return read;
+}
+
+
+/* Update SAM flag to set a record as an unmapped alignment
+ *   - Clear forward/reverse status.
+ *   - If paired, changed to improper paired. 
+ *
+ * We currenly set an unliftable read as unampped, and thus the 
+ * BAM_FUNMAP or BAM_FMUNMAP flags will be raised.
+ */
+void update_flag_unmap(bam1_t* aln, const bool first_seg) {
+    bam1_core_t* c = &(aln->core);
+    if (first_seg) {
+        if (c->flag & BAM_FREVERSE)
+            LevioSamUtils::reverse_seq_and_qual(aln);
+        c->flag |= BAM_FUNMAP;
+        c->flag &= ~BAM_FPROPER_PAIR;
+        c->flag &= ~BAM_FREVERSE;
+        // c->qual = 0;
+        c->pos = -1;
+        c->tid = -1;
+    } else {
+        c->flag |= BAM_FMUNMAP;
+        c->flag &= ~BAM_FPROPER_PAIR;
+        c->flag &= ~BAM_FMREVERSE;
+    }
+    // Keep the secondary/supplementary annotation if unmapped
+    // This might violate some strict SAM linter, but keeping the 
+    // annotations can avoid converting SUPP reads to FASTQ
+    // c->flag &= ~BAM_FSECONDARY;
+    // c->flag &= ~BAM_FSUPPLEMENTARY;
 }
 
 

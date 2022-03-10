@@ -5,7 +5,6 @@ project(leviosam CXX C)
 set(PROJECT_URL "https://github.com/alshai/leviosam")
 set(PROJECT_DESCRIPTION "leviosam: lifting over alignments between genomes")
 set(CMAKE_CXX_STANDARD 14)
-# set(CMAKE_CXX_STANDARD 11)
 
 find_library(HTS_LIB hts)
 if(NOT HTS_LIB)
@@ -70,12 +69,97 @@ endif()
 
 include_directories(${CMAKE_INCLUDE_PATH})
 
+# Check if SSE instructions are available on the machine where
+# the project is compiled.
+
+# From https://gist.github.com/hideo55/5642892
+MACRO (FindSSE)
+
+IF(CMAKE_SYSTEM_NAME MATCHES "Linux")
+   EXEC_PROGRAM(cat ARGS "/proc/cpuinfo" OUTPUT_VARIABLE CPUINFO)
+
+   STRING(FIND ${CPUINFO} "sse2" SSE2_TRUE)
+   IF (SSE2_TRUE)
+      set(SSE2_FOUND ON)
+   ELSE (SSE2_TRUE)
+      set(SSE2_FOUND OFF)
+   ENDIF (SSE2_TRUE)
+
+   STRING(FIND ${CPUINFO} "sse4_1" SSE4_1_TRUE)
+   IF (SSE4_1_TRUE)
+      set(SSE4_1_FOUND ON)
+   ELSE (SSE4_1_TRUE)
+      set(SSE4_1_FOUND OFF)
+   ENDIF (SSE4_1_TRUE)
+
+ELSEIF(CMAKE_SYSTEM_NAME MATCHES "Darwin")
+   EXEC_PROGRAM("/usr/sbin/sysctl -n machdep.cpu.features" OUTPUT_VARIABLE
+      CPUINFO)
+
+   STRING(FIND ${CPUINFO} "SSE2" SSE2_TRUE)
+   IF (SSE2_TRUE)
+      set(SSE2_FOUND ON)
+   ELSE (SSE2_TRUE)
+      set(SSE2_FOUND OFF)
+   ENDIF (SSE2_TRUE)
+
+   STRING(FIND ${CPUINFO} "SSE4.1" SSE4_1_TRUE)
+   IF (SSE4_1_TRUE)
+      set(SSE4_1_FOUND ON)
+   ELSE (SSE4_1_TRUE)
+      set(SSE4_1_FOUND OFF)
+   ENDIF (SSE4_1_TRUE)
+
+   # ELSEIF(CMAKE_SYSTEM_NAME MATCHES "Windows")
+   #    # TODO
+   #    set(SSE2_FOUND   true  CACHE BOOL "SSE2 available on host")
+   #    set(SSE3_FOUND   false CACHE BOOL "SSE3 available on host")
+   #    set(SSSE3_FOUND  false CACHE BOOL "SSSE3 available on host")
+   #    set(SSE4_1_FOUND false CACHE BOOL "SSE4.1 available on host")
+   #    set(SSE4_2_FOUND false CACHE BOOL "SSE4.2 available on host")
+   # ELSE(CMAKE_SYSTEM_NAME MATCHES "Linux")
+   #    set(SSE2_FOUND   true  CACHE BOOL "SSE2 available on host")
+   #    set(SSE3_FOUND   false CACHE BOOL "SSE3 available on host")
+   #    set(SSSE3_FOUND  false CACHE BOOL "SSSE3 available on host")
+   #    set(SSE4_1_FOUND false CACHE BOOL "SSE4.1 available on host")
+   #    set(SSE4_2_FOUND false CACHE BOOL "SSE4.2 available on host")
+ENDIF(CMAKE_SYSTEM_NAME MATCHES "Linux")
+
+# IF(CMAKE_COMPILER_IS_GNUCXX)
+#     EXECUTE_PROCESS(COMMAND ${CMAKE_CXX_COMPILER} -dumpversion OUTPUT_VARIABLE GCC_VERSION)
+#     IF(GCC_VERSION VERSION_LESS 4.2)
+#         set(SSE4_1_FOUND false CACHE BOOL "SSE4.1 available on host" FORCE)
+#         set(SSE4_2_FOUND false CACHE BOOL "SSE4.2 available on host" FORCE)
+#     ENDIF()
+# ENDIF(CMAKE_COMPILER_IS_GNUCXX)
+
+if(SSE4_1_FOUND)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -msse4.1")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse4.1")
+    # message("CXX_FLAGS: ${CMAKE_CXX_FLAGS}")
+elseif(SSE2_FOUND)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -msse2")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse2")
+    # message("CXX_FLAGS: ${CMAKE_CXX_FLAGS}")
+endif(SSE4_1_FOUND)
+
+mark_as_advanced(SSE2_FOUND SSE3_FOUND SSSE3_FOUND SSE4_1_FOUND SSE4_2_FOUND)
+
+ENDMACRO(FindSSE)
+
+FindSSE()
+
+
 file(GLOB LIB_SOURCES   src/reconcile.cpp src/lift_bed.cpp src/collate.cpp src/chain.cpp
-                        src/leviosam_utils.cpp src/bed.cpp src/lift_bed.cpp
+                        src/leviosam_utils.cpp src/bed.cpp src/lift_bed.cpp src/aln.cpp
+                        src/yaml.cpp
+                        src/ksw2_extd2_sse.c src/ksw2_extz2_sse.c src/ksw2_extz.c
                         src/bam_md.c src/bam_aux.c src/gzstream.C)
 file(GLOB LIB_HEADERS   src/leviosam.hpp
                         src/reconcile.hpp src/lift_bed.hpp src/collate.hpp src/chain.hpp
-                        src/leviosam_utils.hpp src/bed.hpp src/lift_bed.hpp
+                        src/leviosam_utils.hpp src/bed.hpp src/lift_bed.hpp src/aln.hpp
+                        src/yaml.hpp src/rapidyaml.hpp
+                        src/ksw.h
                         src/bam.h src/IITree.h src/gzstream.h)
 add_library(lvsam ${LIB_SOURCES} ${LIB_HEADERS})
 

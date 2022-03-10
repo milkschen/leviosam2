@@ -1,0 +1,13 @@
+alignment:
+    engine: "ksw_extz2_sse"
+    nm_threshold: 15
+    flag: 0x08 # KSW_EZ_APPROX_MAX
+    a: 2
+    b: 4
+    q: 4
+    e: 2
+    q2: 24
+    e2: 1
+    w: 601 # w = bw * 1.5 + 1
+    zdrop: 400
+    end_bonus: -1
