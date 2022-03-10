@@ -359,37 +359,6 @@ void ChainMap::parse_chain_line(
 }
 
 
-/* Update SAM flag to set a record as an unmapped alignment
- *   - Clear forward/reverse status.
- *   - If paired, changed to improper paired. 
- *
- * We currenly set an unliftable read as unampped, and thus the 
- * BAM_FUNMAP or BAM_FMUNMAP flags will be raised.
- */
-void ChainMap::update_flag_unmap(bam1_t* aln, const bool first_seg) {
-    bam1_core_t* c = &(aln->core);
-    if (first_seg) {
-        if (c->flag & BAM_FREVERSE)
-            LevioSamUtils::reverse_seq_and_qual(aln);
-        c->flag |= BAM_FUNMAP;
-        c->flag &= ~BAM_FPROPER_PAIR;
-        c->flag &= ~BAM_FREVERSE;
-        // c->qual = 0;
-        c->pos = -1;
-        c->tid = -1;
-    } else {
-        c->flag |= BAM_FMUNMAP;
-        c->flag &= ~BAM_FPROPER_PAIR;
-        c->flag &= ~BAM_FMREVERSE;
-    }
-    // Keep the secondary/supplementary annotation if unmapped
-    // This might violate some strict SAM linter, but keeping the 
-    // annotations can avoid converting SUPP reads to FASTQ
-    // c->flag &= ~BAM_FSECONDARY;
-    // c->flag &= ~BAM_FSUPPLEMENTARY;
-}
-
-
 /* Lift CIGAR
  * This version of `lift_cigar()` can be called when no interval indexes are
  * available, but is slower because of additional calls to query for interval indexes.
@@ -1022,7 +991,7 @@ void ChainMap::lift_aln(
 
     bool r1_liftable = lift_segment(aln, hdr_source, hdr_dest, true, dest_contig);
     if (!r1_liftable) {
-        update_flag_unmap(aln, true);
+        LevioSamUtils::update_flag_unmap(aln, true);
     }
 
     size_t lift_status;
@@ -1033,7 +1002,7 @@ void ChainMap::lift_aln(
         std::string null_mdest_contig;
         bool r2_liftable = lift_segment(aln, hdr_source, hdr_dest, false, null_mdest_contig);
         if (!r2_liftable)
-            update_flag_unmap(aln, false);
+            LevioSamUtils::update_flag_unmap(aln, false);
 
         // We currently don't use the "unliftable" category - 
         // an unliftable read is considered as unmapped.

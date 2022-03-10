@@ -291,6 +291,37 @@ std::string get_read_as_is(const bam1_t *rec){
 }
 
 
+/* Update SAM flag to set a record as an unmapped alignment
+ *   - Clear forward/reverse status.
+ *   - If paired, changed to improper paired. 
+ *
+ * We currenly set an unliftable read as unampped, and thus the 
+ * BAM_FUNMAP or BAM_FMUNMAP flags will be raised.
+ */
+void update_flag_unmap(bam1_t* aln, const bool first_seg) {
+    bam1_core_t* c = &(aln->core);
+    if (first_seg) {
+        if (c->flag & BAM_FREVERSE)
+            LevioSamUtils::reverse_seq_and_qual(aln);
+        c->flag |= BAM_FUNMAP;
+        c->flag &= ~BAM_FPROPER_PAIR;
+        c->flag &= ~BAM_FREVERSE;
+        // c->qual = 0;
+        c->pos = -1;
+        c->tid = -1;
+    } else {
+        c->flag |= BAM_FMUNMAP;
+        c->flag &= ~BAM_FPROPER_PAIR;
+        c->flag &= ~BAM_FMREVERSE;
+    }
+    // Keep the secondary/supplementary annotation if unmapped
+    // This might violate some strict SAM linter, but keeping the 
+    // annotations can avoid converting SUPP reads to FASTQ
+    // c->flag &= ~BAM_FSECONDARY;
+    // c->flag &= ~BAM_FSUPPLEMENTARY;
+}
+
+
 void WriteDeferred::write_deferred_bam(
     bam1_t* aln, sam_hdr_t* hdr
 ) {

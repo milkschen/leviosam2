@@ -138,7 +138,6 @@ class ChainMap {
 
     private:
         void init_rs();
-        void update_flag_unmap(bam1_t* aln, const bool first_seg);
 
         const int verbose;
         const int allowed_intvl_gaps;
