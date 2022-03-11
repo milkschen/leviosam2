@@ -5,7 +5,7 @@
 
 # levioSAM: accurate and efficient lift-over of alignments
 
-LevioSAM lifts over alignments accurately and efficiently using a VCF or a chain file.
+LevioSAM2 lifts over alignments accurately and efficiently using a chain file.
 
 ## Features
 
@@ -37,25 +37,6 @@ docker pull alshai/leviosam
 ```
 
 - Built from source using CMake or Make. See [INSTALL.md](INSTALL.md) for details.
-
-
-## Usage (VcfMap)
-
-LevioSAM can perform lift-over using a VCF file as the lift-over map. Please visit the [VcfMap Usage Page](https://github.com/alshai/levioSAM/wiki/Lift-over-using-a-VCF-map) for detailed instructions.
-
-Quick run:
-```
-leviosam index -v <vcf> -s <sample_name> -p <output_prefix>
-leviosam lift -a <sam> -l <lft> -p <output_prefix> -O bam
-```
-The levioSAM VcfMap index will be saved to `<output_prefix>.lft`. The output will be saved to `<output_prefix>.bam`.
-
-### Example (with pre-built 1000-Genomes-Project indexes)
-
-We provide the Bowtie 2 (which are compatible with Bowtie, too!) and levioSAM indexes for the major-allele references based on the 1000 Genomes Project. 
-Please navigate to the [bowtie-majref](https://github.com/BenLangmead/bowtie-majref) repo for more comprehensive description and more resources.
-
-We provide more detailed instructions of how to use levioSAM in common variant-aware reference pipelines (major-allele reference and personalized reference) in the [levioSAM wiki](https://github.com/alshai/levioSAM/wiki/Alignment-with-variant-aware-reference-genomes). 
 
 
 ## Usage (ChainMap)
