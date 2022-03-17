@@ -11,6 +11,7 @@ const int MERGE_PE_MAX = 1;
 // const int MERGE_PE_PAIR_TLEN_THRESHOLD = 2000;
 
 struct reconcile_opts{
+    bool conservative = false;
     bool paired_end = false;
     std::string cmd = "";
     int rand_seed = 0;
@@ -49,12 +50,14 @@ int select_best_aln(const std::vector<bool>& pair_indicators,
 
 int select_best_aln_single_end(
     const std::vector<bam1_t*>& aln1s,
-    const std::string& score_tag);
+    const std::string& score_tag,
+    const bool conservative);
 
 int select_best_aln_paired_end(
     const std::vector<bam1_t*>& aln1s,
     const std::vector<bam1_t*>& aln2s,
     const std::string& score_tag,
+    const bool conservative,
     const int merge_pe_mode);
 
 void reconcile_core(
@@ -64,7 +67,8 @@ void reconcile_core(
     const std::vector<bam_hdr_t*>& hdrs,
     const bool is_paired_end,
     samFile* out_fp,
-    const std::string& score_tag
+    const std::string& score_tag,
+    const bool conservative
 );
 
 void reconcile(reconcile_opts args);

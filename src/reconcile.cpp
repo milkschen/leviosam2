@@ -93,7 +93,8 @@ int select_best_aln(const std::vector<bool>& pair_indicators,
 
 int select_best_aln_single_end(
     const std::vector<bam1_t*>& aln1s,
-    const std::string& score_tag
+    const std::string& score_tag,
+    const bool conservative
 ) {
     std::vector<int> mapqs, scores;
     // We don't actually need `pair_indicators` in single-end mode.
@@ -119,6 +120,14 @@ int select_best_aln_single_end(
     int best_idx = select_best_aln(
         pair_indicators=pair_indicators, scores=scores,
         mapqs=mapqs, num_tied_best=num_tied_best);
+    if (conservative) {
+        int min_mapq1 = aln1s[0]->core.qual;
+        for (int i = 1; i < aln1s.size(); i++) {
+            if (aln1s[i]->core.qual < min_mapq1)
+                min_mapq1 = aln1s[i]->core.qual;
+        }
+        aln1s[best_idx]->core.qual = min_mapq1;
+    }
 
     return best_idx;
 }
@@ -128,6 +137,7 @@ int select_best_aln_paired_end(
     const std::vector<bam1_t*>& aln1s,
     const std::vector<bam1_t*>& aln2s,
     const std::string& score_tag,
+    const bool conservative,
     const int merge_pe_mode = MERGE_PE_SUM
 ) {
     std::vector<int> mapqs, scores;
@@ -178,6 +188,18 @@ int select_best_aln_paired_end(
     int num_tied_best;
     int best_idx = select_best_aln(
         pair_indicators=pair_indicators, scores=scores, mapqs=mapqs, num_tied_best=num_tied_best);
+    if (conservative) {
+        int min_mapq1 = aln1s[0]->core.qual;
+        int min_mapq2 = aln2s[0]->core.qual;
+        for (int i = 1; i < aln1s.size(); i++) {
+            if (aln1s[i]->core.qual < min_mapq1)
+                min_mapq1 = aln1s[i]->core.qual;
+            if (aln2s[i]->core.qual < min_mapq2)
+                min_mapq2 = aln2s[i]->core.qual;
+        }
+        aln1s[best_idx]->core.qual = min_mapq1;
+        aln2s[best_idx]->core.qual = min_mapq2;
+    }
 
     return best_idx;
 }
@@ -190,7 +212,8 @@ void reconcile_core(
     const std::vector<bam_hdr_t*>& hdrs,
     const bool is_paired_end,
     samFile* out_fp,
-    const std::string& score_tag
+    const std::string& score_tag,
+    const bool conservative
 ) {
     std::vector<bam1_t*> aln1s, aln2s;
     for (int i = 0; i < sam_fns.size(); i++) {
@@ -259,7 +282,7 @@ void reconcile_core(
         if (end)
             break;
         if (is_paired_end) {
-            int best_idx = select_best_aln_paired_end(aln1s, aln2s, score_tag, MERGE_PE_SUM);
+            int best_idx = select_best_aln_paired_end(aln1s, aln2s, score_tag, conservative, MERGE_PE_SUM);
             bam_aux_append(
                 aln1s[best_idx], "RF", 'Z', ids[best_idx].length() + 1,
                 reinterpret_cast<uint8_t*>(const_cast<char*>(ids[best_idx].c_str())));
@@ -273,7 +296,7 @@ void reconcile_core(
                 exit(1);
             }
         } else {
-            int best_idx = select_best_aln_single_end(aln1s, score_tag);
+            int best_idx = select_best_aln_single_end(aln1s, score_tag, conservative);
             bam_aux_append(
                 aln1s[best_idx], "RF", 'Z', ids[best_idx].length() + 1,
                 reinterpret_cast<uint8_t*>(const_cast<char*>(ids[best_idx].c_str())));
@@ -343,8 +366,9 @@ void reconcile(reconcile_opts args) {
         std::cerr << "[E::reconcile] Failed to write SAM header to file " << out_fn << "\n";
         exit(1);
     }
-    reconcile_core(sam_fns, ids, sam_fps, hdrs,
-                     args.paired_end, out_fp, args.score_tag);
+    reconcile_core(
+        sam_fns, ids, sam_fps, hdrs,
+        args.paired_end, out_fp, args.score_tag, args.conservative);
     for (auto& s: sam_fps) {
         sam_close(s);
     }
@@ -362,6 +386,7 @@ static void print_reconcile_help(){
     std::cerr << "  -o <string> Path to the output SAM/BAM file\n";
     std::cerr << "\n";
     std::cerr << "Options:\n";
+    std::cerr << "  -c          Set to use conservative MAPQ [false]\n";
     std::cerr << "  -m          Set to perform merging in pairs [false]\n";
     std::cerr << "  -r <int>    Random seed used by the program [0]\n";
     std::cerr << "\n";
@@ -373,6 +398,7 @@ int reconcile_run(int argc, char** argv) {
     reconcile_opts args;
     args.cmd = LevioSamUtils::make_cmd(argc, argv);
     static struct option long_options[]{
+        {"conservative_mapq", no_argument, 0, 'c'},
         {"paired_end", no_argument, 0, 'm'},
         {"output_fn", required_argument, 0, 'o'},
         {"rand_seed", required_argument, 0, 'r'},
@@ -380,8 +406,12 @@ int reconcile_run(int argc, char** argv) {
         {"score_tag", required_argument, 0, 'x'}
     };
     int long_idx = 0;
-    while ((c = getopt_long(argc, argv, "hmo:r:s:x:", long_options, &long_idx)) != -1) {
+    while ((c = getopt_long(argc, argv, "hcmo:r:s:x:", long_options, &long_idx)) != -1) {
         switch (c) {
+            case 'c':
+                args.conservative = true;
+                std::cerr << "[I::reconcile_run] Using conservative MAPQ estimation\n";
+                break;
             case 'm':
                 args.paired_end = true;
                 break;
