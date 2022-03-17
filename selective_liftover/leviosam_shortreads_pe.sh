@@ -1,17 +1,16 @@
-# LevioSAM pipeline to lift and re-align paired-end short reads
+# LevioSAM2 pipeline to lift and re-align paired-end short reads
 #
 # Authors: Nae-Chyun Chen
 #
 # Distributed under the MIT license
-# https://github.com/alshai/levioSAM
+# https://github.com/milkschen/leviosam2
 #
-set -xp
 
 ALN_RG=""
 THR=$(nproc)
-LEVIOSAM=leviosam
+LEVIOSAM=leviosam2
 TIME=time # GNU time
-MEASURE_TIME=1 # Set to a >0 value to measure time for each step
+MEASURE_TIME=0 # Set to a >0 value to measure time for each step
 ALLOWED_GAPS=0
 FRAC_CLIPPED=0.95
 ISIZE=1000
@@ -31,7 +30,7 @@ MAPQ=30
 ALN_SCORE=100
 
 
-while getopts a:A:b:C:D:f:H:g:G:i:L:M:o:q:r:R:t:T:x: flag
+while getopts a:A:b:C:D:f:H:g:i:L:M:o:q:r:R:t:T:x: flag
 do
     case "${flag}" in
         a) ALN=${OPTARG};;
@@ -42,7 +41,6 @@ do
         f) REF=${OPTARG};;
         H) HDIST=${OPTARG};;
         g) ALLOWED_GAPS=${OPTARG};;
-        G) ALLOWED_GAPS=${OPTARG};; # to be deprecated
         i) INPUT=${OPTARG};;
         L) LEVIOSAM=${OPTARG};;
         M) MEASURE_TIME=${OPTARG};;
@@ -55,22 +53,6 @@ do
         x) REALN_CONFIG=" -x ${OPTARG}";;
     esac
 done
-
-# echo "Input BAM: ${INPUT}";
-# echo "Output prefix: ${PFX}";
-# echo "Aligner: ${ALN}";
-# echo "Aligner indexes prefix: ${ALN_IDX}";
-# echo "Aligner read group: ${ALN_RG}";
-# echo "Targer reference: ${REF}";
-# echo "LevioSAM software: ${LEVIOSAM}";
-# echo "LevioSAM index: ${CLFT}";
-# echo "Allowed gaps: ${ALLOWED_GAPS}";
-# echo "Re-alignment config: ${REALN_CONFIG}";
-# echo "LevioSAM min MAPQ: ${MAPQ}";
-# echo "LevioSAM min AS: ${ALN_SCORE}";
-# echo "BED where reads get deferred: ${DEFER_DEST_BED}";
-# echo "BED where reads get discarded: ${COMMIT_SOURCE_BED}";
-# echo "Num. threads: ${THR}";
 
 if [[ ${INPUT} == "" ]]; then
     echo "Input is not set properly"
@@ -94,6 +76,8 @@ if [[ ! ${ALN} =~ ^(bowtie2|bwamem)$ ]]; then
     echo "Invalid ${ALN}. Accepted input: bowtie2, bwamem"
     exit 1
 fi
+
+set -xp
 
 # Lifting over using leviosam
 if [ ! -s ${PFX}-committed.bam ]; then
@@ -138,8 +122,8 @@ fi
 if [ ! -s ${PFX}-final.bam ]; then
     ${TT} samtools cat ${PFX}-paired-committed.bam ${PFX}-paired-deferred-reconciled.bam | \
         ${TT} samtools sort -@ ${THR} -o ${PFX}-final.bam
-    # rm ${PFX}-paired-deferred.bam ${PFX}-paired-deferred-sorted_n.bam 
-    # rm ${PFX}-paired-realigned.bam ${PFX}-paired-realigned-sorted_n.bam
-    # rm ${PFX}-paired-deferred-reconciled.bam
-    # rm ${PFX}-paired-committed.bam ${PFX}-deferred.bam
+    rm ${PFX}-paired-deferred.bam ${PFX}-paired-deferred-sorted_n.bam 
+    rm ${PFX}-paired-realigned.bam ${PFX}-paired-realigned-sorted_n.bam
+    rm ${PFX}-paired-deferred-reconciled.bam
+    rm ${PFX}-paired-committed.bam ${PFX}-deferred.bam
 fi

@@ -1,17 +1,16 @@
-# LevioSAM pipeline to lift and re-align long reads
+# LevioSAM2 pipeline to lift and re-align long reads
 #
 # Authors: Nae-Chyun Chen
 #
 # Distributed under the MIT license
-# https://github.com/alshai/levioSAM
+# https://github.com/milkschen/leviosam2
 #
-set -xp
 
 ALN_RG=""
 THR=$(nproc)
-LEVIOSAM=leviosam
+LEVIOSAM=leviosam2
 TIME=time # GNU time
-MEASURE_TIME=1 # Set to a >0 value to measure time for each step
+MEASURE_TIME=0 # Set to a >0 value to measure time for each step
 DEFER_DEST_BED=""
 COMMIT_SOURCE_BED=""
 ALLOWED_GAPS=1000
@@ -50,6 +49,8 @@ TT=""
 if (( ${MEASURE_TIME} > 0 )); then
     TT="${TIME} -v -ao leviosam.time_log "
 fi
+
+set -xp
 
 # Lifting over using leviosam
 if [ ! -s ${PFX}-committed.bam ]; then
