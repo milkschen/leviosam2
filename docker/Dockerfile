@@ -1,9 +1,9 @@
-# image: alshai/leviosam
+# image: naechyun/leviosam2
 FROM ubuntu:20.04
-MAINTAINER tmun1@jhu.edu
+MAINTAINER naechyun@jhu.edu
 
 ENV TZ=America/New_York
-ENV VERSION 0.5.1
+ENV VERSION 0.1
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 RUN apt-get update && apt-get install -y curl git build-essential cmake libsdsl-dev wget libbz2-dev zlib1g-dev liblzma-dev
 RUN wget https://github.com/samtools/htslib/releases/download/1.13/htslib-1.13.tar.bz2 && \
@@ -13,7 +13,7 @@ RUN wget https://github.com/samtools/htslib/releases/download/1.13/htslib-1.13.t
     make && \
     make install && \
     cd ../
-RUN curl -k -L https://github.com/alshai/levioSAM/archive/refs/tags/v${VERSION}.tar.gz -o leviosam-v${VERSION}.tar.gz && \
+RUN curl -k -L https://github.com/milkschen/leviosam2/archive/refs/tags/v${VERSION}.tar.gz -o leviosam-v${VERSION}.tar.gz && \
     tar -xzf leviosam-v${VERSION}.tar.gz && \
     cd levioSAM-${VERSION} && \
     mkdir build && \
