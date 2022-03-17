@@ -28,7 +28,7 @@ LevioSAM2 can be installed using:
 - [Conda](https://docs.conda.io/en/latest/) (please make sure the version number is specified)
 
 ```
-conda install -c conda-forge -c bioconda leviosam=0.5.1
+conda install -c conda-forge -c bioconda leviosam2
 ```
 
 - [Docker](https://hub.docker.com/r/milkschen/leviosam2)
