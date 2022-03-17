@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.10)
 
-project(leviosam CXX C)
+project(leviosam2 CXX C)
 
-set(PROJECT_URL "https://github.com/alshai/leviosam")
-set(PROJECT_DESCRIPTION "leviosam: lifting over alignments between genomes")
+set(PROJECT_URL "https://github.com/milkschen/leviosam2")
+set(PROJECT_DESCRIPTION "leviosam2")
 set(CMAKE_CXX_STANDARD 14)
 
 find_library(HTS_LIB hts)
@@ -54,7 +54,7 @@ else()
 
     set(VERSION
     "#ifndef VERSION
-    #define VERSION \"5.2${GIT_BRANCH}${GIT_REV}${GIT_DIFF}\"
+    #define VERSION \"0.1${GIT_BRANCH}${GIT_REV}${GIT_DIFF}\"
     #endif
     "
     )
@@ -167,12 +167,12 @@ file(GLOB LIB_HEADERS   src/leviosam.hpp
                         src/bam.h src/IITree.h src/gzstream.h)
 add_library(lvsam ${LIB_SOURCES} ${LIB_HEADERS})
 
-add_executable(leviosam src/leviosam.cpp)
-target_link_libraries(leviosam lvsam)
-target_link_libraries(leviosam ${HTS_LIB})
-target_link_libraries(leviosam ${SDSL_LIB})
-target_link_libraries(leviosam pthread)
-target_link_libraries(leviosam z)
+add_executable(leviosam2 src/leviosam.cpp)
+target_link_libraries(leviosam2 lvsam)
+target_link_libraries(leviosam2 ${HTS_LIB})
+target_link_libraries(leviosam2 ${SDSL_LIB})
+target_link_libraries(leviosam2 pthread)
+target_link_libraries(leviosam2 z)
 
 
 # Download and unpack googletest at configure time
@@ -224,6 +224,6 @@ add_test(NAME chain_test COMMAND chain_test
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/testdata
 )
 
-INSTALL(TARGETS leviosam DESTINATION bin)
+INSTALL(TARGETS leviosam2 DESTINATION bin)
 INSTALL(FILES src/leviosam.hpp DESTINATION include)
 
