@@ -33,7 +33,7 @@ conda install -c conda-forge -c bioconda leviosam2
 
 - [Docker](https://hub.docker.com/r/milkschen/leviosam2)
 ```
-docker pull milkschen/leviosam2
+docker pull naechyun/leviosam2
 ```
 
 - Built from source using CMake or Make. See [INSTALL.md](INSTALL.md) for details.
@@ -41,7 +41,7 @@ docker pull milkschen/leviosam2
 
 ## Usage (ChainMap)
 
-LevioSAM2 can also perform lift-over using a chain file as the lift-over map since v0.5.0. Using ChainMap enables assembly-to-assembly lift-over and is usually faster. Please visit the [ChainMap Usage Page](https://github.com/milkschen/leviosam2/wiki/Lift-over-using-a-chain-map) for detailed instructions.
+LevioSAM2 performs lift-over using a [chain file](http://hgw1.soe.ucsc.edu/goldenPath/help/chain.html) as the lift-over map.
 
 Quick run:
 ```
