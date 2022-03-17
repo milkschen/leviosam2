@@ -9616,6 +9616,13 @@ template<typename> class allocator;
 template<typename T, typename Alloc> class vector;
 } // namespace _LIBCPP_ABI_NAMESPACE
 } // namespace std
+#elif defined(_LIBCPP_VERSION) || defined(__APPLE_CC__)
+namespace std {
+template<typename> class allocator;
+inline namespace __1 {
+template<typename T, typename Alloc> class vector;
+} // namespace __1
+} // namespace std
 #else
 #error "unknown standard library"
 #endif
