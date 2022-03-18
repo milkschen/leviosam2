@@ -54,7 +54,7 @@ else()
 
     set(VERSION
     "#ifndef VERSION
-    #define VERSION \"0.1${GIT_BRANCH}${GIT_REV}${GIT_DIFF}\"
+    #define VERSION \"0.2${GIT_BRANCH}${GIT_REV}${GIT_DIFF}\"
     #endif
     "
     )
