@@ -1,20 +1,16 @@
-# Installation instructions for levioSAM
+# Installation instructions for levioSAM2
 
-levioSAM supports a variety of methods for installation:
+levioSAM2 supports a variety of methods for installation:
 
-- Conda (*highly recommended*)
+- Conda
 - Docker
+- Singularity
 - CMake
-- Make
 
 ## Conda
 
-This is our recommended method of installing levioSAM.
-
-To install, simpy run this command:
-
 ```
-conda install -c conda-forge -c bioconda leviosam
+conda install -c conda-forge -c bioconda leviosam2
 ```
 
 ## Docker
@@ -22,11 +18,18 @@ conda install -c conda-forge -c bioconda leviosam
 You can obtain a Docker image of the latest version from Docker hub:
 
 ```
-docker pull alshai/leviosam
+docker pull naechyun/leviosam2:v0.1.0
 ```
 
-## CMake and Make
+## Singularity
 
+```
+singularity pull docker://naechyun/leviosam2:v0.1.0
+```
+
+## CMake
+
+### Prerequisites
 
 Make sure the following prerequisite libraries are installed on your system. 
 
@@ -66,30 +69,12 @@ make
 
 If you installed the dependencies manually, you might have to modify the `cmake` command to specify their library and
 include directory locations like so:
-```
-cmake -DHTS_LIB_DIR=<htslib lib directory> \
-      -DHTS_INC_DIR=<htslib include dir> \
-      -DSDSL_LIB_DIR=<sdsl-lite lib directory> \
-      -DSDSL_INC_DIR=<sdsl-lite include dir> \
-      ..
-```
-or
+
 ```
 cmake -D CMAKE_LIBRARY_PATH="/path/to/libsdsl/;/path/to/libhts/" \
-      -D CMAKE_INCLUDE_PATH="/path/to/include/;/path/to/include2/" ..
+      -D CMAKE_INCLUDE_PATH="/path/to/include/" ..
 ```
 
-### Make
-
-Update `LD_LIBRARY_PATH` and `CPLUS_INCLUDE_PATH` paths after installing sdsl-lite and htslib and install with `make`:
-
-```
-export LD_LIBRARY_PATH=<path/to/lib>:$LD_LIBRARY_PATH
-export LIBRARY_PATH=<path/to/lib>:$LIBRARY_PATH
-export C_INCLUDE_PATH=<path/to/include>:$C_INCLUDE_PATH
-export CPLUS_INCLUDE_PATH=<path/to/include>:$CPLUS_INCLUDE_PATH
-make
-```
 
 ## Test
 
