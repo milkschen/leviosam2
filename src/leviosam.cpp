@@ -357,18 +357,23 @@ void lift_run(lift_opts args) {
 
     sam_hdr_t* hdr_orig = sam_hdr_read(sam_fp);
     sam_hdr_t* hdr = LevioSamUtils::lengthmap_to_hdr(args.length_map, hdr_orig);
-    sam_hdr_add_pg(hdr, "leviosam", "VN", VERSION, "CL", args.cmd.data(), NULL);
-    sam_hdr_add_pg(hdr_orig, "leviosam", "VN", VERSION, "CL", args.cmd.data(), NULL);
+    sam_hdr_add_pg(hdr, "leviosam2", "VN", VERSION, "CL", args.cmd.data(), NULL);
+    sam_hdr_add_pg(hdr_orig, "leviosam2", "VN", VERSION, "CL", args.cmd.data(), NULL);
     auto write_hdr = sam_hdr_write(out_sam_fp, hdr);
 
-    std::map<std::string, std::string> ref_dict;
     if (args.md_flag) {
-        // load
         if (args.ref_name == "") {
             std::cerr << "[E::lift_run] -m/--md -f <fasta> to be provided as well\n";
             exit(1);
         }
+    }
+    std::map<std::string, std::string> ref_dict;
+    if (args.ref_name != "") {
         ref_dict = load_fasta(args.ref_name);
+        if (ref_dict.size() == 0){
+            std::cerr << "[E::lift_run] Failed to load reference from " << args.ref_name << "\n";
+            exit(1);
+        }
     }
 
     LevioSamUtils::WriteDeferred wd;
@@ -389,16 +394,14 @@ void lift_run(lift_opts args) {
                 &lift_map,
                 &mutex_fread, &mutex_fwrite,
                 sam_fp, out_sam_fp, hdr_orig, hdr,
-                // args.chunk_size, args.allowed_cigar_changes,
-                &ref_dict, /*args.md_flag,*/ &wd, args));
+                &ref_dict, &wd, args));
         } else {
             threads.push_back(std::thread(
                 read_and_lift<chain::ChainMap>,
                 &chain_map,
                 &mutex_fread, &mutex_fwrite,
                 sam_fp, out_sam_fp, hdr_orig, hdr,
-                // args.chunk_size, args.allowed_cigar_changes,
-                &ref_dict, /*args.md_flag,*/ &wd, args));
+                &ref_dict, &wd, args));
         }
     }
     for (int j = 0; j < args.threads; j++){
@@ -434,7 +437,7 @@ lift::LiftMap lift::lift_from_vcf(
 void print_serialize_help_msg(){
     std::cerr << "\n";
     std::cerr << "Index a lift-over map using either a VCF or a chain file.\n";
-    std::cerr << "Usage:   leviosam index [options] {-v <vcf> | -c <chain>} -p <out_prefix> -F <fai> \n";
+    std::cerr << "Usage:   leviosam2 index [options] {-v <vcf> | -c <chain>} -p <out_prefix> -F <fai> \n";
     std::cerr << "Options:\n";
     std::cerr << "         VcfMap options:\n";
     std::cerr << "           -v string Index a lift-over map from a VCF file.\n";
@@ -452,8 +455,8 @@ void print_serialize_help_msg(){
 
 void print_lift_help_msg(){
     std::cerr << "\n";
-    std::cerr << "Perform efficient lift-over using levioSAM.\n";
-    std::cerr << "Usage:   leviosam lift [options] {-v <vcf> | -l <vcfmap> | -c <chain> | -C <chainmap>}\n";
+    std::cerr << "Perform efficient lift-over using leviosam2.\n";
+    std::cerr << "Usage:   leviosam2 lift [options] {-v <vcf> | -l <vcfmap> | -c <chain> | -C <chainmap>}\n";
     std::cerr << "Options:\n";
     std::cerr << "         -a string Path to the SAM/BAM file to be lifted. \n";
     std::cerr << "                   Leave empty or set to \"-\" to read from stdin.\n";
@@ -491,9 +494,9 @@ void print_lift_help_msg(){
 
 void print_main_help_msg(){
     std::cerr << "\n";
-    std::cerr << "Program: leviosam (lifting over alignments)\n";
+    std::cerr << "Program: leviosam2 (lifting over alignments)\n";
     std::cerr << "Version: " << VERSION << "\n";
-    std::cerr << "Usage:   leviosam <command> [options]\n\n";
+    std::cerr << "Usage:   leviosam2 <command> [options]\n\n";
     std::cerr << "Commands: index       Index a lift-over map (`serialize` also works).\n";
     std::cerr << "          lift        Lift alignments.\n";
     std::cerr << "          collate     Collate lifted paired-end alignments to make reads properly paired.\n";
