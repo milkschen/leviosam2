@@ -4,7 +4,7 @@ import subprocess
 import sys
 
 
-LEVIOSAM = '../leviosam'
+LEVIOSAM = '../leviosam2'
 WG_MAJOR_LFT = 'major.lft'
 
 BWA_SE_H38 = 'bwa-se-grch38.bam'
