@@ -33,12 +33,12 @@ conda install -c conda-forge -c bioconda leviosam2
 
 - [Docker](https://hub.docker.com/r/milkschen/leviosam2)
 ```
-docker pull naechyun/leviosam2:v0.1.0
+docker pull naechyun/leviosam2:latest
 ```
 
 - [Singularity](https://hub.docker.com/r/milkschen/leviosam2)
 ```
-singularity pull docker://naechyun/leviosam2:v0.1.0
+singularity pull docker://naechyun/leviosam2:latest
 ```
 
 - Built from source using CMake. See [INSTALL.md](INSTALL.md) for details.
