@@ -1,16 +1,32 @@
 # image: leviosam2
-FROM biocontainers/bwa:v0.7.17_cv1 AS bwa
 FROM leviosam2_env:latest AS lev
 
 FROM ubuntu:20.04
 MAINTAINER naechyun@jhu.edu
 
 ENV TZ=America/New_York
-COPY --from=bwa /opt/conda/bin/bwa /usr/local/bin
-COPY --from=lev /leviosam2-0.2.0 /lev
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+RUN apt-get update && apt-get install -y perl python3
+COPY --from=lev /leviosam2-0.1.0 /lev
 COPY --from=lev /usr/local/bin/leviosam2 /usr/local/bin/
 COPY --from=lev /usr/local/bin/bgzip /usr/local/bin/
 COPY --from=lev /usr/local/bin/bwa /usr/local/bin/
+COPY --from=lev /usr/local/bin/bowtie2 /usr/local/bin/
+COPY --from=lev /usr/local/bin/bowtie2-build /usr/local/bin/
+COPY --from=lev /usr/local/bin/bowtie2-inspect /usr/local/bin/
+COPY --from=lev /usr/local/bin/bowtie2-build-s /usr/local/bin/
+COPY --from=lev /usr/local/bin/bowtie2-build-l /usr/local/bin/
+COPY --from=lev /usr/local/bin/bowtie2-align-s /usr/local/bin/
+COPY --from=lev /usr/local/bin/bowtie2-align-l /usr/local/bin/
+COPY --from=lev /usr/local/bin/bowtie2-inspect-s /usr/local/bin/
+COPY --from=lev /usr/local/bin/bowtie2-inspect-l /usr/local/bin/
+COPY --from=lev /usr/local/bin/minimap2 /usr/local/bin/
+COPY --from=lev /usr/lib/gcc/x86_64-linux-gnu/9/libgomp.a /usr/local/lib/
+COPY --from=lev /usr/lib/gcc/x86_64-linux-gnu/9/libgomp.so /usr/local/lib/
+COPY --from=lev /usr/lib/x86_64-linux-gnu/libgomp.so.1 /usr/local/lib/
+COPY --from=lev /usr/lib/x86_64-linux-gnu/libgomp.so.1.0.0 /usr/local/lib/
+COPY --from=lev /usr/local/bin/winnowmap /usr/local/bin/
+COPY --from=lev /usr/local/bin/meryl /usr/local/bin/
 COPY --from=lev /usr/local/bin/samtools /usr/local/bin/
 COPY --from=lev /usr/local/lib/libhts.a /usr/local/lib
 COPY --from=lev /usr/local/lib/libhts.so /usr/local/lib
