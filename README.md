@@ -1,6 +1,5 @@
 [![Docker](https://img.shields.io/docker/v/naechyun/leviosam2?label=Docker)](https://hub.docker.com/r/naechyun/leviosam2)
 [![Anaconda-Server Badge](https://anaconda.org/bioconda/leviosam2/badges/version.svg)](https://anaconda.org/bioconda/leviosam2)
-[![Anaconda-Server Badge](https://anaconda.org/bioconda/leviosam2/badges/platforms.svg)](https://anaconda.org/bioconda/leviosam2)
 [![Anaconda-Server Badge](https://anaconda.org/bioconda/leviosam2/badges/downloads.svg)](https://anaconda.org/bioconda/leviosam2)
 
 # levioSAM2: Fast and accurate coordinate conversion between assemblies
