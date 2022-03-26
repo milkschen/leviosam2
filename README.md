@@ -33,23 +33,28 @@ conda install -c conda-forge -c bioconda leviosam2
 
 - [Docker](https://hub.docker.com/r/milkschen/leviosam2)
 ```
-docker pull naechyun/leviosam2
+docker pull naechyun/leviosam2:v0.1.0
 ```
 
-- Built from source using CMake or Make. See [INSTALL.md](INSTALL.md) for details.
+- [Singularity](https://hub.docker.com/r/milkschen/leviosam2)
+```
+singularity pull docker://naechyun/leviosam2:v0.1.0
+```
+
+- Built from source using CMake. See [INSTALL.md](INSTALL.md) for details.
 
 
-## Usage (ChainMap)
+## Usage
 
 LevioSAM2 performs lift-over using a [chain file](http://hgw1.soe.ucsc.edu/goldenPath/help/chain.html) as the lift-over map.
 
 Quick run:
 ```
-leviosam2 index -c a_to_b.chain -p a_to_b -F dest.fai
-leviosam2 lift -C a_to_b.clft -a aligned_to_a.bam -p lifted_from_a -O bam
+leviosam2 index -c source_to_target.chain -p source_to_target -F target.fai
+leviosam2 lift -C source_to_target.clft -a aligned_to_source.bam -p lifted_from_source -O bam
 ```
 
-The levioSAM2 ChainMap index will be saved to `a_to_b.clft`. The output will be saved to `lifted_from_a.bam`.
+The levioSAM2 ChainMap index will be saved to `source_to_target.clft`. The output will be saved to `lifted_from_source.bam`.
 
 
 ## Publication
