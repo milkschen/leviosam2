@@ -1,3 +1,16 @@
+/*
+ * yaml.hpp
+ *
+ * Simple functions to handle YAML config files. 
+ *
+ * The core library is rapidyaml: https://github.com/biojppm/rapidyaml
+ *
+ * Author: Nae-Chyun Chen
+ * Dept. of Computer Science, Johns Hopkins University
+ *
+ * Distributed under the MIT license
+ * https://github.com/milkschen/leviosam2
+ */
 #include <iostream>
 #include "yaml.hpp"
 #define RYML_SINGLE_HDR_DEFINE_NOW

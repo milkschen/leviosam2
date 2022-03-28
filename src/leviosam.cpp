@@ -8,7 +8,7 @@
  * Dept. of Computer Science, Johns Hopkins University
  *
  * Distributed under the MIT license
- * https://github.com/alshai/levioSAM
+ * https://github.com/milkschen/leviosam2
  */
 #include <ctime>
 #include <stdio.h>
@@ -436,18 +436,10 @@ lift::LiftMap lift::lift_from_vcf(
 
 void print_serialize_help_msg(){
     std::cerr << "\n";
-    std::cerr << "Index a lift-over map using either a VCF or a chain file.\n";
-    std::cerr << "Usage:   leviosam2 index [options] {-v <vcf> | -c <chain>} -p <out_prefix> -F <fai> \n";
-    std::cerr << "Options:\n";
-    std::cerr << "         VcfMap options:\n";
-    std::cerr << "           -v string Index a lift-over map from a VCF file.\n";
-    std::cerr << "           -s string The sample used to build leviosam index (-v needs to be set).\n";
-    std::cerr << "           -g 0/1    The haplotype used to index leviosam. [0] \n";
-    std::cerr << "           -n string Path to a name map file.\n";
-    std::cerr << "                     This can be used to map '1' to 'chr1', or vice versa.\n";
-    std::cerr << "         ChainMap options:\n";
-    std::cerr << "           -c string Index a lift-over map from a chain file.\n";
+    std::cerr << "Index a lift-over map using either a chain file.\n";
+    std::cerr << "Usage:   leviosam2 index -c <chain> -p <out_prefix> -F <fai>\n";
     std::cerr << "\n";
+    std::cerr << "Inputs:  -c string Index a lift-over map from a chain file.\n";
     std::cerr << "         -F string Path to the FAI (FASTA index) file of the dest reference.\n";
     std::cerr << "         -p string The prefix of the output file.\n";
     std::cerr << "\n";
@@ -456,9 +448,10 @@ void print_serialize_help_msg(){
 void print_lift_help_msg(){
     std::cerr << "\n";
     std::cerr << "Perform efficient lift-over using leviosam2.\n";
-    std::cerr << "Usage:   leviosam2 lift [options] {-v <vcf> | -l <vcfmap> | -c <chain> | -C <chainmap>}\n";
-    std::cerr << "Options:\n";
-    std::cerr << "         -a string Path to the SAM/BAM file to be lifted. \n";
+    std::cerr << "Usage:   leviosam2 lift [options] -C <clft>\n";
+    std::cerr << "\n";
+    std::cerr << "Inputs:  -C string Path to an indexed ChainMap.\n";
+    std::cerr << "Options: -a string Path to the SAM/BAM file to be lifted. \n";
     std::cerr << "                   Leave empty or set to \"-\" to read from stdin.\n";
     std::cerr << "         -t INT    Number of threads used. [1] \n";
     std::cerr << "         -T INT    Chunk size for each thread. [256] \n";
@@ -467,14 +460,7 @@ void print_lift_help_msg(){
     std::cerr << "         -m        add MD and NM to output alignment records (requires -f option)\n";
     std::cerr << "         -f string Fasta reference that corresponds to input SAM/BAM (for use w/ -m option)\n";
     std::cerr << "         -x string Alignment preset [illumina] \n";
-    std::cerr << "\n";
-    std::cerr << "         VcfMap options (one of -v or -l must be set to perform lift-over using a VcfMap):\n";
-    std::cerr << "           -v string If -l is not specified, can build indexes using a VCF file.\n";
-    std::cerr << "           -l string Path to an indexed VcfMap.\n";
-    std::cerr << "         ChainMap options (one of -c and -C must be set to perform lift-over using a ChainMap):\n";
-    std::cerr << "           -c string If -C is not specified, build a ChainMap from a chain file.\n";
-    std::cerr << "           -C string Path to an indexed ChainMap.\n";
-    std::cerr << "           -G INT    Number of allowed CIGAR changes for one alingment. [0]\n";
+    std::cerr << "         -G INT    Number of allowed CIGAR changes for one alingment. [0]\n";
     std::cerr << "\n";
     std::cerr << "         Commit/defer rule options:\n";
     std::cerr << "           -S string<:int/float> Key-value pair of a split rule. We allow appending multiple `-S` options.\n";
@@ -488,8 +474,6 @@ void print_lift_help_msg(){
     std::cerr << "           -r string Path to a BED file (source coordinates). Reads overlap with the regions are always committed. [none]\n";
     std::cerr << "           -D string Path to a BED file (dest coordinates). Reads overlap with the regions are always deferred. [none]\n";
     std::cerr << "\n";
-    std::cerr << "         The options for serialize can also be used here, if -v/-c is set.\n";
-    std::cerr << "\n";
 }
 
 void print_main_help_msg(){
@@ -497,10 +481,10 @@ void print_main_help_msg(){
     std::cerr << "Program: leviosam2 (lifting over alignments)\n";
     std::cerr << "Version: " << VERSION << "\n";
     std::cerr << "Usage:   leviosam2 <command> [options]\n\n";
-    std::cerr << "Commands: index       Index a lift-over map (`serialize` also works).\n";
-    std::cerr << "          lift        Lift alignments.\n";
-    std::cerr << "          collate     Collate lifted paired-end alignments to make reads properly paired.\n";
-    std::cerr << "          bed         Lift BED intervals.\n";
+    std::cerr << "Commands: index       Index a lift-over map.\n";
+    std::cerr << "          lift        Lift alignments in the SAM/BAM formats.\n";
+    std::cerr << "          bed         Lift intervals in the BED format.\n";
+    std::cerr << "          collate     Collate lifted paired-end alignments.\n";
     std::cerr << "          reconcile   Reconcile alignments.\n";
     std::cerr << "Options:  -h          Print detailed usage.\n";
     std::cerr << "          -V          Verbose level [0].\n";

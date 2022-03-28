@@ -1,12 +1,13 @@
 /*
- * lift_bed.hpp
+ * lift_bed.cpp
  *
- * The `leviosam bed` program that lifts intervals in the BED format
+ * Lifting over genomic intervals in the BED format
  *
- * Authors: Nae-Chyun Chen
+ * Author: Nae-Chyun Chen
+ * Dept. of Computer Science, Johns Hopkins University
  *
  * Distributed under the MIT license
- * https://github.com/alshai/levioSAM
+ * https://github.com/milkschen/leviosam2
  */
 #ifndef LIFT_BED_HPP
 #define LIFT_BED_HPP

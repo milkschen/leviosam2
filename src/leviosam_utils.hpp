@@ -3,10 +3,11 @@
  *
  * Utility functions for the leviosam software
  *
- * Authors: Nae-Chyun Chen
+ * Author: Nae-Chyun Chen
+ * Dept. of Computer Science, Johns Hopkins University
  *
  * Distributed under the MIT license
- * https://github.com/alshai/levioSAM
+ * https://github.com/milkschen/leviosam2
  */
 #ifndef LEVIOSAM_UTILS_HPP
 #define LEVIOSAM_UTILS_HPP

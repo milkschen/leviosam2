@@ -3,10 +3,11 @@
  *
  * Building a lift-over map from a chain file and performing lift-over
  *
- * Authors: Nae-Chyun Chen
+ * Author: Nae-Chyun Chen
+ * Dept. of Computer Science, Johns Hopkins University
  *
  * Distributed under the MIT license
- * https://github.com/alshai/levioSAM
+ * https://github.com/milkschen/leviosam2
  */
 #ifndef CHAIN_HPP
 #define CHAIN_HPP

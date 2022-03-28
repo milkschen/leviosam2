@@ -1,3 +1,14 @@
+/*
+ * reconcile.hpp
+ *
+ * Reconcile two sets of alignments and selects the ones with higher alignment confidence
+ *
+ * Author: Nae-Chyun Chen
+ * Dept. of Computer Science, Johns Hopkins University
+ *
+ * Distributed under the MIT license
+ * https://github.com/milkschen/leviosam2
+ */
 #ifndef RECONCILE_H__
 #define RECONCILE_H__
 #include <tuple>

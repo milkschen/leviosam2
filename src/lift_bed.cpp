@@ -1,3 +1,14 @@
+/*
+ * lift_bed.cpp
+ *
+ * Lifting over genomic intervals in the BED format
+ *
+ * Author: Nae-Chyun Chen
+ * Dept. of Computer Science, Johns Hopkins University
+ *
+ * Distributed under the MIT license
+ * https://github.com/milkschen/leviosam2
+ */
 #include <ctime>
 #include <getopt.h>
 #include <iostream>
@@ -8,10 +19,10 @@
 
 void print_lift_bed_help_msg() {
     std::cerr << "\nLift over a BED file\n";
-    std::cerr << "Version: %s\n", VERSION;
-    std::cerr << "Usage:   leviosam bed [options] -b <bed> -C <clft> -p <prefix>\n\n";
+    std::cerr << "Version: " << VERSION << "\n";
+    std::cerr << "Usage:   leviosam2 bed [options] -b <bed> -C <clft> -p <prefix>\n\n";
     std::cerr << "Inputs:  -b string   Path to the input BED.\n";
-    std::cerr << "         -C string   Path to the chain index.\n";
+    std::cerr << "         -C string   Path to an indexed ChainMap. See `leviosam2 index` for details.\n";
     std::cerr << "         -p string   Prefix to the output files.\n";
     std::cerr << "Options: -h          Print detailed usage.\n";
     std::cerr << "         -G INT      Number of allowed gaps for an interval. [500]\n";

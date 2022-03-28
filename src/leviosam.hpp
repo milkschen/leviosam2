@@ -8,8 +8,7 @@
  * Dept. of Computer Science, Johns Hopkins University
  *
  * Distributed under the MIT license
- * https://github.com/alshai/levioSAM
- * Created: July 2019
+ * https://github.com/milkschen/leviosam2
  */
 #ifndef LIFTOVER_HPP
 #define LIFTOVER_HPP

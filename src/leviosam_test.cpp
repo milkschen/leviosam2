@@ -1,3 +1,14 @@
+/*
+ * leviosam_test.cpp
+ *
+ * Test levioSAM functions
+ *
+ * Authors: Taher Mun, Nae-Chyun Chen, Ben Langmead
+ * Dept. of Computer Science, Johns Hopkins University
+ *
+ * Distributed under the MIT license
+ * https://github.com/milkschen/leviosam2
+ */
 #include <iostream>
 #include <unistd.h>
 #include <string>

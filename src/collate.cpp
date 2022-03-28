@@ -1,14 +1,14 @@
 /*
  * collate.cpp
  *
- * The `leviosam collate` program that collates a pair of BAM files that are originally split
- * from a paired-end BAM file (example use case: a BAM is split using a MAPQ cutoff). The
- * resulting pair of files will be properly paired
+ * Collates a pair of BAM files that are originally split from a paired-end dataset.
+ * The resulting pair of files will be properly paired
  *
- * Authors: Nae-Chyun Chen
+ * Author: Nae-Chyun Chen
+ * Dept. of Computer Science, Johns Hopkins University
  *
  * Distributed under the MIT license
- * https://github.com/alshai/levioSAM
+ * https://github.com/milkschen/leviosam2
  */
 #include <ctime>
 #include <getopt.h>
@@ -19,17 +19,17 @@
 
 
 void print_collate_help_msg() {
-    fprintf(stderr, "\n");
-    fprintf(stderr, "Collate alignments to make sure reads are paired\n");
-    fprintf(stderr, "Version: %s\n", VERSION);
-    fprintf(stderr, "Usage:   leviosam collate [options] -a <bam> {-b <bam> | -q <fastq>} -p <prefix>\n\n");
-    fprintf(stderr, "Inputs:  -a string   Path to the input SAM/BAM.\n");
-    fprintf(stderr, "         -b string   Path to the input deferred SAM/BAM.\n");
-    fprintf(stderr, "         -q string   Path to the input singleton FASTQ.\n");
-    fprintf(stderr, "         -p string   Prefix to the output files (1 BAM and a pair of gzipped FASTQs).\n");
-    fprintf(stderr, "Options: -h          Print detailed usage.\n");
-    fprintf(stderr, "         -V INT      Verbose level [0].\n");
-    fprintf(stderr, "\n");
+    std::cerr << "\n";
+    std::cerr << "Collate alignments to make sure reads are paired\n";
+    std::cerr << "Version: " << VERSION << "\n";
+    std::cerr << "Usage:   leviosam2 collate [options] -a <bam> {-b <bam> | -q <fastq>} -p <prefix>\n\n";
+    std::cerr << "Inputs:  -a string   Path to the input SAM/BAM.\n";
+    std::cerr << "         -b string   Path to the input deferred SAM/BAM.\n";
+    std::cerr << "         -q string   Path to the input singleton FASTQ.\n";
+    std::cerr << "         -p string   Prefix to the output files (1 BAM and a pair of gzipped FASTQs).\n";
+    std::cerr << "Options: -h          Print detailed usage.\n";
+    std::cerr << "         -V INT      Verbose level [0].\n";
+    std::cerr << "\n";
 }
 
 

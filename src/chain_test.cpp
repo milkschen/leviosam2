@@ -1,3 +1,14 @@
+/*
+ * chain_test.cpp
+ *
+ * Test chain related functions for levioSAM2
+ *
+ * Author: Nae-Chyun Chen
+ * Dept. of Computer Science, Johns Hopkins University
+ *
+ * Distributed under the MIT license
+ * https://github.com/milkschen/leviosam2
+ */
 #include <iostream>
 #include <unistd.h>
 #include "chain.hpp"

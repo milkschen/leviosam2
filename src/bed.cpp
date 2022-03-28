@@ -1,10 +1,13 @@
 /*
  * bed.cpp
  *
- * Authors: Nae-Chyun Chen
+ * Classes and routines to lift over genomic intervals in the BED format
+ *
+ * Author: Nae-Chyun Chen
+ * Dept. of Computer Science, Johns Hopkins University
  *
  * Distributed under the MIT license
- * https://github.com/alshai/levioSAM
+ * https://github.com/milkschen/leviosam2
  */
 #include <iostream>
 #include <vector>

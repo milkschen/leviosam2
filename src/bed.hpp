@@ -1,3 +1,14 @@
+/*
+ * bed.hpp
+ *
+ * Classes and routines to lift over genomic intervals in the BED format
+ *
+ * Author: Nae-Chyun Chen
+ * Dept. of Computer Science, Johns Hopkins University
+ *
+ * Distributed under the MIT license
+ * https://github.com/milkschen/leviosam2
+ */
 #ifndef BED_HPP
 #define BED_HPP
 

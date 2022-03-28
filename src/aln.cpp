@@ -1,3 +1,14 @@
+/*
+ * aln.cpp
+ *
+ * Align two sequences using dynamic programming
+ *
+ * Author: Nae-Chyun Chen
+ * Dept. of Computer Science, Johns Hopkins University
+ *
+ * Distributed under the MIT license
+ * https://github.com/milkschen/leviosam2
+ */
 #include "aln.hpp"
 
 

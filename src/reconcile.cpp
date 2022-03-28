@@ -1,3 +1,14 @@
+/*
+ * reconcile.cpp
+ *
+ * Reconcile two sets of alignments and selects the ones with higher alignment confidence
+ *
+ * Author: Nae-Chyun Chen
+ * Dept. of Computer Science, Johns Hopkins University
+ *
+ * Distributed under the MIT license
+ * https://github.com/milkschen/leviosam2
+ */
 #include <algorithm>
 #include <iostream>
 #include <fstream>
@@ -10,6 +21,7 @@
 
 #include "reconcile.hpp"
 #include "leviosam_utils.hpp"
+#include "version.hpp"
 
 /* Fill the zipped vector with pairs consisting of the corresponding elements of
  * a, b, c and d. (This assumes that the vectors have equal length)
@@ -379,16 +391,17 @@ void reconcile(reconcile_opts args) {
 
 static void print_reconcile_help(){
     std::cerr << "\n";
-    std::cerr << "Usage: leviosam reconcile [options] -s <label:input> -o <out>\n";
+    std::cerr << "Reconcile alignments to select the one with higher confidence\n";
+    std::cerr << "Version: " << VERSION << "\n";
+    std::cerr << "Usage: leviosam2 reconcile [options] -s <label:input> -o <out>\n";
     std::cerr << "\n";
-    std::cerr << "  -s <string:string>  Input label and file; separated by a colon, e.g.\n";
-    std::cerr << "                      `-s foo:foo.bam -s bar:bar.bam`\n";
-    std::cerr << "  -o <string> Path to the output SAM/BAM file\n";
-    std::cerr << "\n";
-    std::cerr << "Options:\n";
-    std::cerr << "  -c          Set to use conservative MAPQ [false]\n";
-    std::cerr << "  -m          Set to perform merging in pairs [false]\n";
-    std::cerr << "  -r <int>    Random seed used by the program [0]\n";
+    std::cerr << "Inputs:  -s string:string  Input label and file; separated by a colon, e.g.\n";
+    std::cerr << "                           `-s foo:foo.bam -s bar:bar.bam`\n";
+    std::cerr << "         -o string Path to the output SAM/BAM file\n";
+    std::cerr << "Options: -h        Print detailed usage.\n";
+    std::cerr << "         -c        Set to use conservative MAPQ [false]\n";
+    std::cerr << "         -m        Set to perform merging in pairs [false]\n";
+    std::cerr << "         -r INT    Random seed used by the program [0]\n";
     std::cerr << "\n";
 }
 

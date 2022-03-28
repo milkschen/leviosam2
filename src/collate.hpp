@@ -1,13 +1,14 @@
 /*
  * collate.hpp
  *
- * The `leviosam collate` program that makes sure a split paired-end
- * BAM file is properly paired
+ * Collates a pair of BAM files that are originally split from a paired-end dataset.
+ * The resulting pair of files will be properly paired
  *
- * Authors: Nae-Chyun Chen
+ * Author: Nae-Chyun Chen
+ * Dept. of Computer Science, Johns Hopkins University
  *
  * Distributed under the MIT license
- * https://github.com/alshai/levioSAM
+ * https://github.com/milkschen/leviosam2
  */
 #ifndef COLLATE_HPP
 #define COLLATE_HPP

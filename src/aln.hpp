@@ -3,10 +3,10 @@
  *
  * Perform dynamic programming to align sequences
  *
- * Authors: Nae-Chyun Chen
+ * Author: Nae-Chyun Chen
  *
  * Distributed under the MIT license
- * https://github.com/alshai/levioSAM
+ * https://github.com/milkschen/leviosam2
  */
 #ifndef ALN_HPP
 #define ALN_HPP
