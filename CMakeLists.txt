@@ -26,10 +26,9 @@ execute_process(COMMAND git log --pretty=format:'%h' -n 1
 
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "release")
     set(VERSION
-    "#ifndef VERSION
-    #define VERSION \"${PROJECT_VER}\"
-    #endif
-    "
+"#ifndef VERSION
+#define VERSION \"${PROJECT_VER}\"
+#endif"
     )
 else()
     # Check whether we got any revision (which isn't
@@ -60,10 +59,9 @@ else()
     endif()
 
     set(VERSION
-    "#ifndef VERSION
-    #define VERSION \"${PROJECT_VER}${GIT_BRANCH}${GIT_REV}${GIT_DIFF}\"
-    #endif
-    "
+"#ifndef VERSION
+#define VERSION \"${PROJECT_VER}${GIT_BRANCH}${GIT_REV}${GIT_DIFF}\"
+#endif"
     )
 endif()
 
