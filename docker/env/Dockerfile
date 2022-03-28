@@ -55,7 +55,7 @@ RUN curl -k -L https://github.com/milkschen/leviosam2/archive/refs/tags/v${VERSI
     cd leviosam2-${VERSION} && \
     mkdir build && \
     cd build && \
-    cmake .. && \
+    cmake -D CMAKE_BUILD_TYPE="release" .. && \
     echo "#ifndef VERSION\n#define VERSION \"${VERSION}\"\n#endif" > ../src/version.hpp && \
     make && \
     make install
