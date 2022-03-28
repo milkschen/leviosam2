@@ -4,6 +4,7 @@ project(leviosam2 CXX C)
 
 set(PROJECT_URL "https://github.com/milkschen/leviosam2")
 set(PROJECT_DESCRIPTION "leviosam2")
+set(PROJECT_VER "0.2")
 set(CMAKE_CXX_STANDARD 14)
 
 find_library(HTS_LIB hts)
@@ -16,14 +17,20 @@ if(NOT SDSL_LIB)
     message(FATAL_ERROR "libsdsl not found. Please specify -D CMAKE_LIBRARY_PATH and -D CMAKE_INCLUDE_PATH in the CMake command")
 endif()
 
-message(" type ${CMAKE_BUILD_TYPE}")
-
 # From https://www.mattkeeter.com/blog/2018-01-06-versioning/
 execute_process(COMMAND git log --pretty=format:'%h' -n 1
                 OUTPUT_VARIABLE GIT_REV
                 ERROR_QUIET)
 
+
+
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "release")
+    set(VERSION
+    "#ifndef VERSION
+    #define VERSION \"${PROJECT_VER}\"
+    #endif
+    "
+    )
 else()
     # Check whether we got any revision (which isn't
     # always the case, e.g. when someone downloaded a zip
@@ -54,20 +61,20 @@ else()
 
     set(VERSION
     "#ifndef VERSION
-    #define VERSION \"0.2${GIT_BRANCH}${GIT_REV}${GIT_DIFF}\"
+    #define VERSION \"${PROJECT_VER}${GIT_BRANCH}${GIT_REV}${GIT_DIFF}\"
     #endif
     "
     )
+endif()
 
-    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/src/version.hpp)
-        file(READ ${CMAKE_CURRENT_SOURCE_DIR}/src/version.hpp VERSION_)
-    else()
-        set(VERSION_ "")
-    endif()
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/src/version.hpp)
+    file(READ ${CMAKE_CURRENT_SOURCE_DIR}/src/version.hpp VERSION_)
+else()
+    set(VERSION_ "")
+endif()
 
-    if (NOT "${VERSION}" STREQUAL "${VERSION_}")
-        file(WRITE ${CMAKE_CURRENT_SOURCE_DIR}/src/version.hpp "${VERSION}")
-    endif()
+if (NOT "${VERSION}" STREQUAL "${VERSION_}")
+    file(WRITE ${CMAKE_CURRENT_SOURCE_DIR}/src/version.hpp "${VERSION}")
 endif()
 
 
@@ -166,6 +173,12 @@ file(GLOB LIB_HEADERS   src/leviosam.hpp
                         src/ksw.h
                         src/bam.h src/IITree.h src/gzstream.h)
 add_library(lvsam ${LIB_SOURCES} ${LIB_HEADERS})
+
+if("${CMAKE_BUILD_TYPE}" STREQUAL "release")
+    message("${CMAKE_BUILD_TYPE} --- use -O2")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O2")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2")
+endif("${CMAKE_BUILD_TYPE}" STREQUAL "release")
 
 add_executable(leviosam2 src/leviosam.cpp)
 target_link_libraries(leviosam2 lvsam)
