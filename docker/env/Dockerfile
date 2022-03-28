@@ -12,34 +12,44 @@ RUN wget https://github.com/samtools/htslib/releases/download/1.13/htslib-1.13.t
     ./configure && \
     make && \
     make install && \
-    cd ../
+    cd ../ && \
+    rm htslib-1.13.tar.bz2
 RUN wget https://github.com/samtools/samtools/releases/download/1.13/samtools-1.13.tar.bz2 && \
     tar -vxjf samtools-1.13.tar.bz2 && \
     cd samtools-1.13 && \
     ./configure && \
     make && \
     make install && \
-    cd ../
+    cd ../ && \
+    rm samtools-1.13.tar.bz2
 RUN wget https://github.com/lh3/bwa/releases/download/v0.7.17/bwa-0.7.17.tar.bz2 && \
     tar -vxjf bwa-0.7.17.tar.bz2 && \
     cd bwa-0.7.17 && \
     make && \
     cp bwa /usr/local/bin && \
-    cd ../
-RUN wget https://github.com/BenLangmead/bowtie2/releases/download/v2.4.5/bowtie2-2.4.5-linux-x86_64.zip && \
-    unzip bowtie2-2.4.5-linux-x86_64.zip && \
-    cd bowtie2-2.4.5-linux-x86_64 && \
+    cd ../ && \
+    rm bwa-0.7.17.tar.bz2
+RUN wget https://github.com/BenLangmead/bowtie2/archive/refs/tags/v2.4.5.tar.gz && \
+    tar -vxzf v2.4.5.tar.gz && \
+    cd bowtie2-2.4.5 && \
+    make && \
     cp bowtie2 bowtie2-build bowtie2-inspect bowtie2-build-s bowtie2-build-l bowtie2-align-s bowtie2-align-l bowtie2-inspect-s bowtie2-inspect-l /usr/local/bin/ && \
-    cd ../
-RUN wget https://github.com/lh3/minimap2/releases/download/v2.24/minimap2-2.24_x64-linux.tar.bz2 && \
-    tar -vxjf minimap2-2.24_x64-linux.tar.bz2 && \
-    cp minimap2-2.24_x64-linux/minimap2 /usr/local/bin
+    cd ../ && \
+    rm v2.4.5.tar.gz
+RUN wget https://github.com/lh3/minimap2/archive/refs/tags/v2.24.tar.gz && \
+    tar -vxzf v2.24.tar.gz && \
+    cd minimap2-2.24 && \
+    make && \
+    cp minimap2 /usr/local/bin && \
+    cd ../ && \
+    rm v2.24.tar.gz
 RUN wget https://github.com/marbl/Winnowmap/archive/refs/tags/v2.03.tar.gz && \
     tar -vxzf v2.03.tar.gz && \
     cd Winnowmap-2.03 && \
     make && \
     cp bin/winnowmap bin/meryl /usr/local/bin && \
-    cd ../
+    cd ../ && \
+    rm v2.03.tar.gz
 RUN curl -k -L https://github.com/milkschen/leviosam2/archive/refs/tags/v${VERSION}.tar.gz -o leviosam2-v${VERSION}.tar.gz && \
     tar -xzf leviosam2-v${VERSION}.tar.gz && \
     cd leviosam2-${VERSION} && \
