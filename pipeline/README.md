@@ -2,6 +2,9 @@
 
 ## Dependencies
 
+All dependent software is included in our Docker/Singularity container.
+Users of other installation approaches may install the dependencies using conda, pre-built binary, or building from source.
+
 - Aligner: [minimap2](https://github.com/lh3/minimap2)/[winnowmap2](https://github.com/marbl/Winnowmap)/[bwa mem](https://github.com/lh3/bwa)/[Bowtie 2](http://bowtie-bio.sourceforge.net/bowtie2/manual.shtml) 
 - samtools, bgzip
 
@@ -75,5 +78,14 @@ bowtie2-build --threads 16 chm13v2.0/chm13v2.0 chm13v2.0.fasta
 bowtie2 -p 16 -x GRCh38_noalt_as/GRCh38_noalt_as -1 {} -2 {} | samtools view -hbo {}.bam
 
 # Run the levioSAM2 pipeline
+sh leviosam2.sh \
+    -i ilmn-pe.bam \
+    -o ilmn-pe-lifted \
+    -f GCA_000001405.15_GRCh38_no_alt_analysis_set.fna \
+    -b GRCh38_noalt_as/GRCh38_noalt_as \
+    -C chm13v2-grch38.clft \
+    -D {} \
+    -R {} \
+    -t 16
 ```
 
