@@ -42,7 +42,7 @@ For both short and long reads. Different parameters are recommended for each seq
 Minimap2 example:
 ```
 sh leviosam2.sh \
-    -a minimap2 -g 1000 -H 100 -x ../configs/pacbio_all.yaml \
+    -a minimap2 -g 1000 -H 100 -S -x ../configs/pacbio_all.yaml \
     -i pacbio.bam \
     -o pacbio-lifted \
     -f grch38.fna \
