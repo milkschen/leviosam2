@@ -63,12 +63,11 @@ function usage {
     echo "Options:"
     echo "    -h          Display help message"
     echo "  System & Pipeline:"
-    echo "    -K          Toggle to keep tmp files [off]"
-    echo "    -M          Toggle to measure time using GNU time [off]"
-    echo "    -S          Toggle to use single-end mode [off]"
-    echo "    -t INT      Number of threads to use [max]"
     echo "    -L path     Path to the levioSAM2 binary [leviosam2]"
+    echo "    -t INT      Number of threads to use [max]"
+    echo "    -M          Toggle to measure time using GNU time [off]"
     echo "    -T path     Path to the GNU time binary [time]"
+    echo "    -K          Toggle to keep tmp files [off]"
     echo "  LevioSAM2-lift:"
     echo "    -g INT      Number of gaps allowed during leviosam2-lift [0]"
     echo "    -X path     Path to the levioSAM2 re-alignment config YAML []"
@@ -79,6 +78,7 @@ function usage {
     echo "    -D path     Path to the force-defer annotation [empty]"
     echo "  Aligner:"
     echo "    -a string   Aligner to use (bowtie2|bwamem|minimap2|winnowmap2) [bowtie2]"
+    echo "    -S          Toggle to use single-end mode [off]"
     echo "    -r string   The read group (RG) string []"
     echo "    -R path     Path to the suppress annotation []"
     exit 0
@@ -113,18 +113,26 @@ done
 
 if [[ ${INPUT} == "" ]]; then
     echo "Input is not set"
+    echo ""
+    usage
     exit 1
 fi
 if [[ ${PFX} == "" ]]; then
     echo "Prefix is not set"
+    echo ""
+    usage
     exit 1
 fi
 if [[ ${REF} == "" ]]; then
     echo "Targer reference is not set"
+    echo ""
+    usage
     exit 1
 fi
 if [[ ${ALN_IDX} == "" ]]; then
     echo "Targer reference index is not set"
+    echo ""
+    usage
     exit 1
 fi
 
@@ -183,7 +191,7 @@ if (( ${SINGLE_END} == 1 )); then
 
     # Clean tmp files
     if (( ${KEEP_TMP} < 1 )); then
-        rm ${PFX}-committed.bam ${PFX}-deferred.bam 
+        rm ${PFX}-committed.bam ${PFX}-deferred.bam ${PFX}-deferred.fq.gz
     fi
 else
     # Collate
@@ -229,9 +237,11 @@ else
 
     # Clean tmp files
     if (( ${KEEP_TMP} < 1 )); then
-        rm ${PFX}-paired-deferred.bam ${PFX}-paired-deferred-sorted_n.bam 
+        rm ${PFX}-paired-deferred.bam ${PFX}-paired-deferred-sorted_n.bam
         rm ${PFX}-paired-realigned.bam ${PFX}-paired-realigned-sorted_n.bam
         rm ${PFX}-paired-deferred-reconciled.bam
         rm ${PFX}-paired-committed.bam ${PFX}-deferred.bam
+        rm ${PFX}-paired-deferred-R1.fq.gz ${PFX}-paired-deferred-R2.fq.gz
+        rm ${PFX}-committed.bam ${PFX}-deferred.bam
     fi
 fi
