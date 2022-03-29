@@ -55,6 +55,9 @@ leviosam2 lift -C source_to_target.clft -a aligned_to_source.bam -p lifted_from_
 
 The levioSAM2 ChainMap index will be saved to `source_to_target.clft`. The output will be saved to `lifted_from_source.bam`.
 
+See [this README](https://github.com/milkschen/leviosam2/blob/main/pipeline/README.md) to learn more about running the full levioSAM2
+pipeline with selective re-mapping.
+
 
 ## Publication
 
