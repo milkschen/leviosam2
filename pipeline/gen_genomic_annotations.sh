@@ -1,4 +1,3 @@
-# 
 # gen_genomic_annotations.sh
 # 
 # Generate genomic annotations for the levioSAM2 pipeline

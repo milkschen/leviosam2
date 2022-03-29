@@ -1,4 +1,3 @@
-#
 # leviosam2.sh
 #
 # Full levioSAM2 pipeline for a SAM/BAM file
