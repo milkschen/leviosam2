@@ -62,7 +62,6 @@ cd case_study
 # Download FASTQs
 ## TODO
 
-
 # Download FASTAs and pre-built indexes
 ## GRCh38
 wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.15_GRCh38/seqs_for_alignment_pipelines.ucsc_ids/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.gz
@@ -73,7 +72,8 @@ wget https://genome-idx.s3.amazonaws.com/bt/GRCh38_noalt_as.zip
 unzip GRCh38_noalt_as.zip
 ## CHM13v2
 wget https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies/chm13v2.0.fa.gz
-bowtie2-build --threads 16 chm13v2.0/chm13v2.0 chm13v2.0.fa.gz
+mkdir -p chm13v2.0
+bowtie2-build --threads 16 chm13v2.0.fa.gz chm13v2.0/chm13v2.0
 
 # Download levioSAM2 resources
 ## TODO
