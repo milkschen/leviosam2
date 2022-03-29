@@ -60,11 +60,14 @@ mkdir case_study
 cd case_study
 
 # Download FASTQs
+## TODO
+
 
 # Download FASTAs and pre-built indexes
 ## GRCh38
 wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.15_GRCh38/seqs_for_alignment_pipelines.ucsc_ids/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.gz
 gunzip GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.gz
+samtools faidx GCA_000001405.15_GRCh38_no_alt_analysis_set.fna
 ## Pre-build GRCh38 indexes
 wget https://genome-idx.s3.amazonaws.com/bt/GRCh38_noalt_as.zip
 unzip GRCh38_noalt_as.zip
@@ -73,19 +76,23 @@ wget https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies/c
 bowtie2-build --threads 16 chm13v2.0/chm13v2.0 chm13v2.0.fasta
 
 # Download levioSAM2 resources
+## TODO
+
 
 # Align to CHM13
-bowtie2 -p 16 -x GRCh38_noalt_as/GRCh38_noalt_as -1 {} -2 {} | samtools view -hbo {}.bam
+bowtie2 -p 16 -x chm13v2.0/chm13v2.0 -1 HG002.novaseq.pcr-free.0_3x-R1.fq.gz -2 HG002.novaseq.pcr-free.0_3x-R2.fq.gz | samtools view -hbo ilmn-pe-chm13v2.bam
 
 # Run the levioSAM2 pipeline
+leviosam2 index -c chm13v2-grch38.chain -p chm13v2-grch38 -F GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.fai
 sh leviosam2.sh \
-    -i ilmn-pe.bam \
-    -o ilmn-pe-lifted \
+    -i ilmn-pe-chm13v2.bam \
+    -o ilmn-pe-chm13v2_grch38 \
     -f GCA_000001405.15_GRCh38_no_alt_analysis_set.fna \
     -b GRCh38_noalt_as/GRCh38_noalt_as \
     -C chm13v2-grch38.clft \
-    -D {} \
-    -R {} \
+    -D chm13v2-grch38-lt0.98-map_reduction_k100_e0.01.bed \
+    -R chm13v2-grch38-source-unliftable-s_5000-winnowmap2-exc_1.bed \
     -t 16
 ```
 
+The output is `ilmn-pe-chm13v2_grch38-final.bam`.
