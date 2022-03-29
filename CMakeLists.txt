@@ -17,20 +17,12 @@ if(NOT SDSL_LIB)
     message(FATAL_ERROR "libsdsl not found. Please specify -D CMAKE_LIBRARY_PATH and -D CMAKE_INCLUDE_PATH in the CMake command")
 endif()
 
-# From https://www.mattkeeter.com/blog/2018-01-06-versioning/
-execute_process(COMMAND git log --pretty=format:'%h' -n 1
-                OUTPUT_VARIABLE GIT_REV
-                ERROR_QUIET)
+if ("${CMAKE_BUILD_TYPE}" STREQUAL "dev")
+    # From https://www.mattkeeter.com/blog/2018-01-06-versioning/
+    execute_process(COMMAND git log --pretty=format:'%h' -n 1
+                    OUTPUT_VARIABLE GIT_REV
+                    ERROR_QUIET)
 
-
-
-if ("${CMAKE_BUILD_TYPE}" STREQUAL "release")
-    set(VERSION
-"#ifndef VERSION
-#define VERSION \"${PROJECT_VER}\"
-#endif"
-    )
-else()
     # Check whether we got any revision (which isn't
     # always the case, e.g. when someone downloaded a zip
     # file from Github instead of a checkout)
@@ -61,6 +53,12 @@ else()
     set(VERSION
 "#ifndef VERSION
 #define VERSION \"${PROJECT_VER}${GIT_BRANCH}${GIT_REV}${GIT_DIFF}\"
+#endif"
+    )
+else()
+    set(VERSION
+"#ifndef VERSION
+#define VERSION \"${PROJECT_VER}\"
 #endif"
     )
 endif()
@@ -172,11 +170,13 @@ file(GLOB LIB_HEADERS   src/leviosam.hpp
                         src/bam.h src/IITree.h src/gzstream.h)
 add_library(lvsam ${LIB_SOURCES} ${LIB_HEADERS})
 
-if("${CMAKE_BUILD_TYPE}" STREQUAL "release")
-    message("${CMAKE_BUILD_TYPE} --- use -O2")
+if("${CMAKE_BUILD_TYPE}" STREQUAL "dev")
+    message("CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} --- do not use -O2")
+else()
+    message("CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} --- use -O2")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O2")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2")
-endif("${CMAKE_BUILD_TYPE}" STREQUAL "release")
+endif("${CMAKE_BUILD_TYPE}" STREQUAL "dev")
 
 add_executable(leviosam2 src/leviosam.cpp)
 target_link_libraries(leviosam2 lvsam)
