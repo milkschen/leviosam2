@@ -1,44 +1,79 @@
-# Selective liftover pipelines (ChainMap)
+# LevioSAM2 pipelines
 
-Combining leviosam with a selective re-alignment strategy can improve accuracy.
+## Dependencies
 
-## Short read (paired-end) pipeline (`leviosam_shortreads_pe.sh`)
+- Aligner: [minimap2](https://github.com/lh3/minimap2)/[winnowmap2](https://github.com/marbl/Winnowmap)/[bwa mem](https://github.com/lh3/bwa)/[Bowtie 2](http://bowtie-bio.sourceforge.net/bowtie2/manual.shtml) 
+- samtools, bgzip
 
-This pipeline is designed for paired-end short reads (Illumina). 
-We first lift all reads using `leviosam lift`. 
-Reads are split into _committed_ and _deferred_ groups using a set of filtration criteria. 
-We then use `leviosam collate` to make sure all reads are properly paired. 
-If one pair is assigned as both committed and deferred, we'll put both segments into the deferred group.
-The deferred reads are then converted to FASTQ and re-aligned.
-Committed and re-aligned deferred reads are concatenated and sorted as the final output.
+## Paired-end pipelines
 
 * Supported aligners: [bwa mem](https://github.com/lh3/bwa) and [Bowtie 2](http://bowtie-bio.sourceforge.net/bowtie2/manual.shtml) 
 
-Example:
+Bowtie 2 example:
 ```
-sh /home/cnaechy1/data_blangme2/naechyun/levioSAM/selective_liftover/leviosam_refflow_mappability.sh \
-    -i pe_short_reads.bam \
-    -o lifted_pe_short_reads \
-    -b GCA_000001405.15_GRCh38_no_alt_analysis_set.fna \
-    -C hg19ToHg38.over.clft \
-    -t 16 \
-    -D hg19-grch38-lt98-map_reduction_k100_e0.01-merged.bed
-```
-
-
-## Long read pipeline (`leviosam_longreads.sh`)
-
-The long read pipeline is similar to the short read pipeline, with the following differences:
-
-- Reads are single-end
-- Supported aligners: [minimap2](https://github.com/lh3/minimap2) and [winnowmap2](https://github.com/marbl/Winnowmap)
-
-Example:
-```
-sh leviosam_longreads.sh \
-    -i long_reads.bam \
-    -o lifted_long_reads \
-    -F GCA_000001405.15_GRCh38_no_alt_analysis_set.fna \
-    -C hg19ToHg38.over.clft \
+sh leviosam2.sh \
+    -i ilmn-pe.bam \
+    -o ilmn-pe-lifted \
+    -f grch38.fna \
+    -b bt2/grch38 \
+    -C chm13v2-grch38.clft \
     -t 16
 ```
+
+BWA MEM example:
+```
+sh leviosam2.sh \
+    -a bwamem -A 100 -q 30 \
+    -i ilmn-pe.bam \
+    -o ilmn-pe-lifted \
+    -f grch38.fna \
+    -b bwa/grch38.fna \
+    -C chm13v2-grch38.clft \
+    -t 16
+```
+
+## Single-end pipelines
+
+For both short and long reads. Different parameters are recommended for each sequence type.
+
+- Supported aligners: [minimap2](https://github.com/lh3/minimap2), [winnowmap2](https://github.com/marbl/Winnowmap),
+[bwa mem](https://github.com/lh3/bwa) and [Bowtie 2](http://bowtie-bio.sourceforge.net/bowtie2/manual.shtml) 
+
+Minimap2 example:
+```
+sh leviosam2.sh \
+    -a minimap2 -g 1000 -H 100 -x ../configs/pacbio_all.yaml \
+    -i pacbio.bam \
+    -o pacbio-lifted \
+    -f grch38.fna \
+    -C chm13v2-grch38.clft \
+    -t 16
+```
+
+
+## Case Study
+```
+mkdir case_study
+cd case_study
+
+# Download FASTQs
+
+# Download FASTAs and pre-built indexes
+## GRCh38
+wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.15_GRCh38/seqs_for_alignment_pipelines.ucsc_ids/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.gz
+gunzip GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.gz
+## Pre-build GRCh38 indexes
+wget https://genome-idx.s3.amazonaws.com/bt/GRCh38_noalt_as.zip
+unzip GRCh38_noalt_as.zip
+## CHM13v2
+wget https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies/chm13v2.0.fasta
+bowtie2-build --threads 16 chm13v2.0/chm13v2.0 chm13v2.0.fasta
+
+# Download levioSAM2 resources
+
+# Align to CHM13
+bowtie2 -p 16 -x GRCh38_noalt_as/GRCh38_noalt_as -1 {} -2 {} | samtools view -hbo {}.bam
+
+# Run the levioSAM2 pipeline
+```
+
