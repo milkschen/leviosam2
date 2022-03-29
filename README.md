@@ -8,17 +8,14 @@ LevioSAM2 lifts over alignments accurately and efficiently using a chain file.
 
 ## Features
 
-- Converting SAM/BAM records from one reference to another using either a VCF file or a chain file
-- Converting alignment information, including:
-    - Contig
-    - Position
-    - Alignmant flag
-    - CIGAR string
-    - Mate read information
-    - MD:Z and NM:i tag (optional)
-
+- Converting aligned short and long reads records (in SAM/BAM format) from one reference to another
+- The following alignment features are updated during coversion:
+    - Reference name (`RNAME`), position (`POS`), alignmant flag (`FLAG`), and CIGAR alignment string (`CIGAR`)
+    - Mate read information (`RNEXT`, `PNEXT`, `TLEN`)
+    - (optional) Alignment tags (`MD:Z`, `NM:i`)
 - Multithreading support
-
+- Toolkit for "selective" pipelines which consider major changes between the source and target references
+- (beta) Converting intervals (in BED format) from one reference to another
 
 ## Installation
 
