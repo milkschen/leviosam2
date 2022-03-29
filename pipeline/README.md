@@ -72,8 +72,8 @@ samtools faidx GCA_000001405.15_GRCh38_no_alt_analysis_set.fna
 wget https://genome-idx.s3.amazonaws.com/bt/GRCh38_noalt_as.zip
 unzip GRCh38_noalt_as.zip
 ## CHM13v2
-wget https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies/chm13v2.0.fasta
-bowtie2-build --threads 16 chm13v2.0/chm13v2.0 chm13v2.0.fasta
+wget https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies/chm13v2.0.fa.gz
+bowtie2-build --threads 16 chm13v2.0/chm13v2.0 chm13v2.0.fa.gz
 
 # Download levioSAM2 resources
 ## TODO
