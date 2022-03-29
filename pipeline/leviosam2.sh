@@ -28,26 +28,26 @@ ALN_RG=""
 
 # LevioSAM2 parameters
 ALLOWED_GAPS=0
-FRAC_CLIPPED="-S clipped_frac:0.95"
-ISIZE="-S isize:1000"
-HDIST="-S hdist:5"
+MAPQ=""
+FRAC_CLIPPED=""
+ISIZE=""
+HDIST=""
 DEFER_DEST_BED=""
 COMMIT_SOURCE_BED=""
 REALN_CONFIG=""
 
-# Default parameters for Bowtie 2 (local)
+# Default parameters for Bowtie 2
 ALN=bowtie2
-MAPQ="-S mapq:10"
-ALN_SCORE="-S aln_score:-10"
+# `-q 10 -A -10 -H 5`
+# FRAC_CLIPPED="-S clipped_frac:0.95"
+# ISIZE="-S isize:1000"
 
 # Default parameters for BWA-MEM
-# ALN=bwamem
-# MAPQ="-S mapq:30"
-# ALN_SCORE="-S aln_score:100"
+# ALN=bwamem # `-q 30 -A 100 -H 5`
 
 function usage {
     echo "Run full levioSAM2 pipeline for a SAM/BAM file"
-    echo "Usage: $0 [-h] [options] -i <sam/bam> -o <prefix> -b <target.idx> -C <clft> -f <target.fasta>"
+    echo "Usage: $0 [-h] [options] -i <sam/bam> -o <prefix> -C <clft> -f <target.fasta>"
     echo "Author: Nae-Chyun Chen"
     echo ""
     echo "LevioSAM2 is distributed under the MIT license (2022)"
@@ -56,7 +56,6 @@ function usage {
     echo "Inputs:"
     echo "  -i path     Path to the input SAM/BAM file"
     echo "  -o prefix   Prefix of output files"
-    echo "  -b string   Prefix to the aligner index"
     echo "  -C path     Path to the levioSAM2 index"
     echo "  -f path     Path to the target FASTA file"
     echo ""
@@ -72,19 +71,20 @@ function usage {
     echo "    -g INT      Number of gaps allowed during leviosam2-lift [0]"
     echo "    -X path     Path to the levioSAM2 re-alignment config YAML []"
     echo "  Commit/Defer/Suppress rules:"
-    echo "    -A INT      Alignment score cutoff for the defer rule [-10]"
-    echo "    -H INT      Edit distance cutoff for the defer rule [5]"
-    echo "    -q INT      MAPQ cutoff for the defer rule [10]"
-    echo "    -D path     Path to the force-defer annotation [empty]"
+    echo "    -A INT      Alignment score cutoff for the defer rule []"
+    echo "    -H INT      Edit distance cutoff for the defer rule []"
+    echo "    -q INT      MAPQ cutoff for the defer rule []"
+    echo "    -D path     Path to the force-defer annotation []"
     echo "  Aligner:"
     echo "    -a string   Aligner to use (bowtie2|bwamem|minimap2|winnowmap2) [bowtie2]"
+    echo "    -b string   Prefix to the aligner index"
     echo "    -S          Toggle to use single-end mode [off]"
     echo "    -r string   The read group (RG) string []"
     echo "    -R path     Path to the suppress annotation []"
     exit 0
 }
 
-while getopts hKSPa:A:b:C:D:f:H:g:i:L:o:q:r:R:t:T:x: flag
+while getopts hKMSa:A:b:C:D:f:H:g:i:L:o:q:r:R:t:T:x: flag
 do
     case "${flag}" in
         h) usage;;
@@ -125,12 +125,6 @@ if [[ ${PFX} == "" ]]; then
 fi
 if [[ ${REF} == "" ]]; then
     echo "Targer reference is not set"
-    echo ""
-    usage
-    exit 1
-fi
-if [[ ${ALN_IDX} == "" ]]; then
-    echo "Targer reference index is not set"
     echo ""
     usage
     exit 1
