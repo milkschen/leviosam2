@@ -55,6 +55,13 @@ sh leviosam2.sh \
 
 
 ## Case Study
+
+Please make sure `leviosam2` is in your `$PATH` with command `leviosam2 -h`.
+If it fails, run
+```
+PATH=<path/to/dir_leviosam2>:${PATH}
+```
+
 ```
 mkdir case_study
 cd case_study
