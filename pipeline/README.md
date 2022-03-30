@@ -89,7 +89,7 @@ wget https://genome-idx.s3.amazonaws.com/lev/chm13v2-grch38.tar.gz
 tar xfzv chm13v2-grch38.tar.gz
 
 # Align to CHM13
-bowtie2 -p 16 -x chm13v2.0/chm13v2.0 -1 HG002.novaseq.pcr-free.0_3x-R1.fq.gz -2 HG002.novaseq.pcr-free.0_3x-R2.fq.gz | samtools view -hbo ilmn-pe-chm13v2.bam
+bowtie2 -p 16 -x chm13v2.0/chm13v2.0 -1 HG002.novaseq.pcr-free.0_3x-R1.fq.gz -2 HG002.novaseq.pcr-free.0_3x-R2.fq.gz | samtools sort -@ 4 -o ilmn-pe-chm13v2.bam
 
 # Run the levioSAM2 pipeline
 leviosam2 index -c chm13v2-grch38/chm13v2-grch38.chain -p chm13v2-grch38/chm13v2-grch38 -F GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.fai
