@@ -42,7 +42,10 @@ singularity pull docker://naechyun/leviosam2:latest
 
 ## Usage
 
+### LevioSAM2-lift
+
 LevioSAM2 performs lift-over using a [chain file](http://hgw1.soe.ucsc.edu/goldenPath/help/chain.html) as the lift-over map.
+We recommend to sort the input BAM by position prior to running levioSAM2.
 
 Quick run:
 ```
@@ -52,10 +55,30 @@ leviosam2 lift -C source_to_target.clft -a aligned_to_source.bam -p lifted_from_
 
 The levioSAM2 ChainMap index will be saved to `source_to_target.clft`. The output will be saved to `lifted_from_source.bam`.
 
+### Full levioSAM2 pipeline with selective re-mapping
+
+The levioSAM2 pipeline includes lift-over using the `leviosam2-lift` kernel and a selective re-mapping strategy. This approach can improve accuracy.
+
+Example:
+```
+leviosam2 index -c source_to_target.chain -p source_to_target -F target.fai
+sh leviosam2.sh \
+    -a bowtie2 -A -10 -q 10 -H 5 \
+    -i aligned_to_source.bam \
+    -o aligned_to_source-lifted \
+    -f target.fna \
+    -b bt2/target \
+    -C source_to_target.clft \
+    -t 16
+```
+
 See [this README](https://github.com/milkschen/leviosam2/blob/main/pipeline/README.md) to learn more about running the full levioSAM2
-pipeline with selective re-mapping.
+pipeline.
 
 
 ## Publication
 
-Taher Mun, Nae-Chyun Chen, Ben Langmead, LevioSAM: Fast lift-over of variant-aware reference alignments, _Bioinformatics_, 2021;, btab396, https://doi.org/10.1093/bioinformatics/btab396
+- Preprint for levioSAM2 will come soon
+- Taher Mun, Nae-Chyun Chen, Ben Langmead, LevioSAM: Fast lift-over of variant-aware reference alignments, _Bioinformatics_, 2021;, btab396, https://doi.org/10.1093/bioinformatics/btab396
+
+_Last update: 3/30/2022_
