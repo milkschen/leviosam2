@@ -28,7 +28,8 @@ ALN_RG=""
 
 # LevioSAM2 parameters
 ALLOWED_GAPS=0
-MAPQ=""
+MAPQ=" -S mapq:30"
+ALN_SCORE=" -S aln_score:-10"
 FRAC_CLIPPED=""
 ISIZE=""
 HDIST=""
@@ -233,8 +234,7 @@ else
     if (( ${KEEP_TMP} < 1 )); then
         rm ${PFX}-paired-deferred.bam ${PFX}-paired-deferred-sorted_n.bam
         rm ${PFX}-paired-realigned.bam ${PFX}-paired-realigned-sorted_n.bam
-        rm ${PFX}-paired-deferred-reconciled.bam
-        rm ${PFX}-paired-committed.bam ${PFX}-deferred.bam
+        rm ${PFX}-paired-deferred-reconciled.bam ${PFX}-paired-committed.bam
         rm ${PFX}-paired-deferred-R1.fq.gz ${PFX}-paired-deferred-R2.fq.gz
         rm ${PFX}-committed.bam ${PFX}-deferred.bam
     fi
