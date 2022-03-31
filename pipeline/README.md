@@ -57,10 +57,11 @@ sh leviosam2.sh \
 
 ## Case Study
 
-Please make sure `leviosam2` is in your `$PATH` with command `leviosam2 -h`.
-If it fails, run
+Please make sure `leviosam2` and `leviosam2.sh` is in your `$PATH` with command `leviosam2 -h` and `sh leviosam2.sh -h`.
+If it fails, please use the following command to set `$PATH` (paths need to be adjusted locally) and make sure you see the help message.
+
 ```
-PATH=<path/to/dir_leviosam2>:${PATH}
+PATH=<path/to/leviosam2/build>:<path/to/leviosam2/pipeline>:${PATH}
 ```
 
 ```
