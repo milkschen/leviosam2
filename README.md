@@ -42,18 +42,31 @@ singularity pull docker://naechyun/leviosam2:latest
 
 ## Usage
 
-### LevioSAM2-lift
+### Prepare chain files
 
 LevioSAM2 performs lift-over using a [chain file](http://hgw1.soe.ucsc.edu/goldenPath/help/chain.html) as the lift-over map.
-We recommend to sort the input BAM by position prior to running levioSAM2.
+Many chain files are provided by the UCSC Genome Browser, e.g. [GRCh38-related chains](https://hgdownload.soe.ucsc.edu/goldenPath/hg38/liftOver/).
+For other reference pairs, common ways to generate chain files include using the [UCSC recipe](http://genomewiki.ucsc.edu/index.php/LiftOver_Howto) and [nf-LO](https://github.com/evotools/nf-LO).
 
-Quick run:
+### LevioSAM2-index
+
+LevioSAM2 indexes a chain file for lift-over queries. The resulting index has a `.clft` extension.
+
 ```
 leviosam2 index -c source_to_target.chain -p source_to_target -F target.fai
+```
+
+### LevioSAM2-lift
+
+`LevioSAM2-lift` is the lift-over kernel of the levioSAM2 toolkit. 
+The levioSAM2 ChainMap index will be saved to `source_to_target.clft`. The output will be saved to `lifted_from_source.bam`.
+
+__We highly recommend to sort the input BAM by position prior to running levioSAM2-lift.__
+
+```
 leviosam2 lift -C source_to_target.clft -a aligned_to_source.bam -p lifted_from_source -O bam
 ```
 
-The levioSAM2 ChainMap index will be saved to `source_to_target.clft`. The output will be saved to `lifted_from_source.bam`.
 
 ### Full levioSAM2 pipeline with selective re-mapping
 
@@ -61,6 +74,7 @@ The levioSAM2 pipeline includes lift-over using the `leviosam2-lift` kernel and 
 
 Example:
 ```
+# You may skip the indexing step if you've already run it
 leviosam2 index -c source_to_target.chain -p source_to_target -F target.fai
 sh leviosam2.sh \
     -a bowtie2 -A -10 -q 10 -H 5 \
