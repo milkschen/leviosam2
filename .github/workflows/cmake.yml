@@ -3,8 +3,21 @@ name: CMake
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'leviosam-test.py'
+      - 'CMakeLists.txt'
+      - 'CMakeLists.txt.in'
+      - 'testdata/**'
   pull_request:
-    branches: [ main ]
+    branches:
+      - 'master'
+    paths:
+      - 'src/**'
+      - 'leviosam-test.py'
+      - 'CMakeLists.txt'
+      - 'CMakeLists.txt.in'
+      - 'testdata/**'
 
 env:
   # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
