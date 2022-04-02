@@ -32,11 +32,37 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+    
+    - name: Cache htslib
+      id: cache-htslib
+      uses: actions/cache@v3
+      with:
+        path: |
+          /usr/local/lib/libhts.so.1.13
+          /usr/local/lib/libhts.so
+          /usr/local/lib/libhts.so.3
+          /usr/local/lib/pkgconfig/htslib.pc
+          /usr/local/bin/bgzip
+          /usr/local/bin/htsfile
+          /usr/local/bin/tabix
+          /usr/local/include/htslib
+          /usr/local/lib/libhts.a
+        key: ${{ runner.os }}-${{ hashFiles('**/lockfiles') }}
 
+    - name: Cache SDSL
+      id: cache-sdsl
+      uses: actions/cache@v3
+      with:
+        path: |
+          /usr/include/sdsl
+        key: ${{ runner.os }}-${{ hashFiles('**/lockfiles') }}
+        
     - name: Set up SDSL
+      if: steps.cache-sdsl.outputs.cache-hit != 'true'
       run: sudo apt-get -y install libsdsl-dev
     
     - name: Set up htslib
+      if: steps.cache-htslib.outputs.cache-hit != 'true'
       run: wget https://github.com/samtools/htslib/releases/download/1.13/htslib-1.13.tar.bz2 && tar -vxjf htslib-1.13.tar.bz2 && cd htslib-1.13 && ./configure && make && sudo make install && cd ../ && rm htslib-1.13.tar.bz2
     
     - name: Configure CMake
