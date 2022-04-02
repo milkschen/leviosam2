@@ -20,8 +20,11 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
-    - name: Set up
+    - name: Set up SDSL
       run: sudo apt-get -y install libhts-dev libsdsl-dev
+    
+    - name: Set up htslib
+      run: wget https://github.com/samtools/htslib/releases/download/1.13/htslib-1.13.tar.bz2 && tar -vxjf htslib-1.13.tar.bz2 && cd htslib-1.13 && ./configure && make && make install && cd ../ && rm htslib-1.13.tar.bz2
     
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
