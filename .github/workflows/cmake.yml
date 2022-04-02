@@ -4,6 +4,7 @@ on:
   push:
     branches: [ main ]
     paths:
+      - '.github/**'
       - 'src/**'
       - 'leviosam-test.py'
       - 'CMakeLists.txt'
@@ -13,6 +14,7 @@ on:
     branches:
       - 'master'
     paths:
+      - '.github/**'
       - 'src/**'
       - 'leviosam-test.py'
       - 'CMakeLists.txt'
