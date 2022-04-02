@@ -39,25 +39,15 @@ jobs:
       id: cache-htslib
       uses: actions/cache@v3
       with:
-        path: |
-          /usr/local/lib/libhts.so.1.13
-          /usr/local/lib/libhts.so
-          /usr/local/lib/libhts.so.3
-          /usr/local/lib/pkgconfig/htslib.pc
-          /usr/local/bin/bgzip
-          /usr/local/bin/htsfile
-          /usr/local/bin/tabix
-          /usr/local/include/htslib
-          /usr/local/lib/libhts.a
-        key: ${{ runner.os }}-${{ hashFiles('**/lockfiles') }}
+        path: /usr/local/lib/pkgconfig
+        key: ${{ runner.os }}-${{ hashFiles('htslib.pc') }}
 
     - name: Cache SDSL
       id: cache-sdsl
       uses: actions/cache@v3
       with:
-        path: |
-          /usr/include/sdsl
-        key: ${{ runner.os }}-${{ hashFiles('**/lockfiles') }}
+        path: /usr/lib/x86_64-linux-gnu/
+        key: ${{ runner.os }}-${{ hashFiles('libsdsl.a') }}
         
     - name: Set up SDSL
       if: steps.cache-sdsl.outputs.cache-hit != 'true'
