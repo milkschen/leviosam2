@@ -39,12 +39,12 @@ REALN_CONFIG=""
 
 # Default parameters for Bowtie 2
 ALN=bowtie2
-# `-q 10 -A -10 -H 5`
+# `-q 10 -A -10 -H 5 -m 1000 -p 0.95`
 # FRAC_CLIPPED="-S clipped_frac:0.95"
 # ISIZE="-S isize:1000"
 
 # Default parameters for BWA-MEM
-# ALN=bwamem # `-q 30 -A 100 -H 5`
+# ALN=bwamem # `-q 30 -A 100 -H 5 -m 1000 -p 0.95`
 
 function usage {
     echo "Run full levioSAM2 pipeline for a SAM/BAM file"
@@ -75,6 +75,8 @@ function usage {
     echo "    -A INT      Alignment score cutoff for the defer rule []"
     echo "    -H INT      Edit distance cutoff for the defer rule []"
     echo "    -q INT      MAPQ cutoff for the defer rule []"
+    echo "    -m INT      ISIZE cutoff for the defer rule []"
+    echo "    -p FLOAT    Fraction-of-clipped-bases cutoff for the defer rule []"
     echo "    -D path     Path to the force-defer annotation []"
     echo "  Aligner:"
     echo "    -a string   Aligner to use (bowtie2|bwamem|minimap2|winnowmap2) [bowtie2]"
@@ -85,7 +87,7 @@ function usage {
     exit 0
 }
 
-while getopts hKMSa:A:b:C:D:f:H:g:i:L:o:q:r:R:t:T:x: flag
+while getopts hKMSa:A:b:C:D:f:H:g:i:L:m:o:p:q:r:R:t:T:x: flag
 do
     case "${flag}" in
         h) usage;;
@@ -102,7 +104,9 @@ do
         g) ALLOWED_GAPS=${OPTARG};;
         i) INPUT=${OPTARG};;
         L) LEVIOSAM=${OPTARG};;
+        m) ISIZE=" -S isize:${OPTARG}";;
         o) PFX=${OPTARG};;
+        p) FRAC_CLIPPED=" -S clipped_frac:${OPTARG}";;
         q) MAPQ=" -S mapq:${OPTARG}";;
         r) ALN_RG=${OPTARG};;
         R) COMMIT_SOURCE_BED=" -r ${OPTARG}";;
