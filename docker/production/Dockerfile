@@ -7,7 +7,7 @@ MAINTAINER naechyun@jhu.edu
 ENV TZ=America/New_York
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 RUN apt-get update && apt-get install -y perl python3
-COPY --from=lev /leviosam2-0.1.0 /lev
+COPY --from=lev /leviosam2 /lev
 COPY --from=lev /usr/local/bin/leviosam2 /usr/local/bin/
 COPY --from=lev /usr/local/bin/bgzip /usr/local/bin/
 COPY --from=lev /usr/local/bin/bwa /usr/local/bin/
