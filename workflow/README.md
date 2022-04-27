@@ -1,4 +1,4 @@
-# LevioSAM2 workflows
+# LevioSAM2 workflow
 
 ## Dependencies
 
