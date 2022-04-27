@@ -69,9 +69,9 @@ leviosam2 lift -C source_to_target.clft -a aligned_to_source.bam -p lifted_from_
 ```
 
 
-### Full levioSAM2 pipeline with selective re-mapping
+### Full levioSAM2 workflow with selective re-mapping
 
-The levioSAM2 pipeline includes lift-over using the `leviosam2-lift` kernel and a selective re-mapping strategy. This approach can improve accuracy.
+The levioSAM2 workflow includes lift-over using the `leviosam2-lift` kernel and a selective re-mapping strategy. This approach can improve accuracy.
 
 Example:
 ```
@@ -87,8 +87,7 @@ sh leviosam2.sh \
     -t 16
 ```
 
-See [this README](https://github.com/milkschen/leviosam2/blob/main/pipeline/README.md) to learn more about running the full levioSAM2
-pipeline.
+See [this README](https://github.com/milkschen/leviosam2/blob/main/workflow/README.md) to learn more about running the full levioSAM2 workflow.
 
 
 ## Publication
@@ -96,4 +95,4 @@ pipeline.
 - Preprint for levioSAM2 will come soon
 - Taher Mun, Nae-Chyun Chen, Ben Langmead, LevioSAM: Fast lift-over of variant-aware reference alignments, _Bioinformatics_, 2021;, btab396, https://doi.org/10.1093/bioinformatics/btab396
 
-_Last update: 3/30/2022_
+_Last update: 4/27/2022_
