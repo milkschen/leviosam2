@@ -14,7 +14,7 @@ Users of other installation approaches may install the dependencies using conda,
 
 Bowtie 2 example:
 ```
-sh leviosam2.sh \
+bash leviosam2.sh \
     -a bowtie2 -A -10 -q 10 -H 5 \
     -i ilmn-pe.bam \
     -o ilmn-pe-lifted \
@@ -26,7 +26,7 @@ sh leviosam2.sh \
 
 BWA MEM example:
 ```
-sh leviosam2.sh \
+bash leviosam2.sh \
     -a bwamem -A 100 -q 30 -H 5 \
     -i ilmn-pe.bam \
     -o ilmn-pe-lifted \
@@ -45,7 +45,7 @@ For both short and long reads. Different parameters are recommended for each seq
 
 Minimap2 example:
 ```
-sh leviosam2.sh \
+bash leviosam2.sh \
     -a minimap2 -g 1000 -H 100 -S -x ../configs/pacbio_all.yaml \
     -i pacbio.bam \
     -o pacbio-lifted \
@@ -94,7 +94,7 @@ bowtie2 -p 16 -x chm13v2.0/chm13v2.0 -1 HG002.novaseq.pcr-free.0_3x-R1.fq.gz -2 
 
 # Run the levioSAM2 pipeline
 leviosam2 index -c chm13v2-grch38/chm13v2-grch38.chain -p chm13v2-grch38/chm13v2-grch38 -F GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.fai
-sh leviosam2.sh \
+bash leviosam2.sh \
     -a bowtie2 -A -10 -q 10 -H 5 \
     -i ilmn-pe-chm13v2.bam \
     -o ilmn-pe-chm13v2_grch38 \
