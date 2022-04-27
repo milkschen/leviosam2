@@ -170,12 +170,16 @@ if (( ${SINGLE_END} == 1 )); then
             -U ${PFX}-deferred.fq.gz |\
             ${MT} samtools view -hbo ${PFX}-realigned.bam
         elif [[ ${ALN} == "bwamem" ]]; then
-            ALN_RG="-R ${ALN_RG}"
+            if [[ ${ALN_RG} != "" ]]; then
+                ALN_RG="-R ${ALN_RG}"
+            fi
             ${MT} bwa mem -t ${THR} ${ALN_RG} ${ALN_IDX} \
             ${PFX}-deferred.fq.gz |\
             ${MT} samtools view -hbo ${PFX}-realigned.bam
         else
-            ALN_RG="-R ${ALN_RG}"
+            if [[ ${ALN_RG} != "" ]]; then
+                ALN_RG="-R ${ALN_RG}"
+            fi
             ${MT} ${ALN} -ax map-hifi --MD -t ${THR} ${ALN_RG} \
             ${REF} ${PFX}-deferred.fq.gz | \
             ${MT} samtools view -hbo ${PFX}-realigned.bam
@@ -206,7 +210,9 @@ else
             -1 ${PFX}-paired-deferred-R1.fq.gz -2 ${PFX}-paired-deferred-R2.fq.gz | \
             ${MT} samtools view -hb > ${PFX}-paired-realigned.bam
         elif [[ ${ALN} == "bwamem" ]]; then
-            ALN_RG="-R ${ALN_RG}"
+            if [[ ${ALN_RG} != "" ]]; then
+                ALN_RG="-R ${ALN_RG}"
+            fi
             ${MT} bwa mem -t ${THR} ${ALN_RG} ${ALN_IDX} \
             ${PFX}-paired-deferred-R1.fq.gz ${PFX}-paired-deferred-R2.fq.gz | \
             ${MT} samtools view -hb > ${PFX}-paired-realigned.bam
