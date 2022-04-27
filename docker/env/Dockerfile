@@ -3,7 +3,7 @@ FROM ubuntu:20.04
 MAINTAINER naechyun@jhu.edu
 
 ENV TZ=America/New_York
-ENV VERSION 0.2.0
+ENV VERSION 0.2.1
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 RUN apt-get update && apt-get install -y curl git build-essential cmake libsdsl-dev wget libbz2-dev zlib1g-dev liblzma-dev libncurses-dev zip
 RUN wget https://github.com/samtools/htslib/releases/download/1.13/htslib-1.13.tar.bz2 && \
@@ -52,7 +52,8 @@ RUN wget https://github.com/marbl/Winnowmap/archive/refs/tags/v2.03.tar.gz && \
     rm v2.03.tar.gz
 RUN curl -k -L https://github.com/milkschen/leviosam2/archive/refs/tags/v${VERSION}.tar.gz -o leviosam2-v${VERSION}.tar.gz && \
     tar -xzf leviosam2-v${VERSION}.tar.gz && \
-    cd leviosam2-${VERSION} && \
+    mv leviosam2-${VERSION} leviosam2 && \
+    cd leviosam2 && \
     mkdir build && \
     cd build && \
     cmake -D CMAKE_BUILD_TYPE="release" .. && \

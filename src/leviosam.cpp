@@ -193,43 +193,46 @@ void read_and_lift(
                         current_contig = dest_contig;
                     }
                     bam_fillmd1(aln_vec[i], ref.data(), args.md_flag, 1);
-                    uint8_t* nm_ptr = bam_aux_get(aln_vec[i], "NM");
-                    if (nm_ptr != NULL &&
-                        !(aln_vec[i]->core.flag & BAM_FUNMAP) &&
-                        !(aln_vec[i]->core.flag & BAM_FSECONDARY) &&
-                        !(aln_vec[i]->core.flag & BAM_FSUPPLEMENTARY)
-                    ) {
-                        if (bam_aux2i(nm_ptr) > args.aln_opts.nm_threshold) {
-                            std::string ref_seq = ref.substr(
-                                aln_vec[i]->core.pos,
-                                bam_cigar2rlen(aln_vec[i]->core.n_cigar,
-                                               bam_get_cigar(aln_vec[i])));
-                            std::string q_seq = LevioSamUtils::get_read_as_is(aln_vec[i]);
-                            std::vector<uint32_t> new_cigar;
-                            // We perform global alignment for local sequences and
-                            // thus an alignment with a high number of clipped bases
-                            // might not re-align well
-                            int new_score = 0;
-                            if (Aln::align_ksw2(
-                                ref_seq.data(), q_seq.data(), args.aln_opts,
-                                new_cigar, new_score) > 0) {
-                                LevioSamUtils::update_cigar(aln_vec[i], new_cigar);
-                                // Redo fillmd after re-align
-                                bam_fillmd1(aln_vec[i], ref.data(), args.md_flag, 1);
-                                bam_aux_append(aln_vec[i], "LR", 'i', 4, (uint8_t *) &new_score);
-                            } else {
-                                // If re-alignment fails, set this read to unmapped
-                                bool first_seg = (aln_vec[i]->core.flag & BAM_FPAIRED)? 
-                                        (aln_vec[i]->core.flag & BAM_FREAD1)? true : false: 
-                                        true;
-                                LevioSamUtils::update_flag_unmap(aln_vec[i], first_seg);
-                                if (args.verbose >= VERBOSE_INFO) {
-                                    std::cerr << "[I::read_and_lift] Zero-length new cigar for " << 
-                                        bam_get_qname(aln_vec[i]) <<
-                                        "; flag = " << aln_vec[i]->core.flag <<
-                                        "; NM:i = " << bam_aux2i(nm_ptr) <<
-                                        "; l_qseq = " << aln_vec[i]->core.l_qseq << 
-                                        ". Set to unmapped.\n";
+                    // Skip re-alignment if `-x` is not set
+                    if (args.realign_yaml != "") {
+                        uint8_t* nm_ptr = bam_aux_get(aln_vec[i], "NM");
+                        if (nm_ptr != NULL &&
+                            !(aln_vec[i]->core.flag & BAM_FUNMAP) &&
+                            !(aln_vec[i]->core.flag & BAM_FSECONDARY) &&
+                            !(aln_vec[i]->core.flag & BAM_FSUPPLEMENTARY)
+                        ) {
+                            if (bam_aux2i(nm_ptr) > args.aln_opts.nm_threshold) {
+                                std::string ref_seq = ref.substr(
+                                    aln_vec[i]->core.pos,
+                                    bam_cigar2rlen(aln_vec[i]->core.n_cigar,
+                                                   bam_get_cigar(aln_vec[i])));
+                                std::string q_seq = LevioSamUtils::get_read_as_is(aln_vec[i]);
+                                std::vector<uint32_t> new_cigar;
+                                // We perform global alignment for local sequences and
+                                // thus an alignment with a high number of clipped bases
+                                // might not re-align well
+                                int new_score = 0;
+                                if (Aln::align_ksw2(
+                                    ref_seq.data(), q_seq.data(), args.aln_opts,
+                                    new_cigar, new_score) > 0) {
+                                    LevioSamUtils::update_cigar(aln_vec[i], new_cigar);
+                                    // Redo fillmd after re-align
+                                    bam_fillmd1(aln_vec[i], ref.data(), args.md_flag, 1);
+                                    bam_aux_append(aln_vec[i], "LR", 'i', 4, (uint8_t *) &new_score);
+                                } else {
+                                    // If re-alignment fails, set this read to unmapped
+                                    bool first_seg = (aln_vec[i]->core.flag & BAM_FPAIRED)? 
+                                            (aln_vec[i]->core.flag & BAM_FREAD1)? true : false: 
+                                            true;
+                                    LevioSamUtils::update_flag_unmap(aln_vec[i], first_seg);
+                                    if (args.verbose >= VERBOSE_INFO) {
+                                        std::cerr << "[I::read_and_lift] Zero-length new cigar for " << 
+                                            bam_get_qname(aln_vec[i]) <<
+                                            "; flag = " << aln_vec[i]->core.flag <<
+                                            "; NM:i = " << bam_aux2i(nm_ptr) <<
+                                            "; l_qseq = " << aln_vec[i]->core.l_qseq << 
+                                            ". Set to unmapped.\n";
+                                    }
                                 }
                             }
                         }
@@ -459,7 +462,7 @@ void print_lift_help_msg(){
     std::cerr << "                   Setting a higher <-T> uses slightly more memory but might benefit thread scaling.\n";
     std::cerr << "         -m        add MD and NM to output alignment records (requires -f option)\n";
     std::cerr << "         -f string Fasta reference that corresponds to input SAM/BAM (for use w/ -m option)\n";
-    std::cerr << "         -x string Alignment preset [illumina] \n";
+    std::cerr << "         -x string Alignment preset [] \n";
     std::cerr << "         -G INT    Number of allowed CIGAR changes for one alingment. [0]\n";
     std::cerr << "\n";
     std::cerr << "         Commit/defer rule options:\n";

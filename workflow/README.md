@@ -1,4 +1,4 @@
-# LevioSAM2 pipelines
+# LevioSAM2 workflows
 
 ## Dependencies
 
@@ -8,7 +8,7 @@ Users of other installation approaches may install the dependencies using conda,
 - Aligner: [minimap2](https://github.com/lh3/minimap2)/[winnowmap2](https://github.com/marbl/Winnowmap)/[bwa mem](https://github.com/lh3/bwa)/[Bowtie 2](http://bowtie-bio.sourceforge.net/bowtie2/manual.shtml) 
 - samtools, bgzip
 
-## Paired-end pipelines
+## Paired-end workflows
 
 * Supported aligners: [bwa mem](https://github.com/lh3/bwa) and [Bowtie 2](http://bowtie-bio.sourceforge.net/bowtie2/manual.shtml) 
 
@@ -36,7 +36,7 @@ bash leviosam2.sh \
     -t 16
 ```
 
-## Single-end pipelines
+## Single-end workflows
 
 For both short and long reads. Different parameters are recommended for each sequence type.
 
@@ -61,7 +61,7 @@ Please make sure `leviosam2` and `leviosam2.sh` is in your `$PATH` with command 
 If it fails, please use the following command to set `$PATH` (paths need to be adjusted locally) and make sure you see the help message.
 
 ```
-PATH=<path/to/leviosam2/build>:<path/to/leviosam2/pipeline>:${PATH}
+PATH=<path/to/leviosam2/build>:<path/to/leviosam2/workflow>:${PATH}
 ```
 
 ```
@@ -92,9 +92,9 @@ tar xfzv chm13v2-grch38.tar.gz
 # Align to CHM13
 bowtie2 -p 16 -x chm13v2.0/chm13v2.0 -1 HG002.novaseq.pcr-free.0_3x-R1.fq.gz -2 HG002.novaseq.pcr-free.0_3x-R2.fq.gz | samtools sort -@ 4 -o ilmn-pe-chm13v2.bam
 
-# Run the levioSAM2 pipeline
+# Run the levioSAM2 workflow
 leviosam2 index -c chm13v2-grch38/chm13v2-grch38.chain -p chm13v2-grch38/chm13v2-grch38 -F GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.fai
-bash leviosam2.sh \
+bash ../leviosam2.sh \
     -a bowtie2 -A -10 -q 10 -H 5 \
     -i ilmn-pe-chm13v2.bam \
     -o ilmn-pe-chm13v2_grch38 \
