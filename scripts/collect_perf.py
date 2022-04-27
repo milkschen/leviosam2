@@ -33,9 +33,12 @@ def parse_args():
         '-ln', '--leviosam-name', default='leviosam',
         help='Label of the levioSAM experiment [leviosam].')
     parser.add_argument(
+        '-ll', '--labels', default='',
+        help=('Customized labels for each `-l` items, separated by commas.'
+              'Length should be equal to number of `-l`'))
+    parser.add_argument(
         '-o', '--output',
-        help='Path to the output TSV file.'
-    )
+        help='Path to the output TSV file.')
     args = parser.parse_args()
     return args
 
@@ -95,17 +98,26 @@ def collect_perf(args):
     COLS = ['Task', 'User time (s)', 'System time (s)',
             'CPU time (s)', 'Wall time (s)', 'Max RSS (KB)']
 
+    if args.labels:
+        args.labels = args.labels.split(',')
+        if len(args.labels) != len(args.leviosam_logs):
+            print(
+                f'Error. len(args.labels)={len(args.labels)} != len(args.leviosam_log)={args.leviosam_log}',
+                file=sys.stderr)
+
     df_l = collect_perf_list(args.leviosam_logs, cols=COLS)
-    df_l['Method'] = args.aln_name
-    # df_l = summarize_df(df=df_l, cols=COLS)
-    # print(df_l)
+    if args.labels:
+        df_l['Method'] = args.labels
+    else:
+        df_l['Method'] = args.leviosam_name
 
-    df_a = collect_perf_list([args.aln_log], cols=COLS)
-    df_a['Method'] = args.leviosam_name
-    # df_a = summarize_df(df=df_a, cols=COLS)
-    # print(df_a)
+    if args.aln_log:
+        df_a = collect_perf_list([args.aln_log], cols=COLS)
+        df_a['Method'] = args.aln_name
+        df = pd.concat([df_l, df_a])
+    else:
+        df = df_l
 
-    df = pd.concat([df_l, df_a])
     if args.output:
         df.to_csv(args.output, sep='\t', index=False)
     else:
