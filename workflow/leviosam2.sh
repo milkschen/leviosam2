@@ -70,7 +70,7 @@ function usage {
     echo "    -K          Toggle to keep tmp files [off]"
     echo "  LevioSAM2-lift:"
     echo "    -g INT      Number of gaps allowed during leviosam2-lift [0]"
-    echo "    -X path     Path to the levioSAM2 re-alignment config YAML []"
+    echo "    -x path     Path to the levioSAM2 re-alignment config YAML []"
     echo "  Commit/Defer/Suppress rules:"
     echo "    -A INT      Alignment score cutoff for the defer rule []"
     echo "    -H INT      Edit distance cutoff for the defer rule []"
