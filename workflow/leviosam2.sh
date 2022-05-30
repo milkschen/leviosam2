@@ -25,6 +25,7 @@ SINGLE_END=0
 SOURCE_LABEL="source"
 TARGET_LABEL="target"
 ALN_RG=""
+LR_MODE=""
 
 # LevioSAM2 parameters
 ALLOWED_GAPS=0
@@ -81,6 +82,7 @@ function usage {
     echo "  Aligner:"
     echo "    -a string   Aligner to use (bowtie2|bwamem|bwamem2|minimap2|winnowmap2) [bowtie2]"
     echo "    -b string   Prefix to the aligner index"
+    echo "    -l string   Aligner mode for long read aligner (map-hifi|map-ont) [map-hifi]"
     echo "    -S          Toggle to use single-end mode [off]"
     echo "    -r string   The read group (RG) string []"
     echo "    -R path     Path to the suppress annotation []"
@@ -103,6 +105,7 @@ do
         H) HDIST=" -S hdist:${OPTARG}";;
         g) ALLOWED_GAPS=${OPTARG};;
         i) INPUT=${OPTARG};;
+        l) LR_MODE=${OPTARG};;
         L) LEVIOSAM=${OPTARG};;
         m) ISIZE=" -S isize:${OPTARG}";;
         o) PFX=${OPTARG};;
@@ -187,9 +190,13 @@ if (( ${SINGLE_END} == 1 )); then
             if [[ ${ALN_RG} != "" ]]; then
                 ALN_RG="-R ${ALN_RG}"
             fi
-            ${MT} ${ALN} -ax map-hifi --MD -t ${THR} ${ALN_RG} \
+            if [[ ${LR_MODE} == "map-hifi" ]]; then
+                ${MT} ${ALN} -ax map-hifi --MD -t ${THR} ${ALN_RG} \
+            elif [[ ${LR_MODE} == "map-ont" ]]; then
+                ${MT} ${ALN} -ax map-ont --MD -t ${THR} ${ALN_RG} \
             ${REF} ${PFX}-deferred.fq.gz | \
             ${MT} samtools view -hbo ${PFX}-realigned.bam
+            fi 
         fi
     fi
 
