@@ -3,9 +3,11 @@
 [![Anaconda-Server Badge](https://anaconda.org/bioconda/leviosam2/badges/downloads.svg)](https://anaconda.org/bioconda/leviosam2)
 ![Cmake build](https://github.com/milkschen/leviosam2/actions/workflows/cmake.yml/badge.svg)
 
-# levioSAM2: Fast and accurate coordinate conversion between assemblies
+# LevioSAM2: Fast and accurate coordinate conversion between assemblies
 
 LevioSAM2 lifts over alignments accurately and efficiently using a chain file.
+
+<img src="https://github.com/milkschen/leviosam2/blob/main/figures/logo_white.png" width="300">
 
 ## Features
 
@@ -95,4 +97,4 @@ See [this README](https://github.com/milkschen/leviosam2/blob/main/workflow/READ
 -  Nae-Chyun Chen, Luis Paulin, Fritz Sedlazeck, Sergey Koren, Adam Phillippy, Ben Langmead, Improved sequence mapping using a complete reference genome and lift-over, _bioRxiv_, 2022; https://www.biorxiv.org/content/10.1101/2022.04.27.489683
 - Taher Mun, Nae-Chyun Chen, Ben Langmead, LevioSAM: Fast lift-over of variant-aware reference alignments, _Bioinformatics_, 2021;, btab396, https://doi.org/10.1093/bioinformatics/btab396
 
-_Last update: 4/28/2022_
+_Last update: 6/18/2022_
