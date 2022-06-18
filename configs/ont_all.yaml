@@ -8,6 +8,6 @@ alignment:
     q2: 24
     e: 2
     e2: 1
-    w: 751 # w = bw * 1.5 + 1
+    w: 601 # w = bw * 1.5 + 1
     zdrop: 400
     end_bonus: -1
