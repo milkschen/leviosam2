@@ -43,10 +43,11 @@ For both short and long reads. Different parameters are recommended for each seq
 - Supported aligners: [minimap2](https://github.com/lh3/minimap2), [winnowmap2](https://github.com/marbl/Winnowmap),
 [bwa mem](https://github.com/lh3/bwa) and [Bowtie 2](http://bowtie-bio.sourceforge.net/bowtie2/manual.shtml) 
 
-Minimap2 example:
+Minimap2 example with Pacbio:
 ```
 bash leviosam2.sh \
     -a minimap2 -g 1000 -H 100 -S -x ../configs/pacbio_all.yaml \
+    -l map-hifi \
     -i pacbio.bam \
     -o pacbio-lifted \
     -f grch38.fna \
@@ -54,6 +55,17 @@ bash leviosam2.sh \
     -t 16
 ```
 
+Minimap2 example with Nanopore:
+```
+bash leviosam2.sh \
+    -a minimap2 -g 1000 -H 100 -S -x ../configs/ont_all.yaml \
+    -l map-ont \
+    -i pacbio.bam \
+    -o pacbio-lifted \
+    -f grch38.fna \
+    -C chm13v2-grch38.clft \
+    -t 16
+```
 
 ## Case Study
 

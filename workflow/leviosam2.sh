@@ -25,6 +25,7 @@ SINGLE_END=0
 SOURCE_LABEL="source"
 TARGET_LABEL="target"
 ALN_RG=""
+LR_MODE="map-hifi"
 
 # LevioSAM2 parameters
 ALLOWED_GAPS=0
@@ -79,8 +80,9 @@ function usage {
     echo "    -p FLOAT    Fraction-of-clipped-bases cutoff for the defer rule []"
     echo "    -D path     Path to the force-defer annotation []"
     echo "  Aligner:"
-    echo "    -a string   Aligner to use (bowtie2|bwamem|minimap2|winnowmap2) [bowtie2]"
+    echo "    -a string   Aligner to use (bowtie2|bwamem|bwamem2|minimap2|winnowmap2) [bowtie2]"
     echo "    -b string   Prefix to the aligner index"
+    echo "    -l string   Aligner mode for long read aligner (map-hifi|map-ont) [map-hifi]"
     echo "    -S          Toggle to use single-end mode [off]"
     echo "    -r string   The read group (RG) string []"
     echo "    -R path     Path to the suppress annotation []"
@@ -103,6 +105,7 @@ do
         H) HDIST=" -S hdist:${OPTARG}";;
         g) ALLOWED_GAPS=${OPTARG};;
         i) INPUT=${OPTARG};;
+        l) LR_MODE=${OPTARG};;
         L) LEVIOSAM=${OPTARG};;
         m) ISIZE=" -S isize:${OPTARG}";;
         o) PFX=${OPTARG};;
@@ -140,8 +143,8 @@ if (( ${MEASURE_TIME} > 0 )); then
     MT="${TIME} -v -ao leviosam2.time_log "
 fi
 
-if [[ ! ${ALN} =~ ^(bowtie2|bwamem|minimap2|winnowmap2)$ ]]; then
-    echo "Invalid ${ALN}. Accepted input: bowtie2, bwamem, minimap2, winnowmap2"
+if [[ ! ${ALN} =~ ^(bowtie2|bwamem|bwamem2|minimap2|winnowmap2)$ ]]; then
+    echo "Invalid ${ALN}. Accepted input: bowtie2, bwamem, bwamem2, minimap2, winnowmap2"
     exit 1
 fi
 
@@ -176,13 +179,25 @@ if (( ${SINGLE_END} == 1 )); then
             ${MT} bwa mem -t ${THR} ${ALN_RG} ${ALN_IDX} \
             ${PFX}-deferred.fq.gz |\
             ${MT} samtools view -hbo ${PFX}-realigned.bam
-        else
+        elif [[ ${ALN} == "bwamem2" ]]; then
             if [[ ${ALN_RG} != "" ]]; then
                 ALN_RG="-R ${ALN_RG}"
             fi
-            ${MT} ${ALN} -ax map-hifi --MD -t ${THR} ${ALN_RG} \
+            ${MT} bwa-mem2 mem -t ${THR} ${ALN_RG} ${ALN_IDX} \
+            ${PFX}-deferred.fq.gz |\
+            ${MT} samtools view -hbo ${PFX}-realigned.bam
+        elif [[ ${ALN} = ^(minimap2|winnowmap2)$ ]]; then
+            if [[ ${ALN_RG} != "" ]]; then
+                ALN_RG="-R ${ALN_RG}"
+            fi
+            if [[ ${LR_MORE} ^(map-hifi|map-ont)$ ]]; then
+                usage
+            fi
+            ${MT} ${ALN} -ax ${LR_MORE} --MD -t ${THR} ${ALN_RG} \
             ${REF} ${PFX}-deferred.fq.gz | \
             ${MT} samtools view -hbo ${PFX}-realigned.bam
+        else
+            usage
         fi
     fi
 
@@ -214,6 +229,13 @@ else
                 ALN_RG="-R ${ALN_RG}"
             fi
             ${MT} bwa mem -t ${THR} ${ALN_RG} ${ALN_IDX} \
+            ${PFX}-paired-deferred-R1.fq.gz ${PFX}-paired-deferred-R2.fq.gz | \
+            ${MT} samtools view -hb > ${PFX}-paired-realigned.bam
+        elif [[ ${ALN} == "bwamem2" ]]; then
+            if [[ ${ALN_RG} != "" ]]; then
+                ALN_RG="-R ${ALN_RG}"
+            fi
+            ${MT} bwa-mem2 mem -t ${THR} ${ALN_RG} ${ALN_IDX} \
             ${PFX}-paired-deferred-R1.fq.gz ${PFX}-paired-deferred-R2.fq.gz | \
             ${MT} samtools view -hb > ${PFX}-paired-realigned.bam
         else
