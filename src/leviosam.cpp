@@ -284,6 +284,10 @@ std::map<std::string, std::string> load_fasta(std::string ref_name) {
     std::cerr << "[I::load_fasta] Loading FASTA...";
     std::map<std::string, std::string> fmap;
     gzFile fp = gzopen(ref_name.data(), "r");
+    if (!fp) {
+        std::cerr << "\n[E::load_fasta] Cannot open file " << ref_name << ".\n";
+        exit(1);
+    }
     kseq_t *seq;
     seq = kseq_init(fp);
     while (kseq_read(seq) >= 0) {
