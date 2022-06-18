@@ -25,7 +25,7 @@ SINGLE_END=0
 SOURCE_LABEL="source"
 TARGET_LABEL="target"
 ALN_RG=""
-LR_MODE=""
+LR_MODE="map-hifi"
 
 # LevioSAM2 parameters
 ALLOWED_GAPS=0
@@ -186,17 +186,18 @@ if (( ${SINGLE_END} == 1 )); then
             ${MT} bwa-mem2 mem -t ${THR} ${ALN_RG} ${ALN_IDX} \
             ${PFX}-deferred.fq.gz |\
             ${MT} samtools view -hbo ${PFX}-realigned.bam
-        else
+        elif [[ ${ALN} = ^(minimap2|winnowmap2)$ ]]; then
             if [[ ${ALN_RG} != "" ]]; then
                 ALN_RG="-R ${ALN_RG}"
             fi
-            if [[ ${LR_MODE} == "map-hifi" ]]; then
-                ${MT} ${ALN} -ax map-hifi --MD -t ${THR} ${ALN_RG} \
-            elif [[ ${LR_MODE} == "map-ont" ]]; then
-                ${MT} ${ALN} -ax map-ont --MD -t ${THR} ${ALN_RG} \
+            if [[ ${LR_MORE} ^(map-hifi|map-ont)$ ]]; then
+                usage
+            fi
+            ${MT} ${ALN} -ax ${LR_MORE} --MD -t ${THR} ${ALN_RG} \
             ${REF} ${PFX}-deferred.fq.gz | \
             ${MT} samtools view -hbo ${PFX}-realigned.bam
-            fi 
+        else
+            usage
         fi
     fi
 
