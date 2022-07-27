@@ -631,6 +631,14 @@ std::vector<uint32_t> ChainMap::lift_cigar_core(
         if (verbose >= VERBOSE_DEBUG) {
             std::cerr << "\nOP=" << bam_cigar_opchr(cigar[i]) << ", OP_LEN=" << cigar_op_len << "\n";
         }
+
+        // Replace `=`/`X` operators with `M`.
+        // LevioSAM2 currently accepts reading CIGAR strings in the extended CIGAR format,
+        // but only outputs in the traditional format, where both matches and mismatches
+        // are represented using the `M` operator.
+        if (cigar_op == BAM_CEQUAL || cigar_op == BAM_CDIFF)
+            cigar_op = BAM_CMATCH;
+
         if (start_sidx == end_sidx) {
             // If within one interval, update CIGAR and jump to the next CIGAR operator
             push_cigar(new_cigar, cigar_op_len, cigar_op, false);
