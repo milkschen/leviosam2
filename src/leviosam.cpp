@@ -443,31 +443,31 @@ lift::LiftMap lift::lift_from_vcf(
 
 void print_serialize_help_msg(){
     std::cerr << "\n";
-    std::cerr << "Index a lift-over map using either a chain file.\n";
+    std::cerr << "Build a levioSAM2 index of a chain file.\n";
     std::cerr << "Usage:   leviosam2 index -c <chain> -p <out_prefix> -F <fai>\n";
     std::cerr << "\n";
-    std::cerr << "Inputs:  -c string Index a lift-over map from a chain file.\n";
-    std::cerr << "         -F string Path to the FAI (FASTA index) file of the dest reference.\n";
-    std::cerr << "         -p string The prefix of the output file.\n";
+    std::cerr << "Inputs:  -c path   Path to the chain file to index.\n";
+    std::cerr << "         -F path   Path to the FAI (FASTA index) file of the target reference.\n";
+    std::cerr << "         -p string Prefix of the output file.\n";
     std::cerr << "\n";
 }
 
 void print_lift_help_msg(){
     std::cerr << "\n";
-    std::cerr << "Perform efficient lift-over using leviosam2.\n";
+    std::cerr << "Lift over using leviosam2.\n";
     std::cerr << "Usage:   leviosam2 lift [options] -C <clft>\n";
     std::cerr << "\n";
-    std::cerr << "Inputs:  -C string Path to an indexed ChainMap.\n";
-    std::cerr << "Options: -a string Path to the SAM/BAM file to be lifted. \n";
+    std::cerr << "Inputs:  -C path   Path to an indexed ChainMap.\n";
+    std::cerr << "Options: -a path   Path to the SAM/BAM/CRAM file to be lifted. \n";
     std::cerr << "                   Leave empty or set to \"-\" to read from stdin.\n";
     std::cerr << "         -t INT    Number of threads used. [1] \n";
+    std::cerr << "         -m        add MD and NM to output alignment records (requires -f option)\n";
+    std::cerr << "         -f path   Path to the FASTA file of the target reference. \n";
+    std::cerr << "         -x path   Re-alignment preset. [] \n";
+    std::cerr << "         -G INT    Number of allowed CIGAR changes for one alingment. [0]\n";
     std::cerr << "         -T INT    Chunk size for each thread. [256] \n";
     std::cerr << "                   Each thread queries <-T> reads, lifts, and writes.\n";
     std::cerr << "                   Setting a higher <-T> uses slightly more memory but might benefit thread scaling.\n";
-    std::cerr << "         -m        add MD and NM to output alignment records (requires -f option)\n";
-    std::cerr << "         -f string Fasta reference that corresponds to input SAM/BAM (for use w/ -m option)\n";
-    std::cerr << "         -x string Alignment preset [] \n";
-    std::cerr << "         -G INT    Number of allowed CIGAR changes for one alingment. [0]\n";
     std::cerr << "\n";
     std::cerr << "         Commit/defer rule options:\n";
     std::cerr << "           -S string<:int/float> Key-value pair of a split rule. We allow appending multiple `-S` options.\n";
@@ -485,12 +485,12 @@ void print_lift_help_msg(){
 
 void print_main_help_msg(){
     std::cerr << "\n";
-    std::cerr << "Program: leviosam2 (lifting over alignments)\n";
+    std::cerr << "Program: leviosam2 (lifting over alignments using a chain file)\n";
     std::cerr << "Version: " << VERSION << "\n";
     std::cerr << "Usage:   leviosam2 <command> [options]\n\n";
-    std::cerr << "Commands: index       Index a lift-over map.\n";
-    std::cerr << "          lift        Lift alignments in the SAM/BAM formats.\n";
-    std::cerr << "          bed         Lift intervals in the BED format.\n";
+    std::cerr << "Commands: index       Build a levioSAM2 index of a chain file.\n";
+    std::cerr << "          lift        Lift alignments in SAM/BAM/CRAM formats.\n";
+    std::cerr << "          bed         Lift intervals in BED format.\n";
     std::cerr << "          collate     Collate lifted paired-end alignments.\n";
     std::cerr << "          reconcile   Reconcile alignments.\n";
     std::cerr << "Options:  -h          Print detailed usage.\n";
@@ -504,8 +504,7 @@ int main(int argc, char** argv) {
         print_main_help_msg();
         exit(1);
     }
-    // The collate functionality is separated and use a different
-    // argument set
+    // These functionalities are separated and use different arguments
     if (!strcmp(argv[optind], "collate")) {
         return collate_run(argc, argv);
     } else if (!strcmp(argv[optind], "bed")) {
@@ -544,7 +543,6 @@ int main(int argc, char** argv) {
         {"vcf", required_argument, 0, 'v'},
         {"verbose", required_argument, 0, 'V'},
         {"realign_yaml", required_argument, 0, 'x'},
-        // {"realign", no_argument, 0, 'X'}
     };
     int long_index = 0;
     while(
