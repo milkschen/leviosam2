@@ -12,6 +12,7 @@
 #include <iostream>
 #include <unistd.h>
 #include "chain.hpp"
+#include "leviosam_utils.hpp"
 #include "gtest/gtest.h"
 
 
@@ -369,6 +370,66 @@ TEST(ChainTest, LiftCigar5) {
     test_cigar = bam_get_cigar(aln);
     // Note: can use the helper function to print out CIGAR results
     // LevioSamUtils::debug_print_cigar(bam_get_cigar(aln), aln->core.n_cigar);
+    EXPECT_EQ(aln->core.n_cigar, 2);
+    EXPECT_EQ(test_cigar[0], bam_cigar_gen( 3, BAM_CSOFT_CLIP));
+    EXPECT_EQ(test_cigar[1], bam_cigar_gen( 13, BAM_CMATCH));
+}
+
+
+TEST(ChainTest, LiftExtendedCigar1) {
+    std::vector<std::pair<std::string, int32_t>> lm;
+    lm.push_back(std::make_pair("chr1", 248387328));
+    chain::ChainMap cmap ("small.chain", 0, 0, lm);
+    std::string hdr_str = "@HD	VN:1.0	SO:unsorted\n@SQ	SN:chr1	LN:248956422";
+    sam_hdr_t* sam_hdr = sam_hdr_parse(hdr_str.length(), &hdr_str[0]);
+    bam1_t* aln = bam_init1();
+    int err;
+    size_t x;
+    uint32_t* test_cigar;
+
+    // Replace extended CIGAR ops (`X` and `=`) with `M`
+    // CIGAR should not change
+    kstring_t str;
+    std::string record = "unchanged	0	chr1	674850	42	7=13D6=1X6=	*	0	0	CAGTTTGTAGTATCTGCAAG	~~~~~~~~~~~~~~~~~~~~";
+    str.s = (char*) record.c_str();
+    str.l = record.length();
+    str.m = kstr_get_m(str.l);
+    err = sam_parse1(&str, sam_hdr, aln);
+    EXPECT_EQ(err, 0);
+    err = cmap.lift_cigar(sam_hdr->target_name[aln->core.tid], aln);
+    EXPECT_EQ(err, 0);
+    test_cigar = bam_get_cigar(aln);
+    // Note: can use the helper function to print out CIGAR results
+    // LevioSamUtils::debug_print_cigar(bam_get_cigar(aln), aln->core.n_cigar);
+    EXPECT_EQ(aln->core.n_cigar, 3);
+    EXPECT_EQ(test_cigar[0], bam_cigar_gen( 7, BAM_CMATCH));
+    EXPECT_EQ(test_cigar[1], bam_cigar_gen( 13, BAM_CDEL));
+    EXPECT_EQ(test_cigar[2], bam_cigar_gen( 13, BAM_CMATCH));
+}
+
+
+TEST(ChainTest, LiftExtendedCigar2) {
+    std::vector<std::pair<std::string, int32_t>> lm;
+    lm.push_back(std::make_pair("chr1", 248387328));
+    chain::ChainMap cmap ("small.chain", 0, 0, lm);
+    std::string hdr_str = "@HD	VN:1.0	SO:unsorted\n@SQ	SN:chr1	LN:248956422";
+    sam_hdr_t* sam_hdr = sam_hdr_parse(hdr_str.length(), &hdr_str[0]);
+    bam1_t* aln = bam_init1();
+    int err;
+    size_t x;
+    uint32_t* test_cigar;
+
+    // Add 3 BAM_CSOFT_CLIPs in the beginning
+    kstring_t str;
+    std::string record = "16M_3S13M	0	chr1	687455	42	10=1X5=	*	0	0	ATTACATTCCATTCCA	~~~~~~~~~~~~~~~~";
+    str.s = (char*) record.c_str();
+    str.l = record.length();
+    str.m = kstr_get_m(str.l);
+    err = sam_parse1(&str, sam_hdr, aln);
+    EXPECT_EQ(err, 0);
+    err = cmap.lift_cigar(sam_hdr->target_name[aln->core.tid], aln);
+    EXPECT_EQ(err, 0);
+    test_cigar = bam_get_cigar(aln);
     EXPECT_EQ(aln->core.n_cigar, 2);
     EXPECT_EQ(test_cigar[0], bam_cigar_gen( 3, BAM_CSOFT_CLIP));
     EXPECT_EQ(test_cigar[1], bam_cigar_gen( 13, BAM_CMATCH));
