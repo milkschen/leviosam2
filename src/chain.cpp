@@ -405,26 +405,58 @@ int ChainMap::lift_cigar(
         aln->core.l_qseq < (num_sclip_start + num_sclip_end)){
         return -1;
     }
-    // If the read sits perfectly inside an interval, just copy the cigar values
-    // (or reverse if in an inversed region):
+    uint32_t* cigar = bam_get_cigar(aln);
+
+    // Replace `=`/`X` operators with `M`.
+    // LevioSAM2 currently accepts reading CIGAR strings in the extended CIGAR format,
+    // but only outputs in the traditional format, where both matches and mismatches
+    // are represented using the `M` operator.
+    bool extended_cigar = false;
+    for (int i = 0; i < aln->core.n_cigar; i++) {
+        auto cigar_op_len = bam_cigar_oplen(cigar[i]);
+        auto cigar_op = bam_cigar_op(cigar[i]);
+        if (cigar_op == BAM_CEQUAL || cigar_op == BAM_CDIFF) {
+            cigar_op = BAM_CMATCH;
+            extended_cigar = true;
+        }
+        cigar[i] = bam_cigar_gen(cigar_op_len, cigar_op);
+    }
+
+    // If the read sits perfectly inside an interval, just copy the 
+    // CIGAR (or reverse it if in an inversed region):
     //  - no sidx diff
     //  - neither sclip values are positive
     if ((num_sclip_start <= 0) && 
         (num_sclip_end <= 0) &&
         (start_sidx == end_sidx)) {
         uint32_t* cigar = bam_get_cigar(aln);
+
+        // If the input SAM uses the extended CIGAR format, we replace the
+        // `=X` ops with `M`s and merge these `M` runs.
+        if (extended_cigar) {
+            std::vector<uint32_t> new_cigar;
+            for (int i = 0; i < aln->core.n_cigar; i++) {
+                auto cigar_op_len = bam_cigar_oplen(cigar[i]);
+                auto cigar_op = bam_cigar_op(cigar[i]);
+                push_cigar(new_cigar, cigar_op_len, cigar_op, false);
+            }
+            LevioSamUtils::update_cigar(aln, new_cigar);
+        }
+        return 0;
+
+        // reverse
         if (!interval_map[contig][start_sidx].strand) {
             std::vector<uint32_t> new_cigar;
+            // TODO
             for (int i = 0; i < aln->core.n_cigar; i++)
                 new_cigar.push_back(cigar[i]);
-            for (int i = 0; i < aln->core.n_cigar; i++){
+            for (int i = 0; i < aln->core.n_cigar; i++)
                 *(cigar + i) = new_cigar[aln->core.n_cigar - i - 1];
-            }
         }
         return 0;
     }
 
-    auto new_cigar = lift_cigar_core(
+    std::vector<uint32_t> new_cigar = lift_cigar_core(
         contig, aln, start_sidx, end_sidx,
         num_sclip_start, num_sclip_end);
 
@@ -610,8 +642,8 @@ std::vector<uint32_t> ChainMap::lift_cigar_core(
     // Number of bases that need to be clipped in next iterations
     int query_offset = 0;
     int idx = 0;
-    // The position of a SAM record starts from the first non-clipped base,
-    // so we don't update the first "S" run
+    // The POS of a SAM record represents the first non-clipped base,
+    // so we don't update the initial "S" run
     if (bam_cigar_op(cigar[0]) == BAM_CSOFT_CLIP) {
         idx += 1;
         auto cigar_op_len = bam_cigar_oplen(cigar[0]);
@@ -636,8 +668,8 @@ std::vector<uint32_t> ChainMap::lift_cigar_core(
         // LevioSAM2 currently accepts reading CIGAR strings in the extended CIGAR format,
         // but only outputs in the traditional format, where both matches and mismatches
         // are represented using the `M` operator.
-        if (cigar_op == BAM_CEQUAL || cigar_op == BAM_CDIFF)
-            cigar_op = BAM_CMATCH;
+        // if (cigar_op == BAM_CEQUAL || cigar_op == BAM_CDIFF)
+        //     cigar_op = BAM_CMATCH;
 
         if (start_sidx == end_sidx) {
             // If within one interval, update CIGAR and jump to the next CIGAR operator
