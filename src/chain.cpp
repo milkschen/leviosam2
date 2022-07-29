@@ -431,27 +431,36 @@ int ChainMap::lift_cigar(
         (start_sidx == end_sidx)) {
         uint32_t* cigar = bam_get_cigar(aln);
 
-        // If the input SAM uses the extended CIGAR format, we replace the
-        // `=X` ops with `M`s and merge these `M` runs.
-        if (extended_cigar) {
-            std::vector<uint32_t> new_cigar;
-            for (int i = 0; i < aln->core.n_cigar; i++) {
-                auto cigar_op_len = bam_cigar_oplen(cigar[i]);
-                auto cigar_op = bam_cigar_op(cigar[i]);
-                push_cigar(new_cigar, cigar_op_len, cigar_op, false);
+        if (interval_map[contig][start_sidx].strand) {
+            // If the input SAM uses the extended CIGAR format, we replace the
+            // `=X` ops with `M`s and merge these `M` runs.
+            if (extended_cigar) {
+                std::vector<uint32_t> new_cigar;
+                for (int i = 0; i < aln->core.n_cigar; i++) {
+                    auto cigar_op_len = bam_cigar_oplen(cigar[i]);
+                    auto cigar_op = bam_cigar_op(cigar[i]);
+                    push_cigar(new_cigar, cigar_op_len, cigar_op, false);
+                }
+                LevioSamUtils::update_cigar(aln, new_cigar);
             }
-            LevioSamUtils::update_cigar(aln, new_cigar);
-        }
-        return 0;
-
-        // reverse
-        if (!interval_map[contig][start_sidx].strand) {
+            return 0;
+        } else if (!interval_map[contig][start_sidx].strand) {
+            // reversed interval
             std::vector<uint32_t> new_cigar;
-            // TODO
-            for (int i = 0; i < aln->core.n_cigar; i++)
-                new_cigar.push_back(cigar[i]);
-            for (int i = 0; i < aln->core.n_cigar; i++)
-                *(cigar + i) = new_cigar[aln->core.n_cigar - i - 1];
+            if (extended_cigar) {
+                for (int i = 0; i < aln->core.n_cigar; i++) {
+                    auto cigar_op_len = bam_cigar_oplen(cigar[i]);
+                    auto cigar_op = bam_cigar_op(cigar[i]);
+                    push_cigar(new_cigar, cigar_op_len, cigar_op, false);
+                }
+                std::reverse(new_cigar.begin(), new_cigar.end());
+                LevioSamUtils::update_cigar(aln, new_cigar);
+            } else {
+                for (int i = 0; i < aln->core.n_cigar; i++)
+                    new_cigar.push_back(cigar[i]);
+                for (int i = 0; i < aln->core.n_cigar; i++)
+                    *(cigar + i) = new_cigar[aln->core.n_cigar - i - 1];
+            }
         }
         return 0;
     }
@@ -1503,16 +1512,20 @@ std::queue<std::tuple<int32_t, int32_t>> ChainMap::get_bp(
         int bp = interval_map[contig][i].source_end - c->pos;
         int diff = interval_map[contig][i+1].offset -
                    interval_map[contig][i].offset;
+        if (!interval_map[contig][i].strand) {
+            diff = diff + interval_map[contig][i+1].source_end 
+                        + interval_map[contig][i+1].source_start
+                        - interval_map[contig][i].source_end
+                        - interval_map[contig][i].source_start;
+        }
         if (interval_map[contig][i+1].target != interval_map[contig][i].target)
             continue;
         if (bp > 0) {
             break_points.push(std::make_tuple(bp, diff));
-            // DEBUG
             if (verbose >= VERBOSE_DEBUG) {
                 interval_map[contig][i].debug_print_interval();
                 std::cerr << "bp=" << bp << ", diff=" << diff << "\n";
             }
-            // END_DEBUG
         }
     }
     return break_points;
