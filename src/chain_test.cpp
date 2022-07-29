@@ -390,7 +390,7 @@ TEST(ChainTest, LiftExtendedCigar1) {
     // Replace extended CIGAR ops (`X` and `=`) with `M`
     // CIGAR should not change
     kstring_t str;
-    std::string record = "unchanged	0	chr1	674850	42	7=13D6=1X6=	*	0	0	CAGTTTGTAGTATCTGCAAG	~~~~~~~~~~~~~~~~~~~~";
+    std::string record = "7=13D6=1X6=_7M13D13M	0	chr1	674850	42	7=13D6=1X6=	*	0	0	CAGTTTGTAGTATCTGCAAG	~~~~~~~~~~~~~~~~~~~~";
     str.s = (char*) record.c_str();
     str.l = record.length();
     str.m = kstr_get_m(str.l);
@@ -421,7 +421,7 @@ TEST(ChainTest, LiftExtendedCigar2) {
 
     // Add 3 BAM_CSOFT_CLIPs in the beginning
     kstring_t str;
-    std::string record = "16M_3S13M	0	chr1	687455	42	10=1X5=	*	0	0	ATTACATTCCATTCCA	~~~~~~~~~~~~~~~~";
+    std::string record = "10=1X5=_3S13M	0	chr1	687455	42	10=1X5=	*	0	0	ATTACATTCCATTCCA	~~~~~~~~~~~~~~~~";
     str.s = (char*) record.c_str();
     str.l = record.length();
     str.m = kstr_get_m(str.l);
@@ -433,6 +433,101 @@ TEST(ChainTest, LiftExtendedCigar2) {
     EXPECT_EQ(aln->core.n_cigar, 2);
     EXPECT_EQ(test_cigar[0], bam_cigar_gen( 3, BAM_CSOFT_CLIP));
     EXPECT_EQ(test_cigar[1], bam_cigar_gen( 13, BAM_CMATCH));
+}
+
+
+TEST(ChainTest, LiftExtendedCigarReverse1) {
+    std::vector<std::pair<std::string, int32_t>> lm;
+    lm.push_back(std::make_pair("chr1", 248387497));
+    chain::ChainMap cmap ("chr1_reversed_region.chain", 0, 0, lm);
+    std::string hdr_str = "@HD	VN:1.0	SO:unsorted\n@SQ	SN:chr1	LN:248956422";
+    sam_hdr_t* sam_hdr = sam_hdr_parse(hdr_str.length(), &hdr_str[0]);
+    bam1_t* aln = bam_init1();
+    int err;
+    size_t x;
+    uint32_t* test_cigar;
+
+    // Replace extended CIGAR ops (`X` and `=`) with `M`
+    // CIGAR should not change
+    kstring_t str;
+    std::string record = "10=1X5=_16M	0	chr1	145302531	42	10=1X5=	*	0	0	ATTACATTCCATTCCA	~~~~~~~~~~~~~~~~";
+    str.s = (char*) record.c_str();
+    str.l = record.length();
+    str.m = kstr_get_m(str.l);
+    err = sam_parse1(&str, sam_hdr, aln);
+    EXPECT_EQ(err, 0);
+    err = cmap.lift_cigar(sam_hdr->target_name[aln->core.tid], aln);
+    EXPECT_EQ(err, 0);
+    test_cigar = bam_get_cigar(aln);
+    // Note: can use the helper function to print out CIGAR results
+    // LevioSamUtils::debug_print_cigar(bam_get_cigar(aln), aln->core.n_cigar);
+    EXPECT_EQ(aln->core.n_cigar, 1);
+    EXPECT_EQ(test_cigar[0], bam_cigar_gen( 16, BAM_CMATCH));
+}
+
+
+TEST(ChainTest, LiftExtendedCigarReverse2) {
+    std::vector<std::pair<std::string, int32_t>> lm;
+    lm.push_back(std::make_pair("chr1", 248387497));
+    chain::ChainMap cmap ("chr1_reversed_region.chain", 0, 0, lm);
+    // chain::ChainMap cmap ("chr1_reversed_region.chain", 5, 0, lm);
+    std::string hdr_str = "@HD	VN:1.0	SO:unsorted\n@SQ	SN:chr1	LN:248956422";
+    sam_hdr_t* sam_hdr = sam_hdr_parse(hdr_str.length(), &hdr_str[0]);
+    bam1_t* aln = bam_init1();
+    int err;
+    size_t x;
+    uint32_t* test_cigar;
+
+    // Replace extended CIGAR ops (`X` and `=`) with `M`
+    // Reverse & 1-bp INS
+    kstring_t str;
+    std::string record = "10=1X5=_9M1I6M	0	chr1	145331505	42	10=1X5=	*	0	0	ATTACATTCCATTCCA	~~~~~~~~~~~~~~~~";
+    str.s = (char*) record.c_str();
+    str.l = record.length();
+    str.m = kstr_get_m(str.l);
+    err = sam_parse1(&str, sam_hdr, aln);
+    EXPECT_EQ(err, 0);
+    err = cmap.lift_cigar(sam_hdr->target_name[aln->core.tid], aln);
+    EXPECT_EQ(err, 0);
+    test_cigar = bam_get_cigar(aln);
+    // Note: can use the helper function to print out CIGAR results
+    // LevioSamUtils::debug_print_cigar(bam_get_cigar(aln), aln->core.n_cigar);
+    EXPECT_EQ(aln->core.n_cigar, 3);
+    EXPECT_EQ(test_cigar[0], bam_cigar_gen( 9, BAM_CMATCH));
+    EXPECT_EQ(test_cigar[1], bam_cigar_gen( 1, BAM_CINS));
+    EXPECT_EQ(test_cigar[2], bam_cigar_gen( 6, BAM_CMATCH));
+}
+
+
+TEST(ChainTest, LiftExtendedCigarReverse3) {
+    std::vector<std::pair<std::string, int32_t>> lm;
+    lm.push_back(std::make_pair("chr1", 248387497));
+    chain::ChainMap cmap ("chr1_reversed_region.chain", 0, 0, lm);
+    std::string hdr_str = "@HD	VN:1.0	SO:unsorted\n@SQ	SN:chr1	LN:248956422";
+    sam_hdr_t* sam_hdr = sam_hdr_parse(hdr_str.length(), &hdr_str[0]);
+    bam1_t* aln = bam_init1();
+    int err;
+    size_t x;
+    uint32_t* test_cigar;
+
+    // Replace extended CIGAR ops (`X` and `=`) with `M`
+    // 
+    kstring_t str;
+    std::string record = "10=1X5=_13M6D3M	0	chr1	145334831	42	10=1X5=	*	0	0	ATTACATTCCATTCCA	~~~~~~~~~~~~~~~~";
+    str.s = (char*) record.c_str();
+    str.l = record.length();
+    str.m = kstr_get_m(str.l);
+    err = sam_parse1(&str, sam_hdr, aln);
+    EXPECT_EQ(err, 0);
+    err = cmap.lift_cigar(sam_hdr->target_name[aln->core.tid], aln);
+    EXPECT_EQ(err, 0);
+    test_cigar = bam_get_cigar(aln);
+    // Note: can use the helper function to print out CIGAR results
+    // LevioSamUtils::debug_print_cigar(bam_get_cigar(aln), aln->core.n_cigar);
+    EXPECT_EQ(aln->core.n_cigar, 3);
+    EXPECT_EQ(test_cigar[0], bam_cigar_gen( 13, BAM_CMATCH));
+    EXPECT_EQ(test_cigar[1], bam_cigar_gen( 6, BAM_CDEL));
+    EXPECT_EQ(test_cigar[2], bam_cigar_gen( 3, BAM_CMATCH));
 }
 
 
