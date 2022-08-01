@@ -89,7 +89,7 @@ function usage {
     exit 0
 }
 
-while getopts hKMSa:A:b:C:D:f:H:g:i:L:m:o:p:q:r:R:t:T:x: flag
+while getopts hKMSa:A:b:C:D:f:H:g:i:l:L:m:o:p:q:r:R:t:T:x: flag
 do
     case "${flag}" in
         h) usage;;
