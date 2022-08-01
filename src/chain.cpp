@@ -469,6 +469,8 @@ int ChainMap::lift_cigar(
         contig, aln, start_sidx, end_sidx,
         num_sclip_start, num_sclip_end);
 
+    LevioSamUtils::update_cigar(aln, new_cigar);
+
     // There must be >=1 M/I/D/N OPs in the CIGAR, otherwise it's not valid
     bool contain_midn = false;
     for (auto& cg: new_cigar) {
@@ -483,7 +485,6 @@ int ChainMap::lift_cigar(
     if (!contain_midn)
         return -1;
 
-    LevioSamUtils::update_cigar(aln, new_cigar);
     return 0;
 }
 
@@ -1510,13 +1511,36 @@ std::queue<std::tuple<int32_t, int32_t>> ChainMap::get_bp(
     std::queue<std::tuple<int32_t, int32_t>> break_points;
     for (auto i = start_sidx; i <= end_sidx; i++) {
         int bp = interval_map[contig][i].source_end - c->pos;
-        int diff = interval_map[contig][i+1].offset -
+        int diff;
+        // forward strand
+        // diff = -1 * (
+        //   ( source_{start}(1) - source_{end}(0) ) - 
+        //   ( target_{start}(1) - target_{end}(0) ) )
+        // = -1 * (
+        //   ( source_{start}(1) - source_{end}(0) ) - 
+        //   ( source_{start}(1) + offset(1) - source_{end}(0) - offset(0) )
+        // = offset(1) - offset(0)
+        //
+        // reversed strand
+        // diff = -1 * (
+        //   ( source_{start}(1) - source_{end}(0) ) - 
+        //   ( target_{start}(0) - target_{end}(1) ) )
+        // = -1 * (
+        //   ( source_{start}(1) - source_{end}(0) ) -
+        //   ( source_{start}(0) + offset(0) - source_{end}(1) - offset(1) ) )
+        // = ( offset(0) + source_{start}(0) + source_{end}(0) ) -
+        //   ( offset(1) + source_{start}(1) + source_{end}(1) )
+        if (interval_map[contig][i].strand) { // forward
+            diff = interval_map[contig][i+1].offset -
                    interval_map[contig][i].offset;
-        if (!interval_map[contig][i].strand) {
-            diff = diff + interval_map[contig][i+1].source_end 
-                        + interval_map[contig][i+1].source_start
-                        - interval_map[contig][i].source_end
-                        - interval_map[contig][i].source_start;
+        } else { // reverse
+            diff = 
+                ( interval_map[contig][i].offset + 
+                  interval_map[contig][i].source_start +
+                  interval_map[contig][i].source_end ) -
+                ( interval_map[contig][i+1].offset +
+                  interval_map[contig][i+1].source_start +
+                  interval_map[contig][i+1].source_end );
         }
         if (interval_map[contig][i+1].target != interval_map[contig][i].target)
             continue;
