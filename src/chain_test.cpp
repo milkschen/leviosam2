@@ -479,9 +479,9 @@ TEST(ChainTest, LiftExtendedCigarReverse2) {
     uint32_t* test_cigar;
 
     // Replace extended CIGAR ops (`X` and `=`) with `M`
-    // Reverse & 1-bp INS
+    // Reverse & 1-bp DEL
     kstring_t str;
-    std::string record = "10=1X5=_9M1I6M	0	chr1	145331505	42	10=1X5=	*	0	0	ATTACATTCCATTCCA	~~~~~~~~~~~~~~~~";
+    std::string record = "10=1X5=_10M1D6M	0	chr1	145331505	42	10=1X5=	*	0	0	ATTACATTCCATTCCA	~~~~~~~~~~~~~~~~";
     str.s = (char*) record.c_str();
     str.l = record.length();
     str.m = kstr_get_m(str.l);
@@ -493,8 +493,8 @@ TEST(ChainTest, LiftExtendedCigarReverse2) {
     // Note: can use the helper function to print out CIGAR results
     // LevioSamUtils::debug_print_cigar(bam_get_cigar(aln), aln->core.n_cigar);
     EXPECT_EQ(aln->core.n_cigar, 3);
-    EXPECT_EQ(test_cigar[0], bam_cigar_gen( 9, BAM_CMATCH));
-    EXPECT_EQ(test_cigar[1], bam_cigar_gen( 1, BAM_CINS));
+    EXPECT_EQ(test_cigar[0], bam_cigar_gen( 10, BAM_CMATCH));
+    EXPECT_EQ(test_cigar[1], bam_cigar_gen( 1, BAM_CDEL));
     EXPECT_EQ(test_cigar[2], bam_cigar_gen( 6, BAM_CMATCH));
 }
 
@@ -511,9 +511,9 @@ TEST(ChainTest, LiftExtendedCigarReverse3) {
     uint32_t* test_cigar;
 
     // Replace extended CIGAR ops (`X` and `=`) with `M`
-    // 
+    // Replacing 6-bp MATCH with INS
     kstring_t str;
-    std::string record = "10=1X5=_13M6D3M	0	chr1	145334831	42	10=1X5=	*	0	0	ATTACATTCCATTCCA	~~~~~~~~~~~~~~~~";
+    std::string record = "10=1X5=_7M6I3M	0	chr1	145334831	42	10=1X5=	*	0	0	ATTACATTCCATTCCA	~~~~~~~~~~~~~~~~";
     str.s = (char*) record.c_str();
     str.l = record.length();
     str.m = kstr_get_m(str.l);
@@ -525,8 +525,8 @@ TEST(ChainTest, LiftExtendedCigarReverse3) {
     // Note: can use the helper function to print out CIGAR results
     // LevioSamUtils::debug_print_cigar(bam_get_cigar(aln), aln->core.n_cigar);
     EXPECT_EQ(aln->core.n_cigar, 3);
-    EXPECT_EQ(test_cigar[0], bam_cigar_gen( 13, BAM_CMATCH));
-    EXPECT_EQ(test_cigar[1], bam_cigar_gen( 6, BAM_CDEL));
+    EXPECT_EQ(test_cigar[0], bam_cigar_gen( 7, BAM_CMATCH));
+    EXPECT_EQ(test_cigar[1], bam_cigar_gen( 6, BAM_CINS));
     EXPECT_EQ(test_cigar[2], bam_cigar_gen( 3, BAM_CMATCH));
 }
 
