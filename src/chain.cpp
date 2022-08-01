@@ -405,28 +405,71 @@ int ChainMap::lift_cigar(
         aln->core.l_qseq < (num_sclip_start + num_sclip_end)){
         return -1;
     }
-    // If the read sits perfectly inside an interval, just copy the cigar values
-    // (or reverse if in an inversed region):
+    uint32_t* cigar = bam_get_cigar(aln);
+
+    // Replace `=`/`X` operators with `M`.
+    // LevioSAM2 currently accepts reading CIGAR strings in the extended CIGAR format,
+    // but only outputs in the traditional format, where both matches and mismatches
+    // are represented using the `M` operator.
+    bool extended_cigar = false;
+    for (int i = 0; i < aln->core.n_cigar; i++) {
+        auto cigar_op_len = bam_cigar_oplen(cigar[i]);
+        auto cigar_op = bam_cigar_op(cigar[i]);
+        if (cigar_op == BAM_CEQUAL || cigar_op == BAM_CDIFF) {
+            cigar_op = BAM_CMATCH;
+            extended_cigar = true;
+        }
+        cigar[i] = bam_cigar_gen(cigar_op_len, cigar_op);
+    }
+
+    // If the read sits perfectly inside an interval, just copy the 
+    // CIGAR (or reverse it if in an inversed region):
     //  - no sidx diff
     //  - neither sclip values are positive
     if ((num_sclip_start <= 0) && 
         (num_sclip_end <= 0) &&
         (start_sidx == end_sidx)) {
         uint32_t* cigar = bam_get_cigar(aln);
-        if (!interval_map[contig][start_sidx].strand) {
+
+        if (interval_map[contig][start_sidx].strand) {
+            // If the input SAM uses the extended CIGAR format, we replace the
+            // `=X` ops with `M`s and merge these `M` runs.
+            if (extended_cigar) {
+                std::vector<uint32_t> new_cigar;
+                for (int i = 0; i < aln->core.n_cigar; i++) {
+                    auto cigar_op_len = bam_cigar_oplen(cigar[i]);
+                    auto cigar_op = bam_cigar_op(cigar[i]);
+                    push_cigar(new_cigar, cigar_op_len, cigar_op, false);
+                }
+                LevioSamUtils::update_cigar(aln, new_cigar);
+            }
+            return 0;
+        } else if (!interval_map[contig][start_sidx].strand) {
+            // reversed interval
             std::vector<uint32_t> new_cigar;
-            for (int i = 0; i < aln->core.n_cigar; i++)
-                new_cigar.push_back(cigar[i]);
-            for (int i = 0; i < aln->core.n_cigar; i++){
-                *(cigar + i) = new_cigar[aln->core.n_cigar - i - 1];
+            if (extended_cigar) {
+                for (int i = 0; i < aln->core.n_cigar; i++) {
+                    auto cigar_op_len = bam_cigar_oplen(cigar[i]);
+                    auto cigar_op = bam_cigar_op(cigar[i]);
+                    push_cigar(new_cigar, cigar_op_len, cigar_op, false);
+                }
+                std::reverse(new_cigar.begin(), new_cigar.end());
+                LevioSamUtils::update_cigar(aln, new_cigar);
+            } else {
+                for (int i = 0; i < aln->core.n_cigar; i++)
+                    new_cigar.push_back(cigar[i]);
+                for (int i = 0; i < aln->core.n_cigar; i++)
+                    *(cigar + i) = new_cigar[aln->core.n_cigar - i - 1];
             }
         }
         return 0;
     }
 
-    auto new_cigar = lift_cigar_core(
+    std::vector<uint32_t> new_cigar = lift_cigar_core(
         contig, aln, start_sidx, end_sidx,
         num_sclip_start, num_sclip_end);
+
+    LevioSamUtils::update_cigar(aln, new_cigar);
 
     // There must be >=1 M/I/D/N OPs in the CIGAR, otherwise it's not valid
     bool contain_midn = false;
@@ -442,7 +485,6 @@ int ChainMap::lift_cigar(
     if (!contain_midn)
         return -1;
 
-    LevioSamUtils::update_cigar(aln, new_cigar);
     return 0;
 }
 
@@ -610,8 +652,8 @@ std::vector<uint32_t> ChainMap::lift_cigar_core(
     // Number of bases that need to be clipped in next iterations
     int query_offset = 0;
     int idx = 0;
-    // The position of a SAM record starts from the first non-clipped base,
-    // so we don't update the first "S" run
+    // The POS of a SAM record represents the first non-clipped base,
+    // so we don't update the initial "S" run
     if (bam_cigar_op(cigar[0]) == BAM_CSOFT_CLIP) {
         idx += 1;
         auto cigar_op_len = bam_cigar_oplen(cigar[0]);
@@ -636,8 +678,8 @@ std::vector<uint32_t> ChainMap::lift_cigar_core(
         // LevioSAM2 currently accepts reading CIGAR strings in the extended CIGAR format,
         // but only outputs in the traditional format, where both matches and mismatches
         // are represented using the `M` operator.
-        if (cigar_op == BAM_CEQUAL || cigar_op == BAM_CDIFF)
-            cigar_op = BAM_CMATCH;
+        // if (cigar_op == BAM_CEQUAL || cigar_op == BAM_CDIFF)
+        //     cigar_op = BAM_CMATCH;
 
         if (start_sidx == end_sidx) {
             // If within one interval, update CIGAR and jump to the next CIGAR operator
@@ -1469,18 +1511,45 @@ std::queue<std::tuple<int32_t, int32_t>> ChainMap::get_bp(
     std::queue<std::tuple<int32_t, int32_t>> break_points;
     for (auto i = start_sidx; i <= end_sidx; i++) {
         int bp = interval_map[contig][i].source_end - c->pos;
-        int diff = interval_map[contig][i+1].offset -
+        int diff;
+        // forward strand
+        // diff = -1 * (
+        //   ( source_{start}(1) - source_{end}(0) ) - 
+        //   ( target_{start}(1) - target_{end}(0) ) )
+        // = -1 * (
+        //   ( source_{start}(1) - source_{end}(0) ) - 
+        //   ( source_{start}(1) + offset(1) - source_{end}(0) - offset(0) )
+        // = offset(1) - offset(0)
+        //
+        // reversed strand
+        // diff = -1 * (
+        //   ( source_{start}(1) - source_{end}(0) ) - 
+        //   ( target_{start}(0) - target_{end}(1) ) )
+        // = -1 * (
+        //   ( source_{start}(1) - source_{end}(0) ) -
+        //   ( source_{start}(0) + offset(0) - source_{end}(1) - offset(1) ) )
+        // = ( offset(0) + source_{start}(0) + source_{end}(0) ) -
+        //   ( offset(1) + source_{start}(1) + source_{end}(1) )
+        if (interval_map[contig][i].strand) { // forward
+            diff = interval_map[contig][i+1].offset -
                    interval_map[contig][i].offset;
+        } else { // reverse
+            diff = 
+                ( interval_map[contig][i].offset + 
+                  interval_map[contig][i].source_start +
+                  interval_map[contig][i].source_end ) -
+                ( interval_map[contig][i+1].offset +
+                  interval_map[contig][i+1].source_start +
+                  interval_map[contig][i+1].source_end );
+        }
         if (interval_map[contig][i+1].target != interval_map[contig][i].target)
             continue;
         if (bp > 0) {
             break_points.push(std::make_tuple(bp, diff));
-            // DEBUG
             if (verbose >= VERBOSE_DEBUG) {
                 interval_map[contig][i].debug_print_interval();
                 std::cerr << "bp=" << bp << ", diff=" << diff << "\n";
             }
-            // END_DEBUG
         }
     }
     return break_points;
