@@ -43,6 +43,8 @@ For both short and long reads. Different parameters are recommended for each seq
 - Supported aligners: [minimap2](https://github.com/lh3/minimap2), [winnowmap2](https://github.com/marbl/Winnowmap),
 [bwa mem](https://github.com/lh3/bwa) and [Bowtie 2](http://bowtie-bio.sourceforge.net/bowtie2/manual.shtml) 
 
+- `-g` sets the max allowed size of overlapping chain gaps of an alignment, `-H` is the max edit distance of an alignment (post-realignment) to be committed. Please adjust these parameters according to your long read platform and library preparation
+
 Minimap2 example with Pacbio:
 ```
 bash leviosam2.sh \
@@ -55,10 +57,10 @@ bash leviosam2.sh \
     -t 16
 ```
 
-Minimap2 example with Nanopore:
+Minimap2 example with Nanopore (ultra-long reads are not fully supported):
 ```
 bash leviosam2.sh \
-    -a minimap2 -g 1000 -H 100 -S -x ../configs/ont_all.yaml \
+    -a minimap2 -g 1500 -H 6000 -S -x ../configs/ont_all.yaml \
     -l map-ont \
     -i pacbio.bam \
     -o pacbio-lifted \
