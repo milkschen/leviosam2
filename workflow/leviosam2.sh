@@ -186,11 +186,11 @@ if (( ${SINGLE_END} == 1 )); then
             ${MT} bwa-mem2 mem -t ${THR} ${ALN_RG} ${ALN_IDX} \
             ${PFX}-deferred.fq.gz |\
             ${MT} samtools view -hbo ${PFX}-realigned.bam
-        elif [[ ${ALN} = ^(minimap2|winnowmap2)$ ]]; then
+        elif [[ ${ALN} =~ ^(minimap2|winnowmap2)$ ]]; then
             if [[ ${ALN_RG} != "" ]]; then
                 ALN_RG="-R ${ALN_RG}"
             fi
-            if [[ ${LR_MORE} ^(map-hifi|map-ont)$ ]]; then
+            if [[ ${LR_MODE} =~ ^(map-hifi|map-ont)$ ]]; then
                 usage
             fi
             ${MT} ${ALN} -ax ${LR_MORE} --MD -t ${THR} ${ALN_RG} \
