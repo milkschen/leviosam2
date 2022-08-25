@@ -193,7 +193,7 @@ if (( ${SINGLE_END} == 1 )); then
             if [[ ${LR_MODE} =~ ^(map-hifi|map-ont)$ ]]; then
                 usage
             fi
-            ${MT} ${ALN} -ax ${LR_MORE} --MD -t ${THR} ${ALN_RG} \
+            ${MT} ${ALN} -ax ${LR_MODE} --MD -t ${THR} ${ALN_RG} \
             ${REF} ${PFX}-deferred.fq.gz | \
             ${MT} samtools view -hbo ${PFX}-realigned.bam
         else
