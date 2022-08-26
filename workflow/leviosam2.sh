@@ -190,7 +190,7 @@ if (( ${SINGLE_END} == 1 )); then
             if [[ ${ALN_RG} != "" ]]; then
                 ALN_RG="-R ${ALN_RG}"
             fi
-            if [[ ${LR_MODE} =~ ^(map-hifi|map-ont)$ ]]; then
+            if [[ ! ${LR_MODE} =~ ^(map-hifi|map-ont)$ ]]; then
                 usage
             fi
             ${MT} ${ALN} -ax ${LR_MODE} --MD -t ${THR} ${ALN_RG} \
