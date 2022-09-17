@@ -24,18 +24,21 @@ LevioSAM2 lifts over alignments accurately and efficiently using a chain file.
 
 LevioSAM2 can be installed using:
 
-- [Conda](https://docs.conda.io/en/latest/)
+- [Conda](https://anaconda.org/bioconda/leviosam2)
 
 ```
-conda install -c conda-forge -c bioconda leviosam2
+# The following commands install leviosam2 in a new conda environment called `leviosam2`
+conda create -n leviosam2
+conda activate leviosam2
+conda install -c bioconda -c conda-forge leviosam2
 ```
 
-- [Docker](https://hub.docker.com/r/milkschen/leviosam2)
+- [Docker](https://hub.docker.com/r/naechyun/leviosam2)
 ```
 docker pull naechyun/leviosam2:latest
 ```
 
-- [Singularity](https://hub.docker.com/r/milkschen/leviosam2)
+- [Singularity](https://hub.docker.com/r/naechyun/leviosam2)
 ```
 singularity pull docker://naechyun/leviosam2:latest
 ```
