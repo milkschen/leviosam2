@@ -33,7 +33,7 @@ singularity pull docker://naechyun/leviosam2:v0.1.0
 
 Make sure the following prerequisite libraries are installed on your system. 
 
-- [htslib v1.10+](https://github.com/samtools/htslib)
+- [htslib v1.11+](https://github.com/samtools/htslib)
 - [sdsl-lite v2.1.1+](https://github.com/simongog/sdsl-lite/)
 
 Both libraries are available through coda:
