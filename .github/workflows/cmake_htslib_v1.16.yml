@@ -1,4 +1,4 @@
-name: CMake
+name: CMake-htslib_v1.16
 
 on:
   push:
