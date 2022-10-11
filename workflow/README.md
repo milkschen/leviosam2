@@ -21,7 +21,9 @@ bash leviosam2.sh \
     -f grch38.fna \
     -b bt2/grch38 \
     -C chm13v2-grch38.clft \
-    -t 16
+    -t 16 \
+    -D defer_annotations.bed \ # optional
+    -R suppress_annotations.bed # optional
 ```
 
 BWA MEM example:
@@ -33,7 +35,9 @@ bash leviosam2.sh \
     -f grch38.fna \
     -b bwa/grch38.fna \
     -C chm13v2-grch38.clft \
-    -t 16
+    -t 16 \
+    -D defer_annotations.bed \ # optional
+    -R suppress_annotations.bed # optional
 ```
 
 ## Single-end workflows
@@ -54,7 +58,8 @@ bash leviosam2.sh \
     -o pacbio-lifted \
     -f grch38.fna \
     -C chm13v2-grch38.clft \
-    -t 16
+    -t 16 \
+    -R suppress_annotations.bed # optional
 ```
 
 Minimap2 example with Nanopore (ultra-long reads are not fully supported):
@@ -66,7 +71,8 @@ bash leviosam2.sh \
     -o ont-lifted \
     -f grch38.fna \
     -C chm13v2-grch38.clft \
-    -t 16
+    -t 16 \
+    -R suppress_annotations.bed # optional
 ```
 
 ## Output files
