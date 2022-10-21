@@ -1,7 +1,7 @@
 [![Docker](https://img.shields.io/docker/v/naechyun/leviosam2?label=Docker)](https://hub.docker.com/r/naechyun/leviosam2)
 [![Anaconda-Server Badge](https://anaconda.org/bioconda/leviosam2/badges/version.svg)](https://anaconda.org/bioconda/leviosam2)
 [![Anaconda-Server Badge](https://anaconda.org/bioconda/leviosam2/badges/downloads.svg)](https://anaconda.org/bioconda/leviosam2)
-![Cmake build](https://github.com/milkschen/leviosam2/actions/workflows/cmake.yml/badge.svg)
+![Cmake build](https://github.com/milkschen/leviosam2/actions/workflows/cmake_htslib_v1.16.yml/badge.svg)
 
 # LevioSAM2: Fast and accurate coordinate conversion between assemblies
 
@@ -24,18 +24,21 @@ LevioSAM2 lifts over alignments accurately and efficiently using a chain file.
 
 LevioSAM2 can be installed using:
 
-- [Conda](https://docs.conda.io/en/latest/)
+- [Conda](https://anaconda.org/bioconda/leviosam2)
 
 ```
-conda install -c conda-forge -c bioconda leviosam2
+# The following commands install leviosam2 in a new conda environment called `leviosam2`
+conda create -n leviosam2
+conda activate leviosam2
+conda install -c bioconda -c conda-forge leviosam2
 ```
 
-- [Docker](https://hub.docker.com/r/milkschen/leviosam2)
+- [Docker](https://hub.docker.com/r/naechyun/leviosam2)
 ```
 docker pull naechyun/leviosam2:latest
 ```
 
-- [Singularity](https://hub.docker.com/r/milkschen/leviosam2)
+- [Singularity](https://hub.docker.com/r/naechyun/leviosam2)
 ```
 singularity pull docker://naechyun/leviosam2:latest
 ```
@@ -97,4 +100,4 @@ See [this README](https://github.com/milkschen/leviosam2/blob/main/workflow/READ
 -  Nae-Chyun Chen, Luis Paulin, Fritz Sedlazeck, Sergey Koren, Adam Phillippy, Ben Langmead, Improved sequence mapping using a complete reference genome and lift-over, _bioRxiv_, 2022; https://www.biorxiv.org/content/10.1101/2022.04.27.489683
 - Taher Mun, Nae-Chyun Chen, Ben Langmead, LevioSAM: Fast lift-over of variant-aware reference alignments, _Bioinformatics_, 2021;, btab396, https://doi.org/10.1093/bioinformatics/btab396
 
-_Last update: 8/2/2022_
+_Last update: 9/16/2022_

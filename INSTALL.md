@@ -18,13 +18,13 @@ conda install -c conda-forge -c bioconda leviosam2
 You can obtain a Docker image of the latest version from Docker hub:
 
 ```
-docker pull naechyun/leviosam2:v0.1.0
+docker pull naechyun/leviosam2:latest
 ```
 
 ## Singularity
 
 ```
-singularity pull docker://naechyun/leviosam2:v0.1.0
+singularity pull docker://naechyun/leviosam2:latest
 ```
 
 ## CMake
@@ -33,7 +33,7 @@ singularity pull docker://naechyun/leviosam2:v0.1.0
 
 Make sure the following prerequisite libraries are installed on your system. 
 
-- [htslib v1.10+](https://github.com/samtools/htslib)
+- [htslib v1.11+ (tested up to v1.16)](https://github.com/samtools/htslib)
 - [sdsl-lite v2.1.1+](https://github.com/simongog/sdsl-lite/)
 
 Both libraries are available through coda:
@@ -82,4 +82,4 @@ We provide an end-to-end test and a set of unit tests for levioSAM.
 
 - The end-to-end test can be run with `python leviosam-test.py`. This test includes running levioSAM on several test files in `testdata`. We also use `picard` to test if the lifted SAM files are valid.
 
-- The unit test can be run `cd build; ctest` if you use cmake to build levioSAM; or `make gtest; cd testdata; ../gtest` if you use make to build levioSAM.
+- The unit test can be run `cd build; ctest` if you use cmake to build levioSAM; or `make gtest; cd testdata; ../gtest` if you use make to build levioSAM2.
