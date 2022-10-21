@@ -7,7 +7,7 @@
 
 LevioSAM2 lifts over alignments accurately and efficiently using a chain file.
 
-<img src="https://github.com/milkschen/leviosam2/blob/main/figures/logo_white.png" width="300">
+<img src="https://github.com/milkschen/leviosam2/blob/main/figures/levioSAM_S_bw.png" width="300">
 
 ## Features
 
