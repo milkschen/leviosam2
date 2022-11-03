@@ -109,6 +109,19 @@ int align_ksw2(
         // printf("%d%c", ez.cigar[i]>>4, "MID"[ez.cigar[i]&0xf]);
         chain::push_cigar(new_cigar, bam_cigar_oplen(ez.cigar[i]), bam_cigar_op(ez.cigar[i]), false);
     }
+    if (new_cigar.size() > 0) {
+        // If starts with INS, replace with SCLIP
+        if (bam_cigar_op(new_cigar[0]) == BAM_CINS){
+            auto len = bam_cigar_oplen(new_cigar[0]);
+            new_cigar[0] = bam_cigar_gen(len, BAM_CSOFT_CLIP);
+        }
+        // If ends with INS, replace with SCLIP
+        size_t last_idx = new_cigar.size() - 1;
+        if (bam_cigar_op(new_cigar[last_idx]) == BAM_CINS){
+            auto len = bam_cigar_oplen(new_cigar[last_idx]);
+            new_cigar[last_idx] = bam_cigar_gen(len, BAM_CSOFT_CLIP);
+        }
+    }
     // putchar('\n');
     new_score = ez.score;
     free(ez.cigar); free(ts); free(qs);
