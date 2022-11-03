@@ -12,7 +12,7 @@ on:
       - 'testdata/**'
   pull_request:
     branches:
-      - 'master'
+      - 'main'
     paths:
       - '.github/**'
       - 'src/**'
