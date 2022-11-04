@@ -78,12 +78,28 @@ bool Bed::add_interval(const std::string &line) {
 
 // Interval intersect query
 bool Bed::intersect(const std::string &contig, const size_t &pos1,
-                    const size_t &pos2) {
+                    const size_t &pos2, const float &isec_frac) {
     if (!is_valid) return false;
+    if (pos2 <= pos1) return false;
     if (intervals.find(contig) == intervals.end()) return false;
     std::vector<size_t> isec;
-    intervals[contig].overlap(pos1, pos2, isec);
-    return (isec.size() > 0);
+    bool ovlp_status = intervals[contig].overlap(pos1, pos2, isec);
+    if (!ovlp_status) return false;
+    // <=0 means any overlap is good
+    if (isec_frac <= 0) return (isec.size() > 0);
+
+    int max_overlap = 0;
+    for (auto& _o: isec) {
+        if (_o > max_overlap) max_overlap = _o;
+    }
+    if (isec_frac > 0 && isec_frac <= 1)
+        return (max_overlap >= (pos2 - pos1) * isec_frac);
+
+    if (isec_frac > 1) 
+        return (max_overlap >= isec_frac);
+
+    return false;
+    // return (isec.size() > 0);
 }
 
 // Point intersect query

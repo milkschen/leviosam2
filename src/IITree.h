@@ -89,15 +89,22 @@ public:
                 size_t i, i0 = z.x >> z.k << z.k, i1 = i0 + (1LL<<(z.k+1)) - 1;
                 if (i1 >= a.size()) i1 = a.size();
                 for (i = i0; i < i1 && a[i].st < en; ++i)
-                    if (st < a[i].en) // if overlap, append to out[]
-                        out.push_back(i);
+                    if (st < a[i].en) { // if overlap, append to out[]
+                        int _en = std::min(en, a[i].en);
+                        int _st = std::max(st, a[i].st);
+                        out.push_back(std::max(1, _en - _st));
+                    }
             } else if (z.w == 0) { // if left child not processed
                 size_t y = z.x - (1LL<<(z.k-1)); // the left child of z.x; NB: y may be out of range (i.e. y>=a.size())
                 stack[t++] = StackCell(z.k, z.x, 1); // re-add node z.x, but mark the left child having been processed
                 if (y >= a.size() || a[y].max > st) // push the left child if y is out of range or may overlap with the query
                     stack[t++] = StackCell(z.k - 1, y, 0);
             } else if (z.x < a.size() && a[z.x].st < en) { // need to push the right child
-                if (st < a[z.x].en) out.push_back(z.x); // test if z.x overlaps the query; if yes, append to out[]
+                if (st < a[z.x].en) {
+                    int _en = std::min(en, a[z.x].en);
+                    int _st = std::max(st, a[z.x].st);
+                    out.push_back(std::max(1, _en - _st)); // test if z.x overlaps the query; if yes, append to out[]
+                }
                 stack[t++] = StackCell(z.k - 1, z.x + (1LL<<(z.k-1)), 0); // push the right child
             }
         }
