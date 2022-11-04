@@ -9,37 +9,39 @@
  * Distributed under the MIT license
  * https://github.com/milkschen/leviosam2
  */
-#include <ctime>
-#include <getopt.h>
-#include <iostream>
-#include "leviosam_utils.hpp"
 #include "lift_bed.hpp"
-#include "version.hpp"
 
+#include <getopt.h>
+
+#include <ctime>
+#include <iostream>
+
+#include "leviosam_utils.hpp"
+#include "version.hpp"
 
 void print_lift_bed_help_msg() {
     std::cerr << "\nLift over a BED file\n";
     std::cerr << "Version: " << VERSION << "\n";
-    std::cerr << "Usage:   leviosam2 bed [options] -b <bed> -C <clft> -p <prefix>\n\n";
+    std::cerr << "Usage:   leviosam2 bed [options] -b <bed> -C <clft> -p "
+                 "<prefix>\n\n";
     std::cerr << "Inputs:  -b string   Path to the input BED.\n";
-    std::cerr << "         -C string   Path to an indexed ChainMap. See `leviosam2 index` for details.\n";
+    std::cerr << "         -C string   Path to an indexed ChainMap. See "
+                 "`leviosam2 index` for details.\n";
     std::cerr << "         -p string   Prefix to the output files.\n";
     std::cerr << "Options: -h          Print detailed usage.\n";
-    std::cerr << "         -G INT      Number of allowed gaps for an interval. [500]\n";
+    std::cerr << "         -G INT      Number of allowed gaps for an interval. "
+                 "[500]\n";
     std::cerr << "         -V INT      Verbose level [0].\n";
     std::cerr << "\n";
 }
-
 
 /* Lift a BED record
  *
  * Returns 1 if it's liftable; 0 if not.
  * The lifted record is updated in the `line` string variable by reference
  */
-int lift_bed_record(
-    chain::ChainMap& cmap,
-    std::string& line, const int& allowed_gaps
-) {
+int lift_bed_record(chain::ChainMap& cmap, std::string& line,
+                    const int& allowed_gaps) {
     std::vector<std::string> fields = LevioSamUtils::str_to_vector(line, "\t");
     std::string s = fields[0];
 
@@ -49,15 +51,17 @@ int lift_bed_record(
     // add it back after lift-over
     hts_pos_t p2 = std::stoi(fields[2]) - 1;
     hts_pos_t op2 = cmap.lift_pos(s, p2, allowed_gaps, false) + 1;
-    
+
     // Lift contig
     std::string t1 = cmap.lift_contig(s, p1);
     std::string t2 = cmap.lift_contig(s, p2);
-    if (op1 < 0 || op2 < 0 || (op2 - op1 <= 0) ||
-        t1 == "*" || t2 == "*" || (t1 != t2) ||
-        (op2 - op1 - p2 + p1 > allowed_gaps) // gap between (intvl(p1), intvl(p2)) is too large
+    if (op1 < 0 || op2 < 0 || (op2 - op1 <= 0) || t1 == "*" || t2 == "*" ||
+        (t1 != t2) ||
+        (op2 - op1 - p2 + p1 >
+         allowed_gaps)  // gap between (intvl(p1), intvl(p2)) is too large
     ) {
-        line += ("\t# " + t1 + ":" + std::to_string(op1) + "-" + t2 + ":" + std::to_string(op2) + "\n");
+        line += ("\t# " + t1 + ":" + std::to_string(op1) + "-" + t2 + ":" +
+                 std::to_string(op2) + "\n");
         return 0;
     } else {
         line = t1 + "\t" + std::to_string(op1) + "\t" + std::to_string(op2);
@@ -73,15 +77,12 @@ int lift_bed_record(
     return -1;
 }
 
-
-void lift_bed(lift_bed_opts &args) {
+void lift_bed(lift_bed_opts& args) {
     chain::ChainMap cmap = [&] {
         if (args.chainmap_fname != "") {
             std::cerr << "Loading levioSAM index...";
             std::ifstream in(args.chainmap_fname, std::ios::binary);
-            return chain::ChainMap(
-                in, args.verbose, args.allowed_gaps
-            );
+            return chain::ChainMap(in, args.verbose, args.allowed_gaps);
         } else {
             std::cerr << "[E::lift_bed] Failed to load chain index. Exit.\n";
             print_lift_bed_help_msg();
@@ -90,7 +91,7 @@ void lift_bed(lift_bed_opts &args) {
     }();
     std::ofstream out_f(args.outpre + ".bed");
     std::ofstream unmapped_f(args.outpre + "-unmapped.bed");
-    
+
     std::ifstream bed_f(args.bed_fname);
     int cnt = 0;
     if (bed_f.is_open()) {
@@ -104,7 +105,8 @@ void lift_bed(lift_bed_opts &args) {
             } else if (lift == 0) {
                 unmapped_f << line;
             } else {
-                std::cerr << "[E::lift_bed] Unexpected liftover outcome at record ";
+                std::cerr
+                    << "[E::lift_bed] Unexpected liftover outcome at record ";
                 std::cerr << cnt << "\n";
                 exit(1);
             }
@@ -113,22 +115,22 @@ void lift_bed(lift_bed_opts &args) {
     }
 }
 
-
 int lift_bed_run(int argc, char** argv) {
     double start_cputime = std::clock();
     auto start_walltime = std::chrono::system_clock::now();
     int c;
     lift_bed_opts args;
-    args.cmd = LevioSamUtils::make_cmd(argc,argv);
+    args.cmd = LevioSamUtils::make_cmd(argc, argv);
     static struct option long_options[] {
         {"bed_fname", required_argument, 0, 'b'},
-        {"chainmap_fname", required_argument, 0, 'C'},
-        {"allowed_gaps", required_argument, 0, 'G'},
-        {"output", required_argument, 0, 'p'},
-        {"verbose", required_argument, 0, 'V'},
+            {"chainmap_fname", required_argument, 0, 'C'},
+            {"allowed_gaps", required_argument, 0, 'G'},
+            {"output", required_argument, 0, 'p'},
+            {"verbose", required_argument, 0, 'V'},
     };
     int long_index = 0;
-    while((c = getopt_long(argc, argv, "h:b:C:G:p:V:", long_options, &long_index)) != -1) {
+    while ((c = getopt_long(argc, argv, "h:b:C:G:p:V:", long_options,
+                            &long_index)) != -1) {
         switch (c) {
             case 'h':
                 print_lift_bed_help_msg();
@@ -156,7 +158,8 @@ int lift_bed_run(int argc, char** argv) {
         exit(1);
     }
     if (args.chainmap_fname == "") {
-        std::cerr << "[E::lift_bed_run] Argument -C/--chainmap_fname is required\n";
+        std::cerr
+            << "[E::lift_bed_run] Argument -C/--chainmap_fname is required\n";
         print_lift_bed_help_msg();
         exit(1);
     }
@@ -166,12 +169,14 @@ int lift_bed_run(int argc, char** argv) {
     std::cerr << " - clft: " << args.chainmap_fname << "\n";
 
     lift_bed(args);
-    
-    double cpu_duration = (std::clock() - start_cputime) / (double)CLOCKS_PER_SEC;
-    std::chrono::duration<double> wall_duration = (std::chrono::system_clock::now() - start_walltime);
+
+    double cpu_duration =
+        (std::clock() - start_cputime) / (double)CLOCKS_PER_SEC;
+    std::chrono::duration<double> wall_duration =
+        (std::chrono::system_clock::now() - start_walltime);
     std::cerr << "\n";
-    std::cerr << "Finished in " << cpu_duration << " CPU seconds, or " << 
-                                   wall_duration.count() << " wall clock seconds\n";
+    std::cerr << "Finished in " << cpu_duration << " CPU seconds, or "
+              << wall_duration.count() << " wall clock seconds\n";
 
     return 0;
 }
