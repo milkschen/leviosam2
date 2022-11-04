@@ -234,6 +234,16 @@ target_link_libraries(chain_test gtest gtest_main)
 add_test(NAME chain_test COMMAND chain_test
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/testdata
 )
+    
+add_executable(bed_test src/bed_test.cpp)
+target_link_libraries(bed_test lvsam)
+target_link_libraries(bed_test ${HTS_LIB})
+target_link_libraries(bed_test ${SDSL_LIB})
+target_link_libraries(bed_test gtest gtest_main)
+
+add_test(NAME bed_test COMMAND bed_test
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/testdata
+)
 
 INSTALL(TARGETS leviosam2 DESTINATION bin)
 INSTALL(FILES src/leviosam.hpp DESTINATION include)
