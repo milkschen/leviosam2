@@ -307,38 +307,6 @@ TEST(HtslibTest, CigarOpType) {
 }
 
 
-TEST(BedTest, AddBedRecord) {
-    auto b = BedUtils::Bed();
-    b.add_interval("chr1	972	1052");
-    b.add_interval("chr1	1053	1085");
-    b.add_interval("chr1	1150	1198");
-    b.add_interval("chr1	1199	1262");
-    b.add_interval("chr2	340	498");
-    b.add_interval("chr2	599	1000");
-    int idx_contig_cnt = b.index();
-    int contig_cnt = 0;
-    // Index the interval trees for each contig
-    for (auto& itr: b.get_intervals()) {
-        contig_cnt += 1;
-    }
-    EXPECT_EQ(contig_cnt, 2);
-    EXPECT_EQ(contig_cnt, idx_contig_cnt);
-    EXPECT_EQ(b.intersect("chr1", 1000), 1);
-    EXPECT_EQ(b.intersect("chr1", 1052), 0);
-    EXPECT_EQ(b.intersect("chr2", 339), 0);
-    EXPECT_EQ(b.intersect("chr2", 340), 1);
-    EXPECT_EQ(b.intersect("chr2", 497), 1);
-    EXPECT_EQ(b.intersect("chr2", 498), 0);
-    EXPECT_EQ(b.intersect("chr2", 340), 1);
-    EXPECT_EQ(b.intersect("chr2", 340), 1);
-    EXPECT_EQ(b.intersect("chr2", 598), 0);
-    EXPECT_EQ(b.intersect("chr2", 599), 1);
-    EXPECT_EQ(b.intersect("chr2", 600), 1);
-    EXPECT_EQ(b.intersect("chr1", 1500), 0);
-    EXPECT_EQ(b.intersect("chr15", 1000), 0);
-}
-
-
 TEST(UtilsTest, StrToSet) {
     std::set<std::string> s = LevioSamUtils::str_to_set("a,b", ",");
     EXPECT_EQ(s.size(), 2);
