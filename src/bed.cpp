@@ -76,7 +76,13 @@ bool Bed::add_interval(const std::string &line) {
     return true;
 }
 
-// Interval intersect query
+/* Interval intersect query
+ * Args:
+ *   isec_frac:
+ *    - <0: return true if overlap >= 1bp
+ *    - 1>= `isec_frac` > 0: return true if overlap fraction >= `isec_frac`
+ *    - `isec_frac` > 1: return true if overlap size >= `isec_frac` (bp)
+*/
 bool Bed::intersect(const std::string &contig, const size_t &pos1,
                     const size_t &pos2, const float &isec_frac) {
     if (!is_valid) return false;
