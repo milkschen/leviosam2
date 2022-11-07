@@ -75,6 +75,8 @@ struct lift_opts {
     BedUtils::Bed bed_defer_dest;
     BedUtils::Bed bed_commit_source;
     BedUtils::Bed bed_commit_dest;
+    // 0: take any overlap, >1: base pairs, 1>=value>0: fraction
+    float bed_isec_threshold = 0;  
 };
 
 #define LIFT_R_L 0           // unpaired, liftable

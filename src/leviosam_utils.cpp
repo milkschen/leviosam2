@@ -21,7 +21,8 @@ void WriteDeferred::init(
     const std::vector<std::pair<std::string, float>>& split_rules,
     const std::string of, sam_hdr_t* ihdr, sam_hdr_t* ohdr,
     const BedUtils::Bed& b_defer_source, const BedUtils::Bed& b_defer_dest,
-    const BedUtils::Bed& b_commit_source, const BedUtils::Bed& b_commit_dest) {
+    const BedUtils::Bed& b_commit_source, const BedUtils::Bed& b_commit_dest,
+    const float& b_isec_th) {
     write_deferred = true;
     std::string rules_str("");
     for (auto& r : split_rules) {
@@ -44,6 +45,7 @@ void WriteDeferred::init(
     bed_defer_dest = b_defer_dest;
     bed_commit_source = b_commit_source;
     bed_commit_dest = b_commit_dest;
+    bed_isec_threshold = b_isec_th;
 
     std::string out_mode = (of == "sam") ? "w" : "wb";
     std::string out_fn = outpre + "-deferred." + of;

@@ -307,9 +307,8 @@ void lift_run(lift_opts args) {
         } else if (args.chain_fname != "") {
             std::cerr << "[I::lift_run] Building levioSAM index...";
             if (args.length_map.size() == 0) {
-                std::cerr
-                    << "[E::lift_run] No length map is found. Please set -F "
-                       "properly.\n";
+                std::cerr << "[E::lift_run] No length map is found. Please "
+                             "set -F properly.\n";
                 print_serialize_help_msg();
                 exit(1);
             }
@@ -389,7 +388,8 @@ void lift_run(lift_opts args) {
     if (args.split_rules.size() != 0) {
         wd.init(args.outpre, args.split_rules, args.out_format, hdr_orig, hdr,
                 args.bed_defer_source, args.bed_defer_dest,
-                args.bed_commit_source, args.bed_commit_dest);
+                args.bed_commit_source, args.bed_commit_dest,
+                args.bed_isec_threshold);
     }
 
     std::vector<std::thread> threads;
@@ -435,8 +435,8 @@ lift::LiftMap lift::lift_from_vcf(std::string fname, std::string sample,
 void print_serialize_help_msg() {
     std::cerr << "\n";
     std::cerr << "Build a levioSAM2 index of a chain file.\n";
-    std::cerr
-        << "Usage:   leviosam2 index -c <chain> -p <out_prefix> -F <fai>\n";
+    std::cerr << "Usage:   leviosam2 index -c <chain> -p <out_prefix> "
+                 "-F <fai>\n";
     std::cerr << "\n";
     std::cerr << "Inputs:  -c path   Path to the chain file to index.\n";
     std::cerr << "         -F path   Path to the FAI (FASTA index) file of the "
@@ -464,9 +464,8 @@ void print_lift_help_msg() {
     std::cerr << "         -G INT    Number of allowed CIGAR changes for one "
                  "alingment. [0]\n";
     std::cerr << "         -T INT    Chunk size for each thread. [256] \n";
-    std::cerr
-        << "                   Each thread queries <-T> reads, lifts, and "
-           "writes.\n";
+    std::cerr << "                   Each thread queries <-T> reads, lifts, "
+                 "and writes.\n";
     std::cerr << "                   Setting a higher <-T> uses slightly more "
                  "memory but might benefit thread scaling.\n";
     std::cerr << "\n";
@@ -480,9 +479,8 @@ void print_lift_help_msg() {
                  "commit (pre-liftover). [30]\n";
     std::cerr << "                       * aln_score     INT   Min AS:i "
                  "(alignment score) to commit (pre-liftover). [100]\n";
-    std::cerr
-        << "                       * isize         INT   Max TLEN/isize to "
-           "commit (post-liftover). [1000]\n";
+    std::cerr << "                       * isize         INT   Max TLEN/isize "
+                 "to commit (post-liftover). [1000]\n";
     std::cerr << "                       * hdist         INT   Max NM:i "
                  "(Hamming dist.) to commit (post-liftover). "
                  "`-m` and `-f` must be set. [5]\n";
@@ -490,9 +488,9 @@ void print_lift_help_msg() {
                  "clipped to commit (post-liftover). [0.95]\n";
     std::cerr << "           Example: `-S mapq:20 -S aln_score:20` commits "
                  "MQ>=20 and AS>=20 alignments.\n";
-    std::cerr
-        << "           -r string Path to a BED file (source coordinates). "
-           "Reads overlap with the regions are always committed. [none]\n";
+    std::cerr << "           -r string Path to a BED file (source "
+                 "coordinates). Reads overlap with the regions are always "
+                 "committed. [none]\n";
     std::cerr << "           -D string Path to a BED file (dest coordinates). "
                  "Reads overlap with the regions are always deferred. [none]\n";
     std::cerr << "\n";
@@ -500,8 +498,8 @@ void print_lift_help_msg() {
 
 void print_main_help_msg() {
     std::cerr << "\n";
-    std::cerr
-        << "Program: leviosam2 (lift over alignments using a chain file)\n";
+    std::cerr << "Program: leviosam2 (lift over alignments using a "
+                 "chain file)\n";
     std::cerr << "Version: " << VERSION << "\n";
     std::cerr << "Usage:   leviosam2 <command> [options]\n\n";
     std::cerr << "Commands: index       Build a levioSAM2 index of "
@@ -509,8 +507,8 @@ void print_main_help_msg() {
     std::cerr << "          lift        Lift alignments in SAM/BAM/CRAM "
                  "formats.\n";
     std::cerr << "          bed         Lift intervals in BED format.\n";
-    std::cerr
-        << "          collate     Collate lifted paired-end alignments.\n";
+    std::cerr << "          collate     Collate lifted paired-end "
+                 "alignments.\n";
     std::cerr << "          reconcile   Reconcile alignments.\n";
     std::cerr << "Options:  -h          Print detailed usage.\n";
     std::cerr << "          -V          Verbose level [0].\n";
@@ -539,17 +537,18 @@ int main(int argc, char **argv) {
     lift_opts args;
     args.cmd = LevioSamUtils::make_cmd(argc, argv);
     static struct option long_options[] {
-        {"md", no_argument, 0, 'm'}, {"sam", required_argument, 0, 'a'},
-            {"bed_defer_source", required_argument, 0, 'd'},
-            {"bed_defer_dest", required_argument, 0, 'D'},
+        {"sam", required_argument, 0, 'a'},
+            {"bed_isec_threshold", required_argument, 0, 'B'},
             {"chain", required_argument, 0, 'c'},
             {"chainmap", required_argument, 0, 'C'},
+            {"bed_defer_source", required_argument, 0, 'd'},
+            {"bed_defer_dest", required_argument, 0, 'D'},
             {"reference", required_argument, 0, 'f'},
             {"dest_fai", required_argument, 0, 'F'},
             {"haplotype", required_argument, 0, 'g'},
             {"allowed_cigar_changes", required_argument, 0, 'G'},
             {"leviosam", required_argument, 0, 'l'},
-            {"namemap", required_argument, 0, 'n'},
+            {"md", no_argument, 0, 'm'}, {"namemap", required_argument, 0, 'n'},
             {"out_format", required_argument, 0, 'O'},
             {"prefix", required_argument, 0, 'p'},
             {"bed_commit_source", required_argument, 0, 'r'},
@@ -564,7 +563,7 @@ int main(int argc, char **argv) {
     };
     int long_index = 0;
     while ((c = getopt_long(argc, argv,
-                            "hma:c:C:d:D:f:F:g:G:l:n:O:p:r:R:s:S:t:T:v:V:x:",
+                            "hma:B:c:C:d:D:f:F:g:G:l:n:O:p:r:R:s:S:t:T:v:V:x:",
                             long_options, &long_index)) != -1) {
         switch (c) {
             case 'h':
@@ -579,6 +578,8 @@ int main(int argc, char **argv) {
             case 'a':
                 args.sam_fname = optarg;
                 break;
+            case 'B':
+                args.bed_isec_threshold = std::stof(optarg);
             case 'c':
                 args.chain_fname = optarg;
                 break;
