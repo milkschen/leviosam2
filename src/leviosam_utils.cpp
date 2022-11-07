@@ -126,10 +126,12 @@ bool WriteDeferred::commit_aln_source(const bam1_t* const aln) {
     size_t pos_end = c->pos + rlen;
     // The commit regions need to be considered ahead of other rules,
     // i.e. a low MAPQ read in a commit region should be committed
-    if (bed_commit_source.intersect(rname, c->pos, pos_end)) {
+    if (bed_commit_source.intersect(rname, c->pos, pos_end,
+                                    bed_isec_threshold)) {
         return true;
     }
-    if (bed_defer_source.intersect(rname, c->pos, pos_end)) {
+    if (bed_defer_source.intersect(rname, c->pos, pos_end,
+                                   bed_isec_threshold)) {
         return false;
     }
     return false;
@@ -162,10 +164,10 @@ bool WriteDeferred::commit_aln_dest(const bam1_t* const aln) {
     std::string rname = hdr->target_name[c->tid];
     auto rlen = bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln));
     size_t pos_end = c->pos + rlen;
-    if (bed_defer_dest.intersect(rname, c->pos, pos_end)) {
+    if (bed_defer_dest.intersect(rname, c->pos, pos_end, bed_isec_threshold)) {
         return false;
     }
-    if (bed_commit_dest.intersect(rname, c->pos, pos_end)) {
+    if (bed_commit_dest.intersect(rname, c->pos, pos_end, bed_isec_threshold)) {
         return true;
     }
     if (split_modes.find("clipped_frac") != split_modes.end()) {
