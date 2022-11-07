@@ -202,43 +202,42 @@ void read_and_lift(T *lift_map, std::mutex *mutex_fread,
             // Skip re-alignment if `-x` is not set
             if (args.realign_yaml == "") continue;
             uint8_t *nm_ptr = bam_aux_get(aln_vec[i], "NM");
-            if (nm_ptr != NULL && !(aln_vec[i]->core.flag & BAM_FUNMAP)) {
-                // Skip if edit distance not greater than the threshold
-                if (bam_aux2i(nm_ptr) <= args.aln_opts.nm_threshold) continue;
-                std::string ref_seq =
-                    ref.substr(aln_vec[i]->core.pos,
-                               bam_cigar2rlen(aln_vec[i]->core.n_cigar,
-                                              bam_get_cigar(aln_vec[i])));
-                std::string q_seq = LevioSamUtils::get_read_as_is(aln_vec[i]);
-                std::vector<uint32_t> new_cigar;
-                // We perform global alignment for local sequences and
-                // thus an alignment with a high number of clipped bases
-                // might not re-align well
-                int new_score = 0;
-                if (Aln::align_ksw2(ref_seq.data(), q_seq.data(), args.aln_opts,
-                                    new_cigar, new_score) > 0) {
-                    LevioSamUtils::update_cigar(aln_vec[i], new_cigar);
-                    // Redo fillmd after re-align
-                    bam_fillmd1(aln_vec[i], ref.data(), args.md_flag, 1);
-                    bam_aux_append(aln_vec[i], "LR", 'i', 4,
-                                   (uint8_t *)&new_score);
-                } else {
-                    // If re-alignment fails, set this read to unmapped
-                    bool first_seg = (aln_vec[i]->core.flag & BAM_FPAIRED)
-                                         ? (aln_vec[i]->core.flag & BAM_FREAD1)
-                                               ? true
-                                               : false
-                                         : true;
-                    LevioSamUtils::update_flag_unmap(aln_vec[i], first_seg);
-                    if (args.verbose >= VERBOSE_INFO) {
-                        std::cerr
-                            << "[I::read_and_lift] Zero-length new cigar for "
-                            << bam_get_qname(aln_vec[i])
-                            << "; flag = " << aln_vec[i]->core.flag
-                            << "; NM:i = " << bam_aux2i(nm_ptr)
-                            << "; l_qseq = " << aln_vec[i]->core.l_qseq
-                            << ". Set to unmapped.\n";
-                    }
+            // Skip is the NM tag is not found
+            if (nm_ptr == NULL) continue;
+            // Skip if unmapped
+            if (aln_vec[i]->core.flag & BAM_FUNMAP) continue;
+            // Skip if edit distance not greater than the threshold
+            if (bam_aux2i(nm_ptr) <= args.aln_opts.nm_threshold) continue;
+            std::string ref_seq =
+                ref.substr(aln_vec[i]->core.pos,
+                           bam_cigar2rlen(aln_vec[i]->core.n_cigar,
+                                          bam_get_cigar(aln_vec[i])));
+            std::string q_seq = LevioSamUtils::get_read_as_is(aln_vec[i]);
+            std::vector<uint32_t> new_cigar;
+            // We perform global alignment for local sequences and
+            // thus an alignment with a high number of clipped bases
+            // might not re-align well
+            int new_score = 0;
+            if (Aln::align_ksw2(ref_seq.data(), q_seq.data(), args.aln_opts,
+                                new_cigar, new_score) > 0) {
+                LevioSamUtils::update_cigar(aln_vec[i], new_cigar);
+                // Redo fillmd after re-align
+                bam_fillmd1(aln_vec[i], ref.data(), args.md_flag, 1);
+                bam_aux_append(aln_vec[i], "LR", 'i', 4, (uint8_t *)&new_score);
+            } else {
+                // If re-alignment fails, set this read to unmapped
+                bool first_seg =
+                    (aln_vec[i]->core.flag & BAM_FPAIRED)
+                        ? (aln_vec[i]->core.flag & BAM_FREAD1) ? true : false
+                        : true;
+                LevioSamUtils::update_flag_unmap(aln_vec[i], first_seg);
+                if (args.verbose >= VERBOSE_INFO) {
+                    std::cerr << "[I::read_and_lift] Zero-length new cigar for "
+                              << bam_get_qname(aln_vec[i])
+                              << "; flag = " << aln_vec[i]->core.flag
+                              << "; NM:i = " << bam_aux2i(nm_ptr)
+                              << "; l_qseq = " << aln_vec[i]->core.l_qseq
+                              << ". Set to unmapped.\n";
                 }
             }
         }
@@ -255,7 +254,7 @@ void read_and_lift(T *lift_map, std::mutex *mutex_fread,
                 }
             }
 
-            // If force-commit, only write the original alignment to
+            // If suppress, only write the original alignment to
             // `unliftable` If defer, write to both `unliftable` and `defer`
             if (wd->commit_aln_dest(aln_vec[i]) == false) {
                 std::lock_guard<std::mutex> g_deferred(wd->mutex_fwrite);
