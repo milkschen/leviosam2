@@ -493,6 +493,12 @@ void print_lift_help_msg() {
                  "committed. [none]\n";
     std::cerr << "           -D string Path to a BED file (dest coordinates). "
                  "Reads overlap with the regions are always deferred. [none]\n";
+    std::cerr << "           -B float  Threshold for BED record intersection. "
+                 "[0]\n"
+                 "                     If <= 0: consider any overlap (>0 bp)\n"
+                 "                     If > 1: consider >`-B`-bp overlap\n"
+                 "                     If 1>=`-B`>0: consider overlap with a "
+                 "fraction of >`-B` of the alignment.\n";
     std::cerr << "\n";
 }
 
