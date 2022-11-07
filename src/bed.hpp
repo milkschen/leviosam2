@@ -32,7 +32,7 @@ class Bed {
     int index();
     bool add_interval(const std::string &line);
     bool intersect(const std::string &contig, const size_t &pos1,
-                   const size_t &pos2, const float &isec_frac = 0);
+                   const size_t &pos2, const float &isec_threshold = 0);
     bool intersect(const std::string &contig, const size_t &pos);
     BedMap get_intervals();
     std::string get_fn();
