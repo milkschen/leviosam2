@@ -20,6 +20,7 @@
 #include <fstream>
 #include <iostream>
 #include <numeric>
+#include <random> 
 #include <regex>
 
 #include "leviosam_utils.hpp"
@@ -94,7 +95,8 @@ int select_best_aln(const std::vector<bool>& pair_indicators,
     for (int i = 0; i < vec_size; i++) {
         ranks.push_back(std::get<3>(zipped[i]));
     }
-    std::random_shuffle(ranks.begin(), ranks.begin() + num_tied_best, myrandom);
+    std::shuffle(ranks.begin(), ranks.begin() + num_tied_best,
+                 std::default_random_engine(0));
 
     return ranks[0];
 }
