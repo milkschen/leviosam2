@@ -79,6 +79,7 @@ function usage {
     echo "    -m INT      ISIZE cutoff for the defer rule []"
     echo "    -p FLOAT    Fraction-of-clipped-bases cutoff for the defer rule []"
     echo "    -D path     Path to the force-defer annotation []"
+    echo "    -B float    Bed intersect threshold. See 'leviosam2 lift -h' for details. [0]"
     echo "  Aligner:"
     echo "    -a string   Aligner to use (bowtie2|bwamem|bwamem2|minimap2|winnowmap2) [bowtie2]"
     echo "    -b string   Prefix to the aligner index"
@@ -89,7 +90,7 @@ function usage {
     exit 0
 }
 
-while getopts hKMSa:A:b:C:D:f:H:g:i:l:L:m:o:p:q:r:R:t:T:x: flag
+while getopts hKMSa:A:b:B:C:D:f:H:g:i:l:L:m:o:p:q:r:R:t:T:x: flag
 do
     case "${flag}" in
         h) usage;;
@@ -99,6 +100,7 @@ do
         a) ALN=${OPTARG};;
         A) ALN_SCORE=" -S aln_score:${OPTARG}";;
         b) ALN_IDX=${OPTARG};;
+        B) BED_ISEC_TH=" -B ${OPTARG}";;
         C) CLFT=${OPTARG};;
         D) DEFER_DEST_BED=" -D ${OPTARG}";;
         f) REF=${OPTARG};;
@@ -153,7 +155,7 @@ set -xp
 # Lifting over using leviosam2
 if [ ! -s ${PFX}-committed.bam ]; then
     ${MT} ${LEVIOSAM} lift -C ${CLFT} -a ${INPUT} -t ${THR} -p ${PFX} -O bam \
-    ${MAPQ} ${ISIZE} ${ALN_SCORE} ${FRAC_CLIPPED} ${HDIST} \
+    ${MAPQ} ${ISIZE} ${ALN_SCORE} ${FRAC_CLIPPED} ${HDIST} ${BED_ISEC_TH}\
     -G ${ALLOWED_GAPS} \
     ${REALN_CONFIG} \
     -m -f ${REF} ${DEFER_DEST_BED} ${COMMIT_SOURCE_BED}
