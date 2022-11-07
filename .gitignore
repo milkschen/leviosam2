@@ -4,3 +4,6 @@ leviosam
 *.swp
 gtest
 test_*.*am
+docker/*
+v*/
+figures/*
