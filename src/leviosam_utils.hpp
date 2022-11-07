@@ -29,6 +29,7 @@
 #define SPLIT_MAX_CLIPPED_FRAC 0.95
 #define SPLIT_MIN_AS 100
 #define SPLIT_MAX_NM 5
+#define BED_ISEC_TH 0
 
 const int8_t seq_comp_table[16] = {0, 8, 4, 12, 2, 10, 6, 14,
                                    1, 9, 5, 13, 3, 11, 7, 15};
@@ -87,7 +88,8 @@ class WriteDeferred {
               const BedUtils::Bed& b_defer_source,
               const BedUtils::Bed& b_defer_dest,
               const BedUtils::Bed& b_commit_source,
-              const BedUtils::Bed& b_commit_dest);
+              const BedUtils::Bed& b_commit_dest,
+              const float& b_isec_th);
 
     void print_info();
     void write_deferred_bam(bam1_t* aln, sam_hdr_t* hdr);
@@ -111,6 +113,7 @@ class WriteDeferred {
     float max_clipped_frac = SPLIT_MAX_CLIPPED_FRAC;
     BedUtils::Bed bed_defer_source, bed_defer_dest, bed_commit_source,
         bed_commit_dest;
+    float bed_isec_threshold = BED_ISEC_TH;
 };
 
 void update_cigar(bam1_t* aln, std::vector<uint32_t>& new_cigar);

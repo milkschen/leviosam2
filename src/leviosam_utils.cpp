@@ -21,7 +21,8 @@ void WriteDeferred::init(
     const std::vector<std::pair<std::string, float>>& split_rules,
     const std::string of, sam_hdr_t* ihdr, sam_hdr_t* ohdr,
     const BedUtils::Bed& b_defer_source, const BedUtils::Bed& b_defer_dest,
-    const BedUtils::Bed& b_commit_source, const BedUtils::Bed& b_commit_dest) {
+    const BedUtils::Bed& b_commit_source, const BedUtils::Bed& b_commit_dest,
+    const float& b_isec_th) {
     write_deferred = true;
     std::string rules_str("");
     for (auto& r : split_rules) {
@@ -44,6 +45,7 @@ void WriteDeferred::init(
     bed_defer_dest = b_defer_dest;
     bed_commit_source = b_commit_source;
     bed_commit_dest = b_commit_dest;
+    bed_isec_threshold = b_isec_th;
 
     std::string out_mode = (of == "sam") ? "w" : "wb";
     std::string out_fn = outpre + "-deferred." + of;
@@ -124,10 +126,12 @@ bool WriteDeferred::commit_aln_source(const bam1_t* const aln) {
     size_t pos_end = c->pos + rlen;
     // The commit regions need to be considered ahead of other rules,
     // i.e. a low MAPQ read in a commit region should be committed
-    if (bed_commit_source.intersect(rname, c->pos, pos_end)) {
+    if (bed_commit_source.intersect(rname, c->pos, pos_end,
+                                    bed_isec_threshold)) {
         return true;
     }
-    if (bed_defer_source.intersect(rname, c->pos, pos_end)) {
+    if (bed_defer_source.intersect(rname, c->pos, pos_end,
+                                   bed_isec_threshold)) {
         return false;
     }
     return false;
@@ -160,10 +164,10 @@ bool WriteDeferred::commit_aln_dest(const bam1_t* const aln) {
     std::string rname = hdr->target_name[c->tid];
     auto rlen = bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln));
     size_t pos_end = c->pos + rlen;
-    if (bed_defer_dest.intersect(rname, c->pos, pos_end)) {
+    if (bed_defer_dest.intersect(rname, c->pos, pos_end, bed_isec_threshold)) {
         return false;
     }
-    if (bed_commit_dest.intersect(rname, c->pos, pos_end)) {
+    if (bed_commit_dest.intersect(rname, c->pos, pos_end, bed_isec_threshold)) {
         return true;
     }
     if (split_modes.find("clipped_frac") != split_modes.end()) {

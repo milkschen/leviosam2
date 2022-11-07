@@ -14,6 +14,7 @@
 #define RECONCILE_H__
 #include <htslib/sam.h>
 
+#include <string>
 #include <tuple>
 #include <vector>
 

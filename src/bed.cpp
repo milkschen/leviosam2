@@ -33,7 +33,6 @@ void Bed::init(const std::string &fn) {
         std::string line;
         while (std::getline(bed_f, line)) {
             cnt += 1;
-            // std::cerr << line << "\n";
             if (add_interval(line) == false) {
                 std::cerr << "[E::Bed] Failed to update BED record " << line
                           << "\n";
@@ -46,9 +45,10 @@ void Bed::init(const std::string &fn) {
               << " contigs) from " << fn << "\n";
 }
 
+/* Index the interval trees for each contig and returns the number of contigs
+ */
 int Bed::index() {
     int contig_cnt = 0;
-    // Index the interval trees for each contig
     for (auto &itr : intervals) {
         itr.second.index();
         contig_cnt += 1;
@@ -76,14 +76,36 @@ bool Bed::add_interval(const std::string &line) {
     return true;
 }
 
-// Interval intersect query
+/* Interval intersect query
+ * Args:
+ *   isec_threshold:
+ *    - <0: return true if overlap >= 1bp
+ *    - 1>= `isec_threshold` > 0: return true if overlap fraction >= `isec_threshold`
+ *    - `isec_threshold` > 1: return true if overlap size >= `isec_threshold` (bp)
+*/
 bool Bed::intersect(const std::string &contig, const size_t &pos1,
-                    const size_t &pos2) {
+                    const size_t &pos2, const float &isec_threshold) {
     if (!is_valid) return false;
+    if (pos2 <= pos1) return false;
     if (intervals.find(contig) == intervals.end()) return false;
     std::vector<size_t> isec;
-    intervals[contig].overlap(pos1, pos2, isec);
-    return (isec.size() > 0);
+    bool ovlp_status = intervals[contig].overlap(pos1, pos2, isec);
+    if (!ovlp_status) return false;
+    // <=0 means any overlap is good
+    if (isec_threshold <= 0) return (isec.size() > 0);
+
+    int max_overlap = 0;
+    for (auto& _o: isec) {
+        if (_o > max_overlap) max_overlap = _o;
+    }
+    if (isec_threshold > 0 && isec_threshold <= 1)
+        return (max_overlap >= (pos2 - pos1) * isec_threshold);
+
+    if (isec_threshold > 1) 
+        return (max_overlap >= isec_threshold);
+
+    return false;
+    // return (isec.size() > 0);
 }
 
 // Point intersect query

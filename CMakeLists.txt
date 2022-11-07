@@ -213,7 +213,7 @@ add_subdirectory(${CMAKE_CURRENT_BINARY_DIR}/googletest-src
                  ${CMAKE_CURRENT_BINARY_DIR}/googletest-build
                  EXCLUDE_FROM_ALL)
 
-
+# leviosam_test
 add_executable(leviosam_test src/leviosam_test.cpp)
 target_link_libraries(leviosam_test lvsam)
 target_link_libraries(leviosam_test ${HTS_LIB})
@@ -224,7 +224,7 @@ add_test(NAME leviosam_test COMMAND leviosam_test
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/testdata
 )
 
-
+# chain_test
 add_executable(chain_test src/chain_test.cpp)
 target_link_libraries(chain_test lvsam)
 target_link_libraries(chain_test ${HTS_LIB})
@@ -232,6 +232,28 @@ target_link_libraries(chain_test ${SDSL_LIB})
 target_link_libraries(chain_test gtest gtest_main)
 
 add_test(NAME chain_test COMMAND chain_test
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/testdata
+)
+
+# bed_test
+add_executable(bed_test src/bed_test.cpp)
+target_link_libraries(bed_test lvsam)
+target_link_libraries(bed_test ${HTS_LIB})
+target_link_libraries(bed_test ${SDSL_LIB})
+target_link_libraries(bed_test gtest gtest_main)
+
+add_test(NAME bed_test COMMAND bed_test
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/testdata
+)
+
+# reconcile_test
+add_executable(reconcile_test src/reconcile_test.cpp)
+target_link_libraries(reconcile_test lvsam)
+target_link_libraries(reconcile_test ${HTS_LIB})
+target_link_libraries(reconcile_test ${SDSL_LIB})
+target_link_libraries(reconcile_test gtest gtest_main)
+
+add_test(NAME reconcile_test COMMAND reconcile_test
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/testdata
 )
 
