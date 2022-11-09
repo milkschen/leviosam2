@@ -263,6 +263,7 @@ else
         ${MT} samtools merge ${PFX}-paired-committed.bam ${PFX}-paired-deferred-reconciled.bam | \
         ${MT} samtools sort -@ ${THR} -o ${PFX}-final.bam
     fi
+    samtools index ${PFX}-final.bam
 
     # Clean tmp files
     if (( ${KEEP_TMP} < 1 )); then
