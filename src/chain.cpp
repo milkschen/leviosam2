@@ -188,14 +188,16 @@ bool ChainMap::interval_map_sanity_check() {
         std::vector<chain::Interval> v = interval_map[itr.first];
         for (int i = 0; i < v.size() - 1; i++) {
             if (v[i].source_end > v[i + 1].source_start) {
-                std::cerr << "Error: " << itr.first << "\n";
+                std::cerr << "[E::chain::interval_map_sanity_check]  "
+                          << itr.first << "\n";
                 v[i].debug_print_interval();
                 v[i + 1].debug_print_interval();
                 return false;
             }
         }
     }
-    std::cerr << "Interval_map sanity check: passed (no overlaps)\n";
+    std::cerr << "[I::chain::interval_map_sanity_check] Interval_map sanity "
+                 "check: passed (no overlaps)\n";
     return true;
 }
 
@@ -267,7 +269,9 @@ void ChainMap::parse_chain_line(std::string line, std::string &source,
     try {
         if (vec[0] == "chain") {
             if (vec.size() != 13) {
-                std::cerr << "Error during parsing chain" << line << "\n";
+                std::cerr
+                    << "[E::chain::parse_chain_line] Error during parsing chain"
+                    << line << "\n";
                 std::cerr << "Invalid chain header\n";
                 exit(1);
             }
@@ -331,7 +335,9 @@ void ChainMap::parse_chain_line(std::string line, std::string &source,
             strand = true;
         }
     } catch (...) {
-        std::cerr << "Error during parsing chain:\n" << line << "\n";
+        std::cerr
+            << "[E::chain::parse_chain_line] Error during parsing chain:\n"
+            << line << "\n";
         exit(1);
     }
 
@@ -827,7 +833,8 @@ bool ChainMap::lift_segment(bam1_t *aln, sam_hdr_t *hdr_source,
         if ((c->flag & BAM_FMUNMAP) || (c->mtid < 0)) return false;
     }
     if (verbose >= VERBOSE_DEBUG) {
-        std::cerr << "\n[D::lift_segment] " << bam_get_qname(aln) << "\n";
+        std::cerr << "\n[D::chain::lift_segment] " << bam_get_qname(aln)
+                  << "\n";
     }
 
     int start_sidx = 0;
@@ -1122,7 +1129,7 @@ size_t ChainMap::serialize(std::ofstream &out) {
     size_t size = 0;
     // interval_map
     size_t nelems = interval_map.size();
-    std::cerr << "serializing interval maps...\n";
+    std::cerr << "[I::chain::serialize] Serializing interval maps...\n";
     size += sizeof(nelems);
     out.write(reinterpret_cast<char *>(&nelems), sizeof(nelems));
     for (auto &x : interval_map) {
@@ -1138,7 +1145,7 @@ size_t ChainMap::serialize(std::ofstream &out) {
         }
     }
     // start_map
-    std::cerr << "serializing start_maps...\n";
+    std::cerr << "[I::chain::serialize] Serializing start_maps...\n";
     nelems = start_map.size();
     out.write(reinterpret_cast<char *>(&nelems), sizeof(nelems));
     size += sizeof(nelems);
@@ -1150,7 +1157,7 @@ size_t ChainMap::serialize(std::ofstream &out) {
         size += x.second.serialize(out);
     }
     // end_map
-    std::cerr << "serializing end_maps...\n";
+    std::cerr << "[I::chain::serialize] Serializing end_maps...\n";
     nelems = end_map.size();
     out.write(reinterpret_cast<char *>(&nelems), sizeof(nelems));
     size += sizeof(nelems);
@@ -1163,7 +1170,7 @@ size_t ChainMap::serialize(std::ofstream &out) {
     }
 
     // length_map
-    std::cerr << "serializing length_maps...\n";
+    std::cerr << "[I::chain::serialize] Serializing length_maps...\n";
     size += LevioSamUtils::serialize_lengthmap(out, length_map);
     return size;
 }
@@ -1171,7 +1178,7 @@ size_t ChainMap::serialize(std::ofstream &out) {
 // loads from stream
 void ChainMap::load(std::ifstream &in) {
     size_t map_size;
-    if (verbose > 2) std::cerr << "Reading interval map...\n";
+    if (verbose > 2) std::cerr << "[I::chain::load] Reading interval map...\n";
     in.read(reinterpret_cast<char *>(&map_size), sizeof(map_size));
     for (auto i = 0; i < map_size; ++i) {
         size_t str_size;
@@ -1185,7 +1192,7 @@ void ChainMap::load(std::ifstream &in) {
             interval_map[key].push_back(Interval(in));
         }
     }
-    if (verbose > 2) std::cerr << "Reading start BV...\n";
+    if (verbose > 2) std::cerr << "[I::chain::load] Reading start BV...\n";
     in.read(reinterpret_cast<char *>(&map_size), sizeof(map_size));
     for (auto i = 0; i < map_size; ++i) {
         size_t str_size;
@@ -1197,7 +1204,7 @@ void ChainMap::load(std::ifstream &in) {
         sdv.load(in);
         start_map[key] = sdv;
     }
-    if (verbose > 2) std::cerr << "Reading end BV...\n";
+    if (verbose > 2) std::cerr << "[I::chain::load] Reading end BV...\n";
     in.read(reinterpret_cast<char *>(&map_size), sizeof(map_size));
     for (auto i = 0; i < map_size; ++i) {
         size_t str_size;
@@ -1209,9 +1216,9 @@ void ChainMap::load(std::ifstream &in) {
         sdv.load(in);
         end_map[key] = sdv;
     }
-    if (verbose > 2) std::cerr << "Reading length map...\n";
+    if (verbose > 2) std::cerr << "[I::chain::load] Reading length map...\n";
     length_map = LevioSamUtils::load_lengthmap(in);
-    if (verbose > 2) std::cerr << "Initialize BVs...\n";
+    if (verbose > 2) std::cerr << "[I::chain::load] Initialize BVs...\n";
     init_rs();
 }
 

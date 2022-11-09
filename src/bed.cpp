@@ -40,7 +40,10 @@ void Bed::init(const std::string &fn) {
         }
         bed_f.close();
     }
-    auto contig_cnt = index();
+    if (cnt == 0) {
+        std::cerr << "[W::Bed] Zero BED records are read from " << fn << "\n";
+    }
+    int contig_cnt = index();
     std::cerr << "[I::Bed] Read " << cnt << " BED records (" << contig_cnt
               << " contigs) from " << fn << "\n";
 }

@@ -342,12 +342,19 @@ void lift_run(lift_opts args) {
     } else if (args.lift_fname != "") {
         args.length_map = lift_map.get_lengthmap();
     }
-
+    if (args.length_map.size() == 0) {
+        std::cerr << "[E::lift_run] Length map is empty\n";
+        exit(1);
+    }
     std::cerr << "done\n";
 
     samFile *sam_fp = (args.sam_fname == "")
                           ? sam_open("-", "r")
                           : sam_open(args.sam_fname.data(), "r");
+    if (!sam_fp) {
+        std::cerr << "[E::lift_run] Invalid alignment input\n";
+        exit(1);
+    }
     std::string out_mode = (args.out_format == "sam") ? "w" : "wb";
     // if split, append "-committed" after `outpre`
     std::string out_sam_fname =
@@ -357,8 +364,16 @@ void lift_run(lift_opts args) {
     samFile *out_sam_fp = (args.outpre == "-" || args.outpre == "")
                               ? sam_open("-", out_mode.data())
                               : sam_open(out_sam_fname.data(), out_mode.data());
+    if (!out_sam_fp) {
+        std::cerr << "[E::lift_run] Invalid alignment output\n";
+        exit(1);
+    }
 
     sam_hdr_t *hdr_orig = sam_hdr_read(sam_fp);
+    if (!hdr_orig) {
+        std::cerr << "[E::lift_run] Invalid input header\n";
+        exit(1);
+    }
     sam_hdr_t *hdr = LevioSamUtils::lengthmap_to_hdr(args.length_map, hdr_orig);
     sam_hdr_add_pg(hdr, "leviosam2", "VN", VERSION, "CL", args.cmd.data(),
                    NULL);
@@ -368,8 +383,8 @@ void lift_run(lift_opts args) {
 
     if (args.md_flag) {
         if (args.ref_name == "") {
-            std::cerr
-                << "[E::lift_run] -m/--md -f <fasta> to be provided as well\n";
+            std::cerr << "[E::lift_run] -m/--md -f <fasta> to be "
+                         "provided as well\n";
             exit(1);
         }
     }
