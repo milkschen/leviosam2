@@ -318,8 +318,9 @@ void WriteDeferred::write_deferred_bam(bam1_t* aln, sam_hdr_t* hdr) {
     }
     auto w_ret = sam_write1(out_fp, hdr, aln);
     if (w_ret < 0) {
-        std::cerr << "[Error] Failed to write record " << bam_get_qname(aln)
-                  << "\n";
+        std::cerr
+            << "[E::WriteDeferred::write_deferred_bam] Failed to write record "
+            << bam_get_qname(aln) << "\n";
         exit(1);
     }
 }
@@ -327,8 +328,9 @@ void WriteDeferred::write_deferred_bam(bam1_t* aln, sam_hdr_t* hdr) {
 void WriteDeferred::write_deferred_bam_orig(bam1_t* aln) {
     auto w_ret = sam_write1(out_fp_orig, hdr_orig, aln);
     if (w_ret < 0) {
-        std::cerr << "[Error] Failed to write record " << bam_get_qname(aln)
-                  << "\n";
+        std::cerr << "[E::WriteDeferred::write_deferred_bam_orig] Failed to "
+                     "write record "
+                  << bam_get_qname(aln) << "\n";
         exit(1);
     }
 }
@@ -447,7 +449,8 @@ sam_hdr_t* lengthmap_to_hdr(std::vector<std::pair<std::string, int32_t>> lm,
         std::string length = std::to_string(it.second);
         if (sam_hdr_add_line(hdr, "SQ", "SN", name.c_str(), "LN",
                              length.c_str(), NULL) < 0) {
-            std::cerr << "Warning: error during updating BAM header\n";
+            std::cerr << "[W::utils::lengthmap_to_hdr] error during "
+                         "updating BAM header\n";
             std::cerr << name << " " << length << "\n";
         }
     }
@@ -467,7 +470,8 @@ sam_hdr_t* fai_to_hdr(std::string fai_fn, const sam_hdr_t* const hdr_orig) {
         length = split_line[1];
         if (sam_hdr_add_line(hdr, "SQ", "SN", name.c_str(), "LN",
                              length.c_str(), NULL) < 0) {
-            std::cerr << "Warning: error during updating BAM header\n";
+            std::cerr << "[W::utils::fai_to_hdr] error during "
+                         "updating BAM header\n";
             std::cerr << name << " " << length << "\n";
         }
     }
