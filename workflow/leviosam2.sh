@@ -205,7 +205,7 @@ if (( ${SINGLE_END} == 1 )); then
 
     # Merge and sort
     if [ ! -s ${PFX}-final.bam ]; then
-        ${MT} samtools cat ${PFX}-committed.bam ${PFX}-realigned.bam | \
+        ${MT} samtools merge ${PFX}-committed.bam ${PFX}-realigned.bam | \
         ${MT} samtools sort -@ ${THR} -o ${PFX}-final.bam
     fi
 
@@ -260,7 +260,7 @@ else
 
     # Merge, sort, and clean
     if [ ! -s ${PFX}-final.bam ]; then
-        ${MT} samtools cat ${PFX}-paired-committed.bam ${PFX}-paired-deferred-reconciled.bam | \
+        ${MT} samtools merge ${PFX}-paired-committed.bam ${PFX}-paired-deferred-reconciled.bam | \
         ${MT} samtools sort -@ ${THR} -o ${PFX}-final.bam
     fi
 
