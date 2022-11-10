@@ -371,7 +371,6 @@ else
             ${PFX}-committed-sorted.bam ${PFX}-paired-deferred-reconciled-sorted.bam
         ${MT} samtools index ${PFX}-final.bam
     fi
-    samtools index ${PFX}-final.bam
 
     # Clean tmp files
     if [[ ${KEEP_TMP} < 1 ]]; then
