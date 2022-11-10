@@ -47,7 +47,7 @@ ALN=bowtie2
 # Default parameters for BWA-MEM
 # ALN=bwamem # `-q 30 -A 100 -H 5 -m 1000 -p 0.95`
 
-function usage {
+function print_usage_and_exit {
     echo "Run full levioSAM2 pipeline for a SAM/BAM file"
     echo "Usage: $0 [-h] [options] -i <sam/bam> -o <prefix> -C <clft> -f <target.fasta>"
     echo "Author: Nae-Chyun Chen"
@@ -87,13 +87,13 @@ function usage {
     echo "    -S          Toggle to use single-end mode [off]"
     echo "    -r string   The read group (RG) string []"
     echo "    -R path     Path to the suppress annotation []"
-    exit 0
+    exit 1
 }
 
 while getopts hKMSa:A:b:B:C:D:f:H:g:i:l:L:m:o:p:q:r:R:t:T:x: flag
 do
     case "${flag}" in
-        h) usage;;
+        h) print_usage_and_exit;;
         K) KEEP_TMP=1;;
         M) MEASURE_TIME=1;;
         S) SINGLE_END=1;;
@@ -123,21 +123,15 @@ done
 
 if [[ ${INPUT} == "" ]]; then
     echo "Input is not set"
-    echo ""
-    usage
-    exit 1
+    print_usage_and_exit
 fi
 if [[ ${PFX} == "" ]]; then
     echo "Prefix is not set"
-    echo ""
-    usage
-    exit 1
+    print_usage_and_exit
 fi
 if [[ ${REF} == "" ]]; then
     echo "Targer reference is not set"
-    echo ""
-    usage
-    exit 1
+    print_usage_and_exit
 fi
 
 MT=""
@@ -150,12 +144,19 @@ if [[ ! ${ALN} =~ ^(bowtie2|bwamem|bwamem2|minimap2|winnowmap2)$ ]]; then
     exit 1
 fi
 
+if [[ ${ALN} =~ ^(minimap2|winnowmap2)$ ]]; then
+    if [[ ! ${LR_MODE} =~ ^(map-hifi|map-ont)$ ]]; then
+        echo "Invalid ${LR_MODE}. Accepted options: map-hifi, map-ont"
+        print_usage_and_exit
+    fi
+fi
+
 set -xp
 
 # Lifting over using leviosam2
 if [ ! -s ${PFX}-committed.bam ]; then
     ${MT} ${LEVIOSAM} lift -C ${CLFT} -a ${INPUT} -t ${THR} -p ${PFX} -O bam \
-    ${MAPQ} ${ISIZE} ${ALN_SCORE} ${FRAC_CLIPPED} ${HDIST} ${BED_ISEC_TH}\
+    ${MAPQ} ${ISIZE} ${ALN_SCORE} ${FRAC_CLIPPED} ${HDIST} ${BED_ISEC_TH} \
     -G ${ALLOWED_GAPS} \
     ${REALN_CONFIG} \
     -m -f ${REF} ${DEFER_DEST_BED} ${COMMIT_SOURCE_BED}
@@ -164,8 +165,7 @@ fi
 if (( ${SINGLE_END} == 1 )); then
     # Convert deferred reads to FASTQ
     if [ ! -s ${PFX}-deferred.fq.gz ]; then
-        ${MT} samtools fastq ${PFX}-deferred.bam | \
-        ${MT} bgzip > ${PFX}-deferred.fq.gz
+        ${MT} samtools fastq ${PFX}-deferred.bam | ${MT} bgzip > ${PFX}-deferred.fq.gz
     fi
 
     # Re-align deferred reads
@@ -192,21 +192,18 @@ if (( ${SINGLE_END} == 1 )); then
             if [[ ${ALN_RG} != "" ]]; then
                 ALN_RG="-R ${ALN_RG}"
             fi
-            if [[ ! ${LR_MODE} =~ ^(map-hifi|map-ont)$ ]]; then
-                usage
-            fi
             ${MT} ${ALN} -ax ${LR_MODE} --MD -t ${THR} ${ALN_RG} \
             ${REF} ${PFX}-deferred.fq.gz | \
             ${MT} samtools view -hbo ${PFX}-realigned.bam
         else
-            usage
+            print_usage_and_exit
         fi
     fi
 
     # Merge and sort
     if [ ! -s ${PFX}-final.bam ]; then
-        ${MT} samtools merge ${PFX}-committed.bam ${PFX}-realigned.bam | \
-        ${MT} samtools sort -@ ${THR} -o ${PFX}-final.bam
+        ${MT} samtools merge -@ ${THR} --write-index -o ${PFX}-final.bam \
+            ${PFX}-committed.bam ${PFX}-realigned.bam
     fi
 
     # Clean tmp files
@@ -260,10 +257,9 @@ else
 
     # Merge, sort, and clean
     if [ ! -s ${PFX}-final.bam ]; then
-        ${MT} samtools merge ${PFX}-paired-committed.bam ${PFX}-paired-deferred-reconciled.bam | \
-        ${MT} samtools sort -@ ${THR} -o ${PFX}-final.bam
+        ${MT} samtools merge -@ ${THR} --write-index -o ${PFX}-final.bam \
+            ${PFX}-paired-committed.bam ${PFX}-paired-deferred-reconciled.bam
     fi
-    samtools index ${PFX}-final.bam
 
     # Clean tmp files
     if (( ${KEEP_TMP} < 1 )); then
