@@ -222,7 +222,7 @@ else
     # Collate
     if [ ! -s ${PFX}-paired-deferred-R1.fq.gz ]; then
         ${MT} ${LEVIOSAM} collate \
-        -a ${PFX}-committed.bam -b ${PFX}-deferred.bam -p ${PFX}-paired
+        -a ${PFX}-committed-sorted.bam -b ${PFX}-deferred.bam -p ${PFX}-paired
     fi
 
     # Re-align deferred reads
