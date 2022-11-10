@@ -365,6 +365,12 @@ else
                 -o ${PFX}-paired-deferred-reconciled-sorted.bam
     fi
 
+    # if [ ! -s ${PFX}-paired-deferred-reconciled-sorted.bam ]; then
+    #     ${MT} samtools sort -@ ${THR} \
+    #         -o ${PFX}-paired-deferred-reconciled-sorted.bam \
+    #         ${PFX}-paired-deferred-reconciled.bam
+    # fi
+
     # Merge, sort, and clean
     if [ ! -s ${PFX}-final.bam ]; then
         ${MT} samtools merge -@ ${THR} --write-index -o ${PFX}-final.bam \
