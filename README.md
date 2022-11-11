@@ -11,7 +11,7 @@ LevioSAM2 lifts over alignments accurately and efficiently using a chain file.
 
 ## Features
 
-- Converting aligned short and long reads records (in SAM/BAM format) from one reference to another
+- Converting aligned short and long reads records (in SAM/BAM/CRAM format) from one reference to another
 - The following alignment features are updated during coversion:
     - Reference name (`RNAME`), position (`POS`), alignmant flag (`FLAG`), and CIGAR alignment string (`CIGAR`)
     - Mate read information (`RNEXT`, `PNEXT`, `TLEN`)
@@ -103,4 +103,4 @@ See [this README](https://github.com/milkschen/leviosam2/blob/main/workflow/READ
 
 _Logo credit: Ting-Wei Young_
 
-_Last update: 10/20/2022_
+_Last update: 11/8/2022_

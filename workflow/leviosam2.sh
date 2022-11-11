@@ -47,7 +47,7 @@ ALN=bowtie2
 # Default parameters for BWA-MEM
 # ALN=bwamem # `-q 30 -A 100 -H 5 -m 1000 -p 0.95`
 
-function usage {
+function print_usage_and_exit {
     echo "Run full levioSAM2 pipeline for a SAM/BAM file"
     echo "Usage: $0 [-h] [options] -i <sam/bam> -o <prefix> -C <clft> -f <target.fasta>"
     echo "Author: Nae-Chyun Chen"
@@ -87,13 +87,13 @@ function usage {
     echo "    -S          Toggle to use single-end mode [off]"
     echo "    -r string   The read group (RG) string []"
     echo "    -R path     Path to the suppress annotation []"
-    exit 0
+    exit 1
 }
 
 while getopts hKMSa:A:b:B:C:D:f:H:g:i:l:L:m:o:p:q:r:R:t:T:x: flag
 do
     case "${flag}" in
-        h) usage;;
+        h) print_usage_and_exit;;
         K) KEEP_TMP=1;;
         M) MEASURE_TIME=1;;
         S) SINGLE_END=1;;
@@ -123,21 +123,15 @@ done
 
 if [[ ${INPUT} == "" ]]; then
     echo "Input is not set"
-    echo ""
-    usage
-    exit 1
+    print_usage_and_exit
 fi
 if [[ ${PFX} == "" ]]; then
     echo "Prefix is not set"
-    echo ""
-    usage
-    exit 1
+    print_usage_and_exit
 fi
 if [[ ${REF} == "" ]]; then
     echo "Targer reference is not set"
-    echo ""
-    usage
-    exit 1
+    print_usage_and_exit
 fi
 
 MT=""
@@ -150,22 +144,35 @@ if [[ ! ${ALN} =~ ^(bowtie2|bwamem|bwamem2|minimap2|winnowmap2)$ ]]; then
     exit 1
 fi
 
+if [[ ${ALN} =~ ^(minimap2|winnowmap2)$ ]]; then
+    if [[ ! ${LR_MODE} =~ ^(map-hifi|map-ont)$ ]]; then
+        echo "Invalid ${LR_MODE}. Accepted options: map-hifi, map-ont"
+        print_usage_and_exit
+    fi
+fi
+
 set -xp
 
 # Lifting over using leviosam2
 if [ ! -s ${PFX}-committed.bam ]; then
     ${MT} ${LEVIOSAM} lift -C ${CLFT} -a ${INPUT} -t ${THR} -p ${PFX} -O bam \
-    ${MAPQ} ${ISIZE} ${ALN_SCORE} ${FRAC_CLIPPED} ${HDIST} ${BED_ISEC_TH}\
+    ${MAPQ} ${ISIZE} ${ALN_SCORE} ${FRAC_CLIPPED} ${HDIST} ${BED_ISEC_TH} \
     -G ${ALLOWED_GAPS} \
     ${REALN_CONFIG} \
     -m -f ${REF} ${DEFER_DEST_BED} ${COMMIT_SOURCE_BED}
+fi
+
+# Sort committed
+if [ ! -s ${PFX}-committed-sorted.bam ]; then
+    ${MT} samtools sort -@ ${THR} \
+        -o ${PFX}-committed-sorted.bam ${PFX}-committed.bam
 fi
 
 if (( ${SINGLE_END} == 1 )); then
     # Convert deferred reads to FASTQ
     if [ ! -s ${PFX}-deferred.fq.gz ]; then
         ${MT} samtools fastq ${PFX}-deferred.bam | \
-        ${MT} bgzip > ${PFX}-deferred.fq.gz
+            ${MT} bgzip > ${PFX}-deferred.fq.gz
     fi
 
     # Re-align deferred reads
@@ -173,51 +180,50 @@ if (( ${SINGLE_END} == 1 )); then
         if [[ ${ALN} == "bowtie2" ]]; then
             ${MT} bowtie2 ${ALN_RG} -p ${THR} -x ${ALN_IDX} \
             -U ${PFX}-deferred.fq.gz |\
-            ${MT} samtools view -hbo ${PFX}-realigned.bam
+            ${MT} samtools sort -o ${PFX}-realigned.bam
         elif [[ ${ALN} == "bwamem" ]]; then
             if [[ ${ALN_RG} != "" ]]; then
                 ALN_RG="-R ${ALN_RG}"
             fi
             ${MT} bwa mem -t ${THR} ${ALN_RG} ${ALN_IDX} \
             ${PFX}-deferred.fq.gz |\
-            ${MT} samtools view -hbo ${PFX}-realigned.bam
+            ${MT} samtools sort -o ${PFX}-realigned.bam
         elif [[ ${ALN} == "bwamem2" ]]; then
             if [[ ${ALN_RG} != "" ]]; then
                 ALN_RG="-R ${ALN_RG}"
             fi
             ${MT} bwa-mem2 mem -t ${THR} ${ALN_RG} ${ALN_IDX} \
             ${PFX}-deferred.fq.gz |\
-            ${MT} samtools view -hbo ${PFX}-realigned.bam
+            ${MT} samtools sort -o ${PFX}-realigned.bam
         elif [[ ${ALN} =~ ^(minimap2|winnowmap2)$ ]]; then
             if [[ ${ALN_RG} != "" ]]; then
                 ALN_RG="-R ${ALN_RG}"
             fi
-            if [[ ! ${LR_MODE} =~ ^(map-hifi|map-ont)$ ]]; then
-                usage
-            fi
             ${MT} ${ALN} -ax ${LR_MODE} --MD -t ${THR} ${ALN_RG} \
             ${REF} ${PFX}-deferred.fq.gz | \
-            ${MT} samtools view -hbo ${PFX}-realigned.bam
+            ${MT} samtools sort -o ${PFX}-realigned.bam
         else
-            usage
+            print_usage_and_exit
         fi
     fi
 
     # Merge and sort
     if [ ! -s ${PFX}-final.bam ]; then
-        ${MT} samtools merge ${PFX}-committed.bam ${PFX}-realigned.bam | \
-        ${MT} samtools sort -@ ${THR} -o ${PFX}-final.bam
+        ${MT} samtools merge -@ ${THR} --write-index -o ${PFX}-final.bam \
+            ${PFX}-committed-sorted.bam ${PFX}-realigned.bam
+        ${MT} samtools index ${PFX}-final.bam
     fi
 
     # Clean tmp files
     if (( ${KEEP_TMP} < 1 )); then
-        rm ${PFX}-committed.bam ${PFX}-deferred.bam ${PFX}-deferred.fq.gz
+        rm ${PFX}-committed.bam ${PFX}-committed-sorted.bam
+        rm ${PFX}-deferred.bam ${PFX}-deferred.fq.gz
     fi
 else
     # Collate
     if [ ! -s ${PFX}-paired-deferred-R1.fq.gz ]; then
         ${MT} ${LEVIOSAM} collate \
-        -a ${PFX}-committed.bam -b ${PFX}-deferred.bam -p ${PFX}-paired
+        -a ${PFX}-committed-sorted.bam -b ${PFX}-deferred.bam -p ${PFX}-paired
     fi
 
     # Re-align deferred reads
@@ -247,7 +253,8 @@ else
     fi
 
     # Reference flow-style merging
-    if [ ! -s ${PFX}-paired-deferred-reconciled.bam ]; then
+    # if [ ! -s ${PFX}-paired-deferred-reconciled.bam ]; then
+    if [ ! -s ${PFX}-paired-deferred-reconciled-sorted.bam ]; then
         ${MT} samtools sort -@ ${THR} -n \
             -o ${PFX}-paired-realigned-sorted_n.bam ${PFX}-paired-realigned.bam
         ${MT} samtools sort -@ ${THR} -n \
@@ -255,13 +262,15 @@ else
         ${MT} ${LEVIOSAM} reconcile \
             -s ${SOURCE_LABEL}:${PFX}-paired-deferred-sorted_n.bam \
             -s ${TARGET_LABEL}:${PFX}-paired-realigned-sorted_n.bam \
-            -m -o ${PFX}-paired-deferred-reconciled.bam
+            -m -o - | ${MT} samtools sort -@ ${THR} \
+                -o ${PFX}-paired-deferred-reconciled-sorted.bam
     fi
 
     # Merge, sort, and clean
     if [ ! -s ${PFX}-final.bam ]; then
-        ${MT} samtools merge ${PFX}-paired-committed.bam ${PFX}-paired-deferred-reconciled.bam | \
-        ${MT} samtools sort -@ ${THR} -o ${PFX}-final.bam
+        ${MT} samtools merge -@ ${THR} --write-index -o ${PFX}-final.bam \
+            ${PFX}-committed-sorted.bam ${PFX}-paired-deferred-reconciled-sorted.bam
+        ${MT} samtools index ${PFX}-final.bam
     fi
 
     # Clean tmp files
@@ -270,6 +279,7 @@ else
         rm ${PFX}-paired-realigned.bam ${PFX}-paired-realigned-sorted_n.bam
         rm ${PFX}-paired-deferred-reconciled.bam ${PFX}-paired-committed.bam
         rm ${PFX}-paired-deferred-R1.fq.gz ${PFX}-paired-deferred-R2.fq.gz
-        rm ${PFX}-committed.bam ${PFX}-deferred.bam
+        rm ${PFX}-committed.bam ${PFX}-committed-sorted.bam ${PFX}-deferred.bam
+        rm ${PFX}-paired-deferred-reconciled-sorted.bam
     fi
 fi
