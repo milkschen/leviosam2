@@ -69,5 +69,5 @@ jobs:
 
       - name: Run leviosam-test
         run: |
-            cd test_data
+            cd testdata
             python ../leviosam-test.py ../build/leviosam2
