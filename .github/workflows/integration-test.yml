@@ -36,22 +36,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest]
         
     steps:
-      - name: checkout repository
+      - name: Checkout repository
         uses: actions/checkout@v2
         
-      - name: create environment with mamba
+      - name: Create environment with mamba
         uses: conda-incubator/setup-miniconda@v2
         with:
           mamba-version: "*"
           channels: conda-forge,bioconda,defaults
-      
-      - name: check solution
-        run: |
-          mamba env export
-    
+          
       - name: Set up SDSL
         run: sudo apt-get -y install libsdsl-dev
 
@@ -69,8 +65,9 @@ jobs:
 
       - name: Install packages
         run: |
-            conda install -c bioconda pysam picard
+            mamba install -c bioconda pysam picard
+
       - name: Run leviosam-test
         run: |
-            cd ${{github.workspace}}/test_data
-            python ${{github.workspace}}/leviosam-test.py ${{github.workspace}}/build/leviosam2
+            cd test_data
+            python ../leviosam-test.py ../build/leviosam2
