@@ -34,12 +34,14 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - uses: conda-incubator/setup-miniconda@v2
+    - name: Set up Python 3.8
+      uses: actions/setup-python@v2
       with:
-          activate-environment: test
-          environment-file: environment.yml
-          python-version: 3.8
-          auto-activate-base: false
+        python-version: 3.8
+    - name: Install dependencies
+      run: |
+        # $CONDA is an environment variable pointing to the root of the miniconda directory
+        $CONDA/bin/conda env update --file environment.yml --name base
     
     - name: Set up SDSL
       run: sudo apt-get -y install libsdsl-dev
