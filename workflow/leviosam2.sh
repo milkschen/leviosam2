@@ -211,6 +211,7 @@ if (( ${SINGLE_END} == 1 )); then
     if [ ! -s ${PFX}-final.bam ]; then
         ${MT} samtools merge -@ ${THR} --write-index -o ${PFX}-final.bam \
             ${PFX}-committed-sorted.bam ${PFX}-realigned.bam
+        ${MT} samtools index ${PFX}-final.bam
     fi
 
     # Clean tmp files
@@ -261,21 +262,15 @@ else
         ${MT} ${LEVIOSAM} reconcile \
             -s ${SOURCE_LABEL}:${PFX}-paired-deferred-sorted_n.bam \
             -s ${TARGET_LABEL}:${PFX}-paired-realigned-sorted_n.bam \
-            -m | ${MT} samtools sort -@ ${THR} \
+            -m -o - | ${MT} samtools sort -@ ${THR} \
                 -o ${PFX}-paired-deferred-reconciled-sorted.bam
-            # -m -o ${PFX}-paired-deferred-reconciled.bam
     fi
-
-    # if [ ! -s ${PFX}-paired-deferred-reconciled-sorted.bam ]; then
-    #     ${MT} samtools sort -@ ${THR} \
-    #         -o ${PFX}-paired-deferred-reconciled-sorted.bam \
-    #         ${PFX}-paired-deferred-reconciled.bam
-    # fi
 
     # Merge, sort, and clean
     if [ ! -s ${PFX}-final.bam ]; then
         ${MT} samtools merge -@ ${THR} --write-index -o ${PFX}-final.bam \
-            ${PFX}-committed-sorted.bam ${PFX}-paired-deferred-reconciled.bam
+            ${PFX}-committed-sorted.bam ${PFX}-paired-deferred-reconciled-sorted.bam
+        ${MT} samtools index ${PFX}-final.bam
     fi
 
     # Clean tmp files
