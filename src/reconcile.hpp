@@ -18,8 +18,8 @@
 #include <tuple>
 #include <vector>
 
-const int MERGE_PE_SUM = 0;
-const int MERGE_PE_MAX = 1;
+#define MERGE_PE_SUM 0
+#define MERGE_PE_MAX 1
 // const int MERGE_PE_PAIR_TLEN_THRESHOLD = 2000;
 
 struct reconcile_opts {
@@ -53,24 +53,28 @@ std::vector<std::string> read_file_as_vector(std::string list_fn);
 
 int select_best_aln(const std::vector<bool>& pair_indicators,
                     const std::vector<int>& scores,
-                    const std::vector<int>& mapqs, int& num_tied_best);
+                    const std::vector<int>& mapqs, int& num_tied_best,
+                    const int& rand_seed = 0);
 
 int select_best_aln_single_end(const std::vector<bam1_t*>& aln1s,
                                const std::string& score_tag,
-                               const bool conservative);
+                               const bool& conservative,
+                               const int& rand_seed = 0);
 
 int select_best_aln_paired_end(const std::vector<bam1_t*>& aln1s,
                                const std::vector<bam1_t*>& aln2s,
                                const std::string& score_tag,
-                               const bool conservative,
-                               const int merge_pe_mode);
+                               const bool& conservative,
+                               const int& merge_pe_mode = MERGE_PE_SUM,
+                               const int& rand_seed = 0);
 
 void reconcile_core(const std::vector<std::string>& sam_fns,
                     const std::vector<std::string>& ids,
                     const std::vector<samFile*>& sam_fps,
                     const std::vector<bam_hdr_t*>& hdrs,
                     const bool is_paired_end, samFile* out_fp,
-                    const std::string& score_tag, const bool conservative);
+                    const std::string& score_tag, const bool& conservative,
+                    const int& rand_seed = 0);
 
 void reconcile(reconcile_opts args);
 

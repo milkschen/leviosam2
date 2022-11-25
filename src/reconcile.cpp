@@ -69,7 +69,8 @@ void unzip(const std::vector<std::tuple<A, B, C, D>>& zipped, std::vector<A>& a,
  */
 int select_best_aln(const std::vector<bool>& pair_indicators,
                     const std::vector<int>& scores,
-                    const std::vector<int>& mapqs, int& num_tied_best) {
+                    const std::vector<int>& mapqs, int& num_tied_best,
+                    const int& rand_seed) {
     int vec_size = pair_indicators.size();
     std::vector<int> ranks(vec_size);
     std::iota(ranks.begin(), ranks.end(), 0);
@@ -99,14 +100,14 @@ int select_best_aln(const std::vector<bool>& pair_indicators,
         ranks.push_back(std::get<3>(zipped[i]));
     }
     std::shuffle(ranks.begin(), ranks.begin() + num_tied_best,
-                 std::default_random_engine(0));
+                 std::default_random_engine(rand_seed));
 
     return ranks[0];
 }
 
 int select_best_aln_single_end(const std::vector<bam1_t*>& aln1s,
                                const std::string& score_tag,
-                               const bool conservative) {
+                               const bool& conservative, const int& rand_seed) {
     std::vector<int> mapqs, scores;
     // We don't actually need `pair_indicators` in single-end mode.
     // Create this to make it easier to re-use the core comparison function.
@@ -130,9 +131,8 @@ int select_best_aln_single_end(const std::vector<bam1_t*>& aln1s,
         scores.push_back(score);
     }
     int num_tied_best;
-    int best_idx =
-        select_best_aln(pair_indicators = pair_indicators, scores = scores,
-                        mapqs = mapqs, num_tied_best = num_tied_best);
+    int best_idx = select_best_aln(pair_indicators, scores, mapqs,
+                                   num_tied_best, rand_seed);
     if (conservative) {
         int min_mapq1 = aln1s[0]->core.qual;
         for (int i = 1; i < aln1s.size(); i++) {
@@ -148,8 +148,9 @@ int select_best_aln_single_end(const std::vector<bam1_t*>& aln1s,
 int select_best_aln_paired_end(const std::vector<bam1_t*>& aln1s,
                                const std::vector<bam1_t*>& aln2s,
                                const std::string& score_tag,
-                               const bool conservative,
-                               const int merge_pe_mode = MERGE_PE_SUM) {
+                               const bool& conservative,
+                               const int& merge_pe_mode,
+                               const int& rand_seed) {
     std::vector<int> mapqs, scores;
     // Indicator
     //      1 if a pair is properly paired (TLEN != 0). We apply a loose
@@ -207,9 +208,8 @@ int select_best_aln_paired_end(const std::vector<bam1_t*>& aln1s,
         }
     }
     int num_tied_best;
-    int best_idx =
-        select_best_aln(pair_indicators = pair_indicators, scores = scores,
-                        mapqs = mapqs, num_tied_best = num_tied_best);
+    int best_idx = select_best_aln(pair_indicators, scores, mapqs,
+                                   num_tied_best, rand_seed);
     if (conservative) {
         int min_mapq1 = aln1s[0]->core.qual;
         int min_mapq2 = aln2s[0]->core.qual;
@@ -231,7 +231,8 @@ void reconcile_core(const std::vector<std::string>& sam_fns,
                     const std::vector<samFile*>& sam_fps,
                     const std::vector<bam_hdr_t*>& hdrs,
                     const bool is_paired_end, samFile* out_fp,
-                    const std::string& score_tag, const bool conservative) {
+                    const std::string& score_tag, const bool& conservative,
+                    const int& rand_seed) {
     std::vector<bam1_t*> aln1s, aln2s;
     for (int i = 0; i < sam_fns.size(); i++) {
         aln1s.push_back(bam_init1());
@@ -303,7 +304,7 @@ void reconcile_core(const std::vector<std::string>& sam_fns,
         if (end) break;
         if (is_paired_end) {
             int best_idx = select_best_aln_paired_end(
-                aln1s, aln2s, score_tag, conservative, MERGE_PE_SUM);
+                aln1s, aln2s, score_tag, conservative, MERGE_PE_SUM, rand_seed);
             bam_aux_append(aln1s[best_idx], "RF", 'Z',
                            ids[best_idx].length() + 1,
                            reinterpret_cast<uint8_t*>(
@@ -319,8 +320,8 @@ void reconcile_core(const std::vector<std::string>& sam_fns,
                 exit(1);
             }
         } else {
-            int best_idx =
-                select_best_aln_single_end(aln1s, score_tag, conservative);
+            int best_idx = select_best_aln_single_end(aln1s, score_tag,
+                                                      conservative, rand_seed);
             bam_aux_append(aln1s[best_idx], "RF", 'Z',
                            ids[best_idx].length() + 1,
                            reinterpret_cast<uint8_t*>(
@@ -350,7 +351,6 @@ void reconcile(reconcile_opts args) {
     else
         std::cerr << "[I::reconcile] Single-end mode\n";
 
-    std::srand(args.rand_seed);
     std::vector<std::string> sam_fns;
     std::vector<std::string> ids;
     for (auto& s : args.inputs) {
@@ -394,7 +394,7 @@ void reconcile(reconcile_opts args) {
         exit(1);
     }
     reconcile_core(sam_fns, ids, sam_fps, hdrs, args.paired_end, out_fp,
-                   args.score_tag, args.conservative);
+                   args.score_tag, args.conservative, args.rand_seed);
     for (auto& s : sam_fps) {
         sam_close(s);
     }

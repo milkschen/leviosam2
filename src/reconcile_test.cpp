@@ -42,6 +42,10 @@ TEST(ReconcileTest, SelectBestAlnOneBestAtSecond) {
 
     EXPECT_EQ(rank, 1);
     EXPECT_EQ(ntb, 1);
+
+    rank = select_best_aln(pi, sc, mq, ntb, 99);
+
+    EXPECT_EQ(rank, 1);
 }
 
 TEST(ReconcileTest, SelectBestAlnFourBest) {
@@ -52,7 +56,13 @@ TEST(ReconcileTest, SelectBestAlnFourBest) {
 
     int rank = select_best_aln(pi, sc, mq, ntb);
 
-    EXPECT_EQ(rank, 2);
+    EXPECT_TRUE(rank == 0 || rank == 1 || rank == 2);
+    EXPECT_EQ(ntb, 4);
+
+    // change the random seed to 2
+    rank = select_best_aln(pi, sc, mq, ntb, 2);
+
+    EXPECT_TRUE(rank == 0 || rank == 1 || rank == 2);
     EXPECT_EQ(ntb, 4);
 }
 
