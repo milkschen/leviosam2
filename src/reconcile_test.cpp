@@ -54,5 +54,11 @@ TEST(ReconcileTest, SelectBestAlnFourBest) {
 
     EXPECT_EQ(rank, 2);
     EXPECT_EQ(ntb, 4);
+
+    // change the random seed to 2
+    rank = select_best_aln(pi, sc, mq, ntb, 2);
+
+    EXPECT_EQ(rank, 1);
+    EXPECT_EQ(ntb, 4);
 }
 
