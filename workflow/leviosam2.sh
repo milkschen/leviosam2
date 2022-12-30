@@ -69,6 +69,11 @@ function print_usage_and_exit {
     echo "    -M          Toggle to measure time using GNU time [off]"
     echo "    -T path     Path to the GNU time binary [time]"
     echo "    -K          Toggle to keep tmp files [off]"
+    echo "  Align to source:"
+    echo "    -s path     Path to the aligner index (source reference) []"
+    echo "    -F path     Path to the source FASTA file []"
+    echo "    -w path     Path to the input FASTQ (read 1) []"
+    echo "    -W path     Path to the input FASTQ (read 2, optional) []"
     echo "  LevioSAM2-lift:"
     echo "    -g INT      Number of gaps allowed during leviosam2-lift [0]"
     echo "    -x path     Path to the levioSAM2 re-alignment config YAML []"
@@ -82,7 +87,7 @@ function print_usage_and_exit {
     echo "    -B float    Bed intersect threshold. See 'leviosam2 lift -h' for details. [0]"
     echo "  Aligner:"
     echo "    -a string   Aligner to use (bowtie2|bwamem|bwamem2|minimap2|winnowmap2) [bowtie2]"
-    echo "    -b string   Prefix to the aligner index"
+    echo "    -b path     Path to the aligner index (target reference)"
     echo "    -l string   Aligner mode for long read aligner (map-hifi|map-ont) [map-hifi]"
     echo "    -S          Toggle to use single-end mode [off]"
     echo "    -r string   The read group (RG) string []"
@@ -90,7 +95,7 @@ function print_usage_and_exit {
     exit 1
 }
 
-while getopts hKMSa:A:b:B:C:D:f:H:g:i:l:L:m:o:p:q:r:R:t:T:x: flag
+while getopts hKMSa:A:b:B:C:D:f:F:H:g:i:l:L:m:o:p:q:r:R:s:t:T:w:W:x: flag
 do
     case "${flag}" in
         h) print_usage_and_exit;;
@@ -104,6 +109,7 @@ do
         C) CLFT=${OPTARG};;
         D) DEFER_DEST_BED=" -D ${OPTARG}";;
         f) REF=${OPTARG};;
+        F) REF_SOURCE=${OPTARG};;
         H) HDIST=" -S hdist:${OPTARG}";;
         g) ALLOWED_GAPS=${OPTARG};;
         i) INPUT=${OPTARG};;
@@ -114,9 +120,12 @@ do
         p) FRAC_CLIPPED=" -S clipped_frac:${OPTARG}";;
         q) MAPQ=" -S mapq:${OPTARG}";;
         r) ALN_RG=${OPTARG};;
+        s) ALN_IDX_SOURCE=${OPTARG};;
         R) COMMIT_SOURCE_BED=" -r ${OPTARG}";;
         t) THR=${OPTARG};;
         T) TIME=${OPTARG};;
+        w) INPUT_FQ_1=${OPTARG};;
+        W) INPUT_FQ_2=${OPTARG};;
         x) REALN_CONFIG=" -x ${OPTARG}";;
     esac
 done
@@ -152,6 +161,70 @@ if [[ ${ALN} =~ ^(minimap2|winnowmap2)$ ]]; then
 fi
 
 set -xp
+
+# Align to the source reference
+if [ ! -s ${INPUT} ]; then
+    if [[ ${SINGLE_END} == 1 ]]; then
+        if [[ ${ALN} == "bowtie2" ]]; then
+            ${MT} bowtie2 ${ALN_RG} -p ${THR} -x ${ALN_IDX_SOURCE} \
+            -U ${INPUT_FQ_1} |\
+            ${MT} samtools sort -o ${INPUT}
+        elif [[ ${ALN} == "bwamem" ]]; then
+            if [[ ${ALN_RG} != "" ]]; then
+                ALN_RG="-R ${ALN_RG}"
+            fi
+            ${MT} bwa mem -t ${THR} ${ALN_RG} ${ALN_IDX_SOURCE} \
+            ${INPUT_FQ_1} |\
+            ${MT} samtools sort -o ${INPUT}
+        elif [[ ${ALN} == "bwamem2" ]]; then
+            if [[ ${ALN_RG} != "" ]]; then
+                ALN_RG="-R ${ALN_RG}"
+            fi
+            ${MT} bwa-mem2 mem -t ${THR} ${ALN_RG} ${ALN_IDX_SOURCE} \
+            ${INPUT_FQ_1} |\
+            ${MT} samtools sort -o ${INPUT}
+        elif [[ ${ALN} =~ ^(minimap2|winnowmap2)$ ]]; then
+            if [[ ${ALN_RG} != "" ]]; then
+                ALN_RG="-R ${ALN_RG}"
+            fi
+            ${MT} ${ALN} -ax ${LR_MODE} --MD -t ${THR} ${ALN_IDX_SOURCE} \
+            ${REF_SOURCE} ${INPUT_FQ_1} | \
+            ${MT} samtools sort -o ${INPUT}
+        else
+            print_usage_and_exit
+        fi
+    else
+        if [[ ${ALN} == "bowtie2" ]]; then
+            ${MT} bowtie2 ${ALN_RG} -p ${THR} -x ${ALN_IDX_SOURCE} \
+            -1 ${INPUT_FQ_1} -2 ${INPUT_FQ_2} |\
+            ${MT} samtools sort -o ${INPUT}
+        elif [[ ${ALN} == "bwamem" ]]; then
+            if [[ ${ALN_RG} != "" ]]; then
+                ALN_RG="-R ${ALN_RG}"
+            fi
+            ${MT} bwa mem -t ${THR} ${ALN_RG} ${ALN_IDX_SOURCE} \
+            ${INPUT_FQ_1} ${INPUT_FQ_2} |\
+            ${MT} samtools sort -o ${INPUT}
+        elif [[ ${ALN} == "bwamem2" ]]; then
+            if [[ ${ALN_RG} != "" ]]; then
+                ALN_RG="-R ${ALN_RG}"
+            fi
+            ${MT} bwa-mem2 mem -t ${THR} ${ALN_RG} ${ALN_IDX_SOURCE} \
+            ${INPUT_FQ_1} ${INPUT_FQ_2} |\
+            ${MT} samtools sort -o ${INPUT}
+        elif [[ ${ALN} =~ ^(minimap2|winnowmap2)$ ]]; then
+            if [[ ${ALN_RG} != "" ]]; then
+                ALN_RG="-R ${ALN_RG}"
+            fi
+            ${MT} ${ALN} -ax ${LR_MODE} --MD -t ${THR} ${ALN_IDX_SOURCE} \
+            ${REF_SOURCE} ${INPUT_FQ_1} ${INPUT_FQ_2} | \
+            ${MT} samtools sort -o ${INPUT}
+        else
+            print_usage_and_exit
+        fi
+    fi
+    
+fi
 
 # Lifting over using leviosam2
 if [ ! -s ${PFX}-committed.bam ]; then
