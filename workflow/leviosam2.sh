@@ -135,7 +135,7 @@ if [[ ${REF} == "" ]]; then
 fi
 
 MT=""
-if (( ${MEASURE_TIME} > 0 )); then
+if [[ ${MEASURE_TIME} > 0 ]]; then
     MT="${TIME} -v -ao leviosam2.time_log "
 fi
 
@@ -168,7 +168,7 @@ if [ ! -s ${PFX}-committed-sorted.bam ]; then
         -o ${PFX}-committed-sorted.bam ${PFX}-committed.bam
 fi
 
-if (( ${SINGLE_END} == 1 )); then
+if [[ ${SINGLE_END} == 1 ]]; then
     # Convert deferred reads to FASTQ
     if [ ! -s ${PFX}-deferred.fq.gz ]; then
         ${MT} samtools fastq ${PFX}-deferred.bam | \
@@ -215,7 +215,7 @@ if (( ${SINGLE_END} == 1 )); then
     fi
 
     # Clean tmp files
-    if (( ${KEEP_TMP} < 1 )); then
+    if [[ ${KEEP_TMP} < 1 ]]; then
         rm ${PFX}-committed.bam ${PFX}-committed-sorted.bam
         rm ${PFX}-deferred.bam ${PFX}-deferred.fq.gz
     fi
@@ -274,7 +274,7 @@ else
     fi
 
     # Clean tmp files
-    if (( ${KEEP_TMP} < 1 )); then
+    if [[ ${KEEP_TMP} < 1 ]]; then
         rm ${PFX}-paired-deferred.bam ${PFX}-paired-deferred-sorted_n.bam
         rm ${PFX}-paired-realigned.bam ${PFX}-paired-realigned-sorted_n.bam
         rm ${PFX}-paired-deferred-reconciled.bam ${PFX}-paired-committed.bam
