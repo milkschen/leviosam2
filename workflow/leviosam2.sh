@@ -130,7 +130,7 @@ do
     esac
 done
 
-if [[ ${INPUT} == "" ]]; then
+if [[ ${INPUT} == "" && ${INPUT_FQ_1} == "" ]]; then
     echo "Input is not set"
     print_usage_and_exit
 fi
@@ -163,7 +163,8 @@ fi
 set -xp
 
 # Align to the source reference
-if [ ! -s ${INPUT} ]; then
+if [[ ${INPUT} == "" ]]; then
+    INPUT=${PFX}.bam
     if [[ ${SINGLE_END} == 1 ]]; then
         if [[ ${ALN} == "bowtie2" ]]; then
             ${MT} bowtie2 ${ALN_RG} -p ${THR} -x ${ALN_IDX_SOURCE} \
