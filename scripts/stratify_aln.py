@@ -21,21 +21,22 @@ with pysam.AlignmentFile(sys.argv[1]) as f:
         if r.is_supplementary:
             comprehensive_cnt['Supplementary'] += 1
             continue
-        if r.has_tag('LO') and r.get_tag('LO') == 'L_L':
+        if r.has_tag('LO') and r.get_tag('LO') in ['L_L', 'L']:
             comprehensive_cnt['Committed'] += 1
             continue
         if r.is_unmapped and (not r.has_tag('RF')):
             comprehensive_cnt['Suppressed'] += 1
             continue
-        if r.has_tag('RF'):
+        else:
             comprehensive_cnt['Deferred'] += 1
-            if r.get_tag('RF') == 'source':
-                comprehensive_cnt['Deferred-source'] += 1
-            elif r.get_tag('RF') == 'target':
-                comprehensive_cnt['Deferred-target'] += 1
+            if r.has_tag('RF'):
+                if r.get_tag('RF') == 'source':
+                    comprehensive_cnt['Deferred-source'] += 1
+                elif r.get_tag('RF') == 'target':
+                    comprehensive_cnt['Deferred-target'] += 1
 
 total_cnt = 0
-cats = ['Deferred', 'Committed', 'Suppress']
+cats = ['Deferred', 'Committed', 'Suppressed']
 cat_cnt = {}
 for cat in cats:
     total_cnt += comprehensive_cnt[cat]
