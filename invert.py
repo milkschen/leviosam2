@@ -7,7 +7,6 @@ img = mpimg.imread('figures/levioSAM_S_bw.png')
 img2 = []
 for irow, row in enumerate(img):
     img2.append([])
-    #print(len(row))
     for cell in row:
         if sum(cell) != 4:
             img2[-1].append([1, 1, 1, 1])
