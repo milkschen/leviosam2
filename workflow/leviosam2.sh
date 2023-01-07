@@ -195,7 +195,7 @@ if [[ ${INPUT} == "" ]]; then
             if [[ ${ALN_RG} != "" ]]; then
                 ALN_RG="--rg ${ALN_RG}"
             fi
-            ${MT} ${ALN} ${ALN_RG} ${REF_SOURCE} ${INPUT_FQ_1} | \
+            ${MT} ${ALN} ${ALN_RG} -t ${THR} ${REF_SOURCE} ${INPUT_FQ_1} | \
             ${MT} samtools sort -o ${INPUT}
         else
             print_usage_and_exit
@@ -230,7 +230,7 @@ if [[ ${INPUT} == "" ]]; then
             if [[ ${ALN_RG} != "" ]]; then
                 ALN_RG="--rg ${ALN_RG}"
             fi
-            ${MT} ${ALN} ${ALN_RG} ${REF_SOURCE} \
+            ${MT} ${ALN} ${ALN_RG} -t ${THR} ${REF_SOURCE} \
             ${INPUT_FQ_1} ${INPUT_FQ_2} | \
             ${MT} samtools sort -o ${INPUT}
         else
@@ -293,7 +293,7 @@ if [[ ${SINGLE_END} == 1 ]]; then
             if [[ ${ALN_RG} != "" ]]; then
                 ALN_RG="--rg ${ALN_RG}"
             fi
-            ${MT} ${ALN} ${ALN_RG} ${REF} ${PFX}-deferred.fq.gz | \
+            ${MT} ${ALN} ${ALN_RG} -t ${THR} ${REF} ${PFX}-deferred.fq.gz | \
             ${MT} samtools sort -o ${PFX}-realigned.bam
         else
             print_usage_and_exit
@@ -343,7 +343,7 @@ else
             if [[ ${ALN_RG} != "" ]]; then
                 ALN_RG="--rg ${ALN_RG}"
             fi
-            ${MT} ${ALN} ${ALN_RG} ${REF} | \
+            ${MT} ${ALN} ${ALN_RG} -t ${THR} ${REF} \
             ${PFX}-paired-deferred-R1.fq.gz ${PFX}-paired-deferred-R2.fq.gz | \
             ${MT} samtools view -hb > ${PFX}-paired-realigned.bam
         else
