@@ -5,11 +5,17 @@ import unittest
 
 import leviosam2
 
+TIME_CMDS = ['', 'time -v -ao test.time_log']
+
 
 class Workflow(unittest.TestCase):
 
+    def test_run_leviosam2(self):
+        pass
+        # leviosam2.run_leviosam2()
+
     def test_run_sort_committed(self):
-        for time_cmd in ['', 'time -v -o test.time_log']:
+        for time_cmd in TIME_CMDS:
             result = leviosam2.run_sort_committed(time_cmd=time_cmd,
                                                   samtools='samtools',
                                                   num_threads=4,
@@ -21,7 +27,7 @@ class Workflow(unittest.TestCase):
             self.assertEqual(result, expected)
 
     def test_run_collate_pe(self):
-        for time_cmd in ['', 'time -v -o test.time_log ']:
+        for time_cmd in TIME_CMDS:
             result = leviosam2.run_collate_pe(time_cmd=time_cmd,
                                               leviosam2='leviosam2',
                                               out_prefix='test',
@@ -31,6 +37,10 @@ class Workflow(unittest.TestCase):
                         '-a test-committed-sorted.bam '
                         '-b test-deferred.bam -p test-paired')
             self.assertEqual(result, expected)
+
+    def test_run_realign_deferred_pe(self):
+        pass
+        # leviosam2.run_realign_deferred_pe()
 
 
 if __name__ == '__main__':

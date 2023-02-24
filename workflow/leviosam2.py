@@ -43,11 +43,19 @@ def parse_args() -> argparse.Namespace:
                         required=True,
                         choices=['ilmn_pe', 'ilmn_se', 'pb_hifi', 'ont'],
                         help='Type of sequence data')
-    parser.add_argument(
-        '--aligner',
-        type=str,
-        required=True,
-        choices=['bowtie2', 'bwamem', 'bwamem2', 'minimap2', 'winnowmap2'])
+    parser.add_argument('-a',
+                        '--aligner',
+                        type=str,
+                        required=True,
+                        choices=[
+                            'bowtie2', 'bwamem', 'bwamem2', 'minimap2',
+                            'winnowmap2', 'strobealign'
+                        ])
+    parser.add_argument('--aligner_binary',
+                        type=str,
+                        default='auto',
+                        help=('Path to the aligner executable. '
+                              'If empty, inferred using `--aligner`'))
     parser.add_argument('--source_label',
                         type=str,
                         default='source',
@@ -110,6 +118,21 @@ def parse_args() -> argparse.Namespace:
                         type=str,
                         required=True,
                         help='Path to the target reference (FASTA file)')
+    parser.add_argument('-fi',
+                        '--target_fasta_index',
+                        type=str,
+                        help=('Path to the target reference index '
+                              'for `--aligner`'))
+    parser.add_argument('-s',
+                        '--source_fasta',
+                        type=str,
+                        required=True,
+                        help='Path to the source reference (FASTA file)')
+    parser.add_argument('-si',
+                        '--source_fasta_index',
+                        type=str,
+                        help=('Path to the source reference index '
+                              'for `--aligner`'))
     parser.add_argument('--dryrun',
                         action='store_true',
                         help='Activate the dryrun mode')
@@ -135,7 +158,8 @@ def run_leviosam2(time_cmd: str, leviosam2: str, clft: str, fn_input: str,
                   lift_commit_max_hdist: typing.Union[int, None],
                   lift_max_gap: typing.Union[int, None],
                   lift_bed_commit_source: str, lift_bed_defer_target: str,
-                  lift_realign_config: str, target_fasta: str, dryrun: bool):
+                  lift_realign_config: str, target_fasta: str, dryrun: bool
+                  ) -> typing.Union[str, 'subprocess.CompletedProcess[bytes]']:
     '''Run leviosam2.
 
     if [ ! -s ${PFX}-committed.bam ]; then
@@ -178,75 +202,186 @@ def run_leviosam2(time_cmd: str, leviosam2: str, clft: str, fn_input: str,
            f'{lift_bed_defer_target_arg}'
            f'{lift_realign_config_arg}')
     if dryrun:
-        print(cmd)
+        return cmd
     else:
-        subprocess.run([cmd], shell=True)
+        return subprocess.run([cmd], shell=True)
 
 
-def run_sort_committed(time_cmd: str, samtools: str, num_threads: int,
-                       out_prefix: str, dryrun: bool,
-                       forcerun: bool) -> typing.Union[str, int]:
+def run_sort_committed(
+    time_cmd: str,
+    samtools: str,
+    num_threads: int,
+    out_prefix: str,
+    dryrun: bool = False,
+    forcerun: bool = False
+) -> typing.Union[str, 'subprocess.CompletedProcess[bytes]']:
+    '''Sort the committed BAM.
+    
+    Subprocess inputs:
+        - <out_prefix>-committed.bam
+    Subprocess outputs:
+        - <out_prefix>-committed-sorted.bam
     '''
-    if [ ! -s ${PFX}-committed-sorted.bam ]; then
-        ${MT} samtools sort -@ ${THR} \
-            -o ${PFX}-committed-sorted.bam ${PFX}-committed.bam
-    fi
-    '''
-    fn_committed = pathlib.Path(f'{out_prefix}-committed.bam')
-    fn_committed_sorted = pathlib.Path(f'{out_prefix}-committed-sorted.bam')
+    fn_in_bam = pathlib.Path(f'{out_prefix}-committed.bam')
+    fn_out = pathlib.Path(f'{out_prefix}-committed-sorted.bam')
 
     cmd = (f'{time_cmd} {samtools} sort -@ {num_threads} '
-           f'-o {fn_committed_sorted} {fn_committed}')
+           f'-o {fn_out} {fn_in_bam}')
     if dryrun:
         return cmd
     else:
-        if not fn_committed.is_file():
-            raise FileNotFoundError(f'{fn_committed} is not a file')
-        if (not forcerun) and fn_committed_sorted.is_file():
+        if not fn_in_bam.is_file():
+            raise FileNotFoundError(f'{fn_in_bam} is not a file')
+        if (not forcerun) and fn_out.is_file():
             print('[Info] Skip sort_committed -- '
-                  f'{fn_committed_sorted} exists')
-            return
-        subprocess.run([cmd], shell=True)
-    return 0
+                  f'{fn_out} exists')
+            return 'skip'
+        return subprocess.run([cmd], shell=True)
 
 
-def run_collate_pe(time_cmd: str, leviosam2: str, out_prefix: str,
-                   dryrun: bool, forcerun: bool) -> typing.Union[str, int]:
-    '''Collate paired-end BAMs into paired FASTQs.
+def run_collate_pe(
+    time_cmd: str,
+    leviosam2: str,
+    out_prefix: str,
+    dryrun: bool = False,
+    forcerun: bool = False
+) -> typing.Union[str, 'subprocess.CompletedProcess[bytes]']:
+    '''[Paired-end] Collate committed/deferred BAMs to properly paired FASTQs.
 
-    if [ ! -s ${PFX}-paired-deferred-R1.fq.gz ]; then
-        ${MT} ${LEVIOSAM} collate \
-        -a ${PFX}-committed-sorted.bam -b ${PFX}-deferred.bam -p ${PFX}-paired
-    fi
+    Subprocess inputs:
+        - <out_prefix>-committed-sorted.bam
+        - <out_prefix>-deferred.bam
+    Subprocess outputs:
+        - <out_prefix>-paired-deferred-R1.fq.gz
+        - <out_prefix>-paired-deferred-R2.fq.gz
     '''
-    fn_committed_sorted = pathlib.Path(f'{out_prefix}-committed-sorted.bam')
-    fn_deferred = pathlib.Path(f'{out_prefix}-deferred.bam')
-    prefix_collated = pathlib.Path(f'{out_prefix}-paired')
-    collated_fq1 = prefix_collated.parent / \
-        f'{prefix_collated.name}-deferred-R1.fq.gz'
-    collated_fq2 = prefix_collated.parent / \
-        f'{prefix_collated.name}-deferred-R2.fq.gz'
+    fn_in_committed = pathlib.Path(f'{out_prefix}-committed-sorted.bam')
+    fn_in_deferred = pathlib.Path(f'{out_prefix}-deferred.bam')
+    out_prefix = pathlib.Path(f'{out_prefix}-paired')
+    fn_out_fq1 = out_prefix.parent / \
+        f'{out_prefix.name}-deferred-R1.fq.gz'
+    fn_out_fq2 = out_prefix.parent / \
+        f'{out_prefix.name}-deferred-R2.fq.gz'
 
     cmd = (f'{time_cmd} {leviosam2} collate '
-           f'-a {fn_committed_sorted} -b {fn_deferred} -p {prefix_collated}')
+           f'-a {fn_in_committed} -b {fn_in_deferred} -p {out_prefix}')
     if dryrun:
         return cmd
     else:
-        if not all((fn_committed_sorted.is_file(), fn_deferred.is_file())):
-            raise FileNotFoundError(f'{collated_fq1} is not a file')
-        if (not forcerun) and (collated_fq1.is_file()
-                               and collated_fq2.is_file()):
+        if not fn_in_committed.is_file():
+            raise FileNotFoundError(f'{fn_in_committed} is not a file')
+        if not fn_in_deferred.is_file():
+            raise FileNotFoundError(f'{fn_in_deferred} is not a file')
+
+        if (not forcerun) and fn_out_fq1.is_file() and fn_out_fq2.is_file():
             print('[Info] Skip collate -- '
-                  f'both {collated_fq1} and {collated_fq2} exist')
-            return
-        subprocess.run([cmd], shell=True)
-    return 0
+                  f'both {fn_out_fq1} and {fn_out_fq2} exist')
+            return 'skip'
+        return subprocess.run([cmd], shell=True)
+
+
+def run_realign_deferred_pe(
+    time_cmd: str,
+    aligner: str,
+    aligner_binary: str,
+    target_fasta_index: str,
+    rg_string: str,
+    num_threads: int,
+    samtools: str,
+    out_prefix: str,
+    target_fasta: str = None,
+    dryrun: bool = False,
+    forcerun: bool = False
+) -> typing.Union[str, 'subprocess.CompletedProcess[bytes]']:
+    '''[Paired-end] Re-align deferred reads.
+    '''
+    if aligner not in ['bowtie2', 'bwamem', 'bwamem2', 'strobealign']:
+        raise ValueError('We have not supported paired-end '
+                         f'mode for aligner {aligner}')
+    fn_in_fq1 = pathlib.Path(f'{out_prefix}-paired-deferred-R1.fq.gz')
+    fn_in_fq2 = pathlib.Path(f'{out_prefix}-paired-deferred-R2.fq.gz')
+    fn_out = pathlib.Path(f'{out_prefix}-paired-realigned.bam')
+    if aligner == 'bowtie2':
+        cmd = (f'{time_cmd} {aligner_binary} {rg_string} -p {num_threads} '
+               f'-x {target_fasta_index} '
+               f'-1 {fn_in_fq1} -2 {fn_in_fq2} | '
+               f'{time_cmd} {samtools} view -hbo {fn_out}')
+    elif aligner in ['bwamem', 'bwamem2']:
+        if rg_string != '':
+            rg_string = f'-R {rg_string}'
+        cmd = (f'{time_cmd} {aligner_binary} mem {rg_string} -t {num_threads} '
+               f'{target_fasta_index} {fn_in_fq1} {fn_in_fq2} | '
+               f'{time_cmd} {samtools} view -hbo {fn_out}')
+    elif aligner == 'strobealign':
+        if rg_string != '':
+            rg_string = f'--rg {rg_string}'
+        cmd = (f'{time_cmd} {aligner_binary} {rg_string} -t {num_threads} '
+               f'{target_fasta} {fn_in_fq1} {fn_in_fq2} | '
+               f'{time_cmd} {samtools} view -hbo {fn_out}')
+
+    if dryrun:
+        return cmd
+    else:
+        if not fn_in_fq1.is_file():
+            raise FileNotFoundError(f'{fn_in_fq1} is not a file')
+        if not fn_in_fq2.is_file():
+            raise FileNotFoundError(f'{fn_in_fq2} is not a file')
+
+        if (not forcerun) and fn_out.is_file():
+            print(f'[Info] Skip realign_deferred_pe -- {fn_out} exists')
+            return 'skip'
+        return subprocess.run([cmd], shell=True)
+
+
+def run_refflow_merge_pe():
+    '''
+    if [ ! -s ${PFX}-paired-deferred-reconciled-sorted.bam ]; then
+        ${MT} samtools sort -@ ${THR} -n \
+            -o ${PFX}-paired-realigned-sorted_n.bam ${PFX}-paired-realigned.bam
+        ${MT} samtools sort -@ ${THR} -n \
+            -o ${PFX}-paired-deferred-sorted_n.bam ${PFX}-paired-deferred.bam
+        ${MT} ${LEVIOSAM} reconcile \
+            -s ${SOURCE_LABEL}:${PFX}-paired-deferred-sorted_n.bam \
+            -s ${TARGET_LABEL}:${PFX}-paired-realigned-sorted_n.bam \
+            -m -o - | ${MT} samtools sort -@ ${THR} \
+                -o ${PFX}-paired-deferred-reconciled-sorted.bam
+    fi
+    '''
+    pass
+
+
+def run_merge_pe():
+    '''
+    # Merge, sort, and clean
+    if [ ! -s ${PFX}-final.bam ]; then
+        ${MT} samtools merge -@ ${THR} --write-index -o ${PFX}-final.bam \
+            ${PFX}-committed-sorted.bam ${PFX}-paired-deferred-reconciled-sorted.bam
+        ${MT} samtools index ${PFX}-final.bam
+    fi
+    '''
+    pass
 
 
 def run_workflow(args: argparse.Namespace):
     time_cmd = ''
     if args.measure_time:
         time_cmd = f'{args.gnu_time_binary} -v -ao {args.out_prefix}.time_log'
+
+    if args.aligner_binary == 'auto':
+        if args.aligner in [
+                'bowtie2', 'minimap2', 'winnowmap2', 'strobealign'
+        ]:
+            aligner_binary = args.aligner
+        elif args.aligner == 'bwamem':
+            aligner_binary = 'bwa'
+        elif args.aligner == 'bwamem2':
+            aligner_binary = 'bwa-mem2'
+        else:
+            raise ValueError(f'Unsupported aligner: {args.aligner}')
+
+    # TODO
+    # validate_binary()
+
     run_leviosam2(
         time_cmd=time_cmd,
         leviosam2=args.leviosam2_binary,
@@ -279,7 +414,12 @@ def run_workflow(args: argparse.Namespace):
                        out_prefix=args.out_prefix,
                        dryrun=args.dryrun,
                        forcerun=args.forcerun)
-        run_realign_deferred_pe()
+        run_realign_deferred_pe(time_cmd=time_cmd,
+                                aligner=args.aligner,
+                                aligner_binary=aligner_binary,
+                                out_prefix=args.out_prefix,
+                                dryrun=args.dryrun,
+                                forcerun=args.forcerun)
         run_refflow_merge_pe()
         run_merge_pe()
     else:
