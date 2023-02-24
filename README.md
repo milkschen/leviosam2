@@ -8,7 +8,10 @@
 
 LevioSAM2 lifts over alignments accurately and efficiently using a chain file.
 
-<img src="https://github.com/milkschen/leviosam2/blob/main/figures/levioSAM_S_bw.png" width="300">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./figures/levioSAM_S_bw_dark.png"  width="300">
+  <img alt="Text changing depending on mode. Light: 'So light!' Dark: 'So dark!'" src="./figures/levioSAM_S_bw.png"  width="300">
+</picture>
 
 ## Features
 

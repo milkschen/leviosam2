@@ -86,7 +86,7 @@ function print_usage_and_exit {
     echo "    -D path     Path to the force-defer annotation []"
     echo "    -B float    Bed intersect threshold. See 'leviosam2 lift -h' for details. [0]"
     echo "  Aligner:"
-    echo "    -a string   Aligner to use (bowtie2|bwamem|bwamem2|minimap2|winnowmap2) [bowtie2]"
+    echo "    -a string   Aligner to use (bowtie2|bwamem|bwamem2|minimap2|winnowmap2|strobealign) [bowtie2]"
     echo "    -b path     Path to the aligner index (target reference)"
     echo "    -l string   Aligner mode for long read aligner (map-hifi|map-ont) [map-hifi]"
     echo "    -S          Toggle to use single-end mode [off]"
@@ -130,7 +130,7 @@ do
     esac
 done
 
-if [[ ${INPUT} == "" ]]; then
+if [[ ${INPUT} == "" && ${INPUT_FQ_1} == "" ]]; then
     echo "Input is not set"
     print_usage_and_exit
 fi
@@ -148,8 +148,8 @@ if [[ ${MEASURE_TIME} > 0 ]]; then
     MT="${TIME} -v -ao leviosam2.time_log "
 fi
 
-if [[ ! ${ALN} =~ ^(bowtie2|bwamem|bwamem2|minimap2|winnowmap2)$ ]]; then
-    echo "Invalid ${ALN}. Accepted input: bowtie2, bwamem, bwamem2, minimap2, winnowmap2"
+if [[ ! ${ALN} =~ ^(bowtie2|bwamem|bwamem2|minimap2|winnowmap2|strobealign)$ ]]; then
+    echo "Invalid ${ALN}. Accepted input: bowtie2, bwamem, bwamem2, minimap2, winnowmap2, strobealign"
     exit 1
 fi
 
@@ -163,7 +163,8 @@ fi
 set -xp
 
 # Align to the source reference
-if [ ! -s ${INPUT} ]; then
+if [[ ${INPUT} == "" ]]; then
+    INPUT=${PFX}.bam
     if [[ ${SINGLE_END} == 1 ]]; then
         if [[ ${ALN} == "bowtie2" ]]; then
             ${MT} bowtie2 ${ALN_RG} -p ${THR} -x ${ALN_IDX_SOURCE} \
@@ -189,6 +190,12 @@ if [ ! -s ${INPUT} ]; then
             fi
             ${MT} ${ALN} -ax ${LR_MODE} --MD -t ${THR} ${ALN_IDX_SOURCE} \
             ${REF_SOURCE} ${INPUT_FQ_1} | \
+            ${MT} samtools sort -o ${INPUT}
+        elif [[ ${ALN} == "strobealign" ]]; then
+            if [[ ${ALN_RG} != "" ]]; then
+                ALN_RG="--rg ${ALN_RG}"
+            fi
+            ${MT} ${ALN} ${ALN_RG} -t ${THR} ${REF_SOURCE} ${INPUT_FQ_1} | \
             ${MT} samtools sort -o ${INPUT}
         else
             print_usage_and_exit
@@ -218,6 +225,13 @@ if [ ! -s ${INPUT} ]; then
             fi
             ${MT} ${ALN} -ax ${LR_MODE} --MD -t ${THR} ${ALN_IDX_SOURCE} \
             ${REF_SOURCE} ${INPUT_FQ_1} ${INPUT_FQ_2} | \
+            ${MT} samtools sort -o ${INPUT}
+        elif [[ ${ALN} == "strobealign" ]]; then
+            if [[ ${ALN_RG} != "" ]]; then
+                ALN_RG="--rg ${ALN_RG}"
+            fi
+            ${MT} ${ALN} ${ALN_RG} -t ${THR} ${REF_SOURCE} \
+            ${INPUT_FQ_1} ${INPUT_FQ_2} | \
             ${MT} samtools sort -o ${INPUT}
         else
             print_usage_and_exit
@@ -275,6 +289,12 @@ if [[ ${SINGLE_END} == 1 ]]; then
             ${MT} ${ALN} -ax ${LR_MODE} --MD -t ${THR} ${ALN_RG} \
             ${REF} ${PFX}-deferred.fq.gz | \
             ${MT} samtools sort -o ${PFX}-realigned.bam
+        elif [[ ${ALN} == "strobealign" ]]; then
+            if [[ ${ALN_RG} != "" ]]; then
+                ALN_RG="--rg ${ALN_RG}"
+            fi
+            ${MT} ${ALN} ${ALN_RG} -t ${THR} ${REF} ${PFX}-deferred.fq.gz | \
+            ${MT} samtools sort -o ${PFX}-realigned.bam
         else
             print_usage_and_exit
         fi
@@ -317,6 +337,13 @@ else
                 ALN_RG="-R ${ALN_RG}"
             fi
             ${MT} bwa-mem2 mem -t ${THR} ${ALN_RG} ${ALN_IDX} \
+            ${PFX}-paired-deferred-R1.fq.gz ${PFX}-paired-deferred-R2.fq.gz | \
+            ${MT} samtools view -hb > ${PFX}-paired-realigned.bam
+        elif [[ ${ALN} == "strobealign" ]]; then
+            if [[ ${ALN_RG} != "" ]]; then
+                ALN_RG="--rg ${ALN_RG}"
+            fi
+            ${MT} ${ALN} ${ALN_RG} -t ${THR} ${REF} \
             ${PFX}-paired-deferred-R1.fq.gz ${PFX}-paired-deferred-R2.fq.gz | \
             ${MT} samtools view -hb > ${PFX}-paired-realigned.bam
         else
