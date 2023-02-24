@@ -136,6 +136,16 @@ def run_leviosam2(time_cmd: str, leviosam2: str, clft: str, fn_input: str,
                   lift_max_gap: typing.Union[int, None],
                   lift_bed_commit_source: str, lift_bed_defer_target: str,
                   lift_realign_config: str, target_fasta: str, dryrun: bool):
+    '''Run leviosam2.
+
+    if [ ! -s ${PFX}-committed.bam ]; then
+        ${MT} ${LEVIOSAM} lift -C ${CLFT} -a ${INPUT} -t ${THR} -p ${PFX} -O bam \
+        ${MAPQ} ${ISIZE} ${ALN_SCORE} ${FRAC_CLIPPED} ${HDIST} ${BED_ISEC_TH} \
+        -G ${ALLOWED_GAPS} \
+        ${REALN_CONFIG} \
+        -m -f ${REF} ${DEFER_DEST_BED} ${COMMIT_SOURCE_BED}
+    fi
+    '''
     lift_commit_min_mapq_arg = f'-S mapq:{lift_commit_min_mapq} ' \
         if lift_commit_min_mapq else ''
     lift_commit_min_score_arg = f'-S aln_score:{lift_commit_min_score} ' \
@@ -174,32 +184,63 @@ def run_leviosam2(time_cmd: str, leviosam2: str, clft: str, fn_input: str,
 
 
 def run_sort_committed(time_cmd: str, samtools: str, num_threads: int,
-                       out_prefix: str, dryrun: bool, forcerun: bool):
+                       out_prefix: str, dryrun: bool,
+                       forcerun: bool) -> typing.Union[str, int]:
+    '''
+    if [ ! -s ${PFX}-committed-sorted.bam ]; then
+        ${MT} samtools sort -@ ${THR} \
+            -o ${PFX}-committed-sorted.bam ${PFX}-committed.bam
+    fi
+    '''
     fn_committed = pathlib.Path(f'{out_prefix}-committed.bam')
     fn_committed_sorted = pathlib.Path(f'{out_prefix}-committed-sorted.bam')
 
     cmd = (f'{time_cmd} {samtools} sort -@ {num_threads} '
            f'-o {fn_committed_sorted} {fn_committed}')
     if dryrun:
-        print(cmd)
+        return cmd
     else:
         if not fn_committed.is_file():
             raise FileNotFoundError(f'{fn_committed} is not a file')
         if (not forcerun) and fn_committed_sorted.is_file():
-            print(f'[Info] Skip sort_committed -- '
+            print('[Info] Skip sort_committed -- '
                   f'{fn_committed_sorted} exists')
             return
         subprocess.run([cmd], shell=True)
+    return 0
 
 
-def run_collate():
-    '''
+def run_collate_pe(time_cmd: str, leviosam2: str, out_prefix: str,
+                   dryrun: bool, forcerun: bool) -> typing.Union[str, int]:
+    '''Collate paired-end BAMs into paired FASTQs.
+
     if [ ! -s ${PFX}-paired-deferred-R1.fq.gz ]; then
         ${MT} ${LEVIOSAM} collate \
         -a ${PFX}-committed-sorted.bam -b ${PFX}-deferred.bam -p ${PFX}-paired
     fi
     '''
-    pass
+    fn_committed_sorted = pathlib.Path(f'{out_prefix}-committed-sorted.bam')
+    fn_deferred = pathlib.Path(f'{out_prefix}-deferred.bam')
+    prefix_collated = pathlib.Path(f'{out_prefix}-paired')
+    collated_fq1 = prefix_collated.parent / \
+        f'{prefix_collated.name}-deferred-R1.fq.gz'
+    collated_fq2 = prefix_collated.parent / \
+        f'{prefix_collated.name}-deferred-R2.fq.gz'
+
+    cmd = (f'{time_cmd} {leviosam2} collate '
+           f'-a {fn_committed_sorted} -b {fn_deferred} -p {prefix_collated}')
+    if dryrun:
+        return cmd
+    else:
+        if not all((fn_committed_sorted.is_file(), fn_deferred.is_file())):
+            raise FileNotFoundError(f'{collated_fq1} is not a file')
+        if (not forcerun) and (collated_fq1.is_file()
+                               and collated_fq2.is_file()):
+            print('[Info] Skip collate -- '
+                  f'both {collated_fq1} and {collated_fq2} exist')
+            return
+        subprocess.run([cmd], shell=True)
+    return 0
 
 
 def run_workflow(args: argparse.Namespace):
@@ -233,7 +274,11 @@ def run_workflow(args: argparse.Namespace):
                        forcerun=args.forcerun)
 
     if args.sequence_type in ['ilmn_pe']:
-        run_collate_pe()
+        run_collate_pe(time_cmd=time_cmd,
+                       leviosam2=args.leviosam2_binary,
+                       out_prefix=args.out_prefix,
+                       dryrun=args.dryrun,
+                       forcerun=args.forcerun)
         run_realign_deferred_pe()
         run_refflow_merge_pe()
         run_merge_pe()
