@@ -12,6 +12,10 @@ TIME_CMDS = ['', 'time -v -ao test.time_log']
 
 class Workflow(unittest.TestCase):
 
+    def test_validate_binary(self):
+        # `ls` should not fail
+        leviosam2.validate_binary(cmd='ls')
+
     def test_check_input_exists(self):
         leviosam2.check_input_exists(pathlib.Path.cwd() / sys.argv[0])
         with self.assertRaises(FileNotFoundError):

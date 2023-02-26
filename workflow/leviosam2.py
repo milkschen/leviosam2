@@ -20,7 +20,7 @@ def parse_args() -> argparse.Namespace:
                         default='samtools',
                         type=str,
                         help='Path to the samtools executable')
-    parser.add_argument('bgzip_binary',
+    parser.add_argument('--bgzip_binary',
                         default='bgzip',
                         type=str,
                         help='Path to the bgzip executable')
@@ -130,7 +130,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('-s',
                         '--source_fasta',
                         type=str,
-                        required=True,
                         help='Path to the source reference (FASTA file)')
     parser.add_argument('-si',
                         '--source_fasta_index',
@@ -172,10 +171,10 @@ def validate_binary(cmd: str, lenient: bool = False) -> None:
     Returns:
         - bool: True if a binary is valid
     '''
-    subprocess_out = subprocess.run([cmd], shell=True, capture=True)
+    subprocess_out = subprocess.run([cmd], shell=True, capture_output=True)
     if not lenient and subprocess_out.returncode != 0:
-        raise ValueError(f'{cmd} has a non-zero return code '
-                         f'{subprocess_out.returncode}')
+        raise ValueError(f'`{cmd}` has a non-zero return code '
+                         f'`{subprocess_out.returncode}`')
     else:
 
         def _count_lines(bin_text):
@@ -183,9 +182,11 @@ def validate_binary(cmd: str, lenient: bool = False) -> None:
 
         if not (_count_lines(subprocess_out.stdout) > 1
                 or _count_lines(subprocess_out.stderr) > 1):
-            raise ValueError(f'{cmd} has an unexpected output.\n'
+            raise ValueError(f'`{cmd}` has an unexpected output:\n'
+                             '```\n'
                              f'STDOUT = {subprocess_out.stdout}\n'
-                             f'STDERR = {subprocess_out.stderr}')
+                             f'STDERR = {subprocess_out.stderr}\n'
+                             '```')
 
 
 def run_leviosam2(
@@ -551,11 +552,12 @@ def run_workflow(args: argparse.Namespace):
     is_single_end = (args.sequence_type not in ['ilmn_pe'])
 
     # Check if executables are valid
-    validate_binary(cmd='{args.samtools_binary} --version')
-    validate_binary(cmd='{args.bgzip_binary} --version')
-    validate_binary(cmd='{args.measure_time} --version')
-    validate_binary(cmd='{args.leviosam2_binary}', lenient=True)
-    validate_binary(cmd='{args.aligner_binary}', lenient=True)
+    validate_binary(cmd=f'{args.samtools_binary} --version')
+    validate_binary(cmd=f'{args.bgzip_binary} --version')
+    if args.measure_time:
+        validate_binary(cmd=f'{args.gnu_time_binary} --version')
+    validate_binary(cmd=f'{args.leviosam2_binary}', lenient=True)
+    validate_binary(cmd=f'{aligner_binary}', lenient=True)
 
     time_cmd = ''
     if args.measure_time:
@@ -567,6 +569,11 @@ def run_workflow(args: argparse.Namespace):
     check_input_exists(fn_target_fasta)
     fn_input_alignment = pathlib.Path(args.input_alignment)
     check_input_exists(fn_input_alignment)
+
+    return 0
+
+    # TODO
+    # run_intial_align()
 
     run_leviosam2(
         time_cmd=time_cmd,
@@ -623,7 +630,7 @@ def run_workflow(args: argparse.Namespace):
                             samtools=args.samtools_binary,
                             bgzip=args.bgzip_binary,
                             out_prefix=path_out_prefix,
-                            dryrun=args.dryrun,
+                            dryrun=args.dyrun,
                             forcerun=args.forcerun)
 
         run_realign_deferred(time_cmd=time_cmd,
