@@ -22,9 +22,9 @@ class Workflow(unittest.TestCase):
             leviosam2.check_input_exists(pathlib.Path.cwd() /
                                          f'{sys.argv[0]}-not-a-file')
 
-    def test_run_leviosam2(self):
-        raise NotImplementedError
-        # leviosam2.run_leviosam2()
+    # def test_run_leviosam2(self):
+    #     raise NotImplementedError
+    #     # leviosam2.run_leviosam2()
 
     def test_run_sort_committed(self):
         for time_cmd in TIME_CMDS:
@@ -51,9 +51,9 @@ class Workflow(unittest.TestCase):
                         '-b test-deferred.bam -p test-paired')
             self.assertEqual(result, expected)
 
-    def test_run_realign_deferred_pe(self):
-        raise NotImplementedError
-        # leviosam2.run_realign_deferred_pe()
+    # def test_run_realign_deferred_pe(self):
+    #     raise NotImplementedError
+    #     # leviosam2.run_realign_deferred_pe()
 
 
 if __name__ == '__main__':
