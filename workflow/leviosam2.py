@@ -55,7 +55,7 @@ def parse_args() -> argparse.Namespace:
                             'bowtie2', 'bwamem', 'bwamem2', 'minimap2',
                             'winnowmap2', 'strobealign'
                         ])
-    parser.add_argument('--aligner_binary',
+    parser.add_argument('--aligner_exe',
                         type=str,
                         default='auto',
                         help=('Path to the aligner executable. '
@@ -156,7 +156,7 @@ class Leviosam2Workflow:
     '''LevioSAM2 workflow module.'''
 
     @staticmethod
-    def validate_binary(cmd: str, lenient: bool = False) -> None:
+    def validate_exe(cmd: str, lenient: bool = False) -> None:
         '''Validate if an executable is valid.
         
         Args:
@@ -188,34 +188,33 @@ class Leviosam2Workflow:
                                  '```')
 
     @staticmethod
-    def check_input_exists(fn_in: pathlib.Path) -> None:
-        if not fn_in.is_file():
-            raise FileNotFoundError(f'{fn_in} is not a file')
+    def check_input_exists(fn: pathlib.Path) -> None:
+        if not fn.is_file():
+            raise FileNotFoundError(f'{fn} is not a file')
 
-    def _infer_aligner_binary(self):
+    def _infer_aligner_exe(self):
         if self.aligner in [
                 'bowtie2', 'minimap2', 'winnowmap2', 'strobealign'
         ]:
-            self.aligner_binary = self.aligner
+            self.aligner_exe = self.aligner
         elif self.aligner == 'bwamem':
-            self.aligner_binary = 'bwa'
+            self.aligner_exe = 'bwa'
         elif self.aligner == 'bwamem2':
-            self.aligner_binary = 'bwa-mem2'
+            self.aligner_exe = 'bwa-mem2'
         else:
             raise ValueError(f'Unsupported aligner: {self.aligner}')
 
-    def _validate_binary(self):
-        self.validate_binary(cmd=f'{self.samtools_binary} --version')
-        self.validate_binary(cmd=f'{self.bgzip_binary} --version')
+    def _validate_exe(self):
+        self.validate_exe(cmd=f'{self.samtools} --version')
+        self.validate_exe(cmd=f'{self.bgzip} --version')
         if self.measure_time:
-            self.validate_binary(cmd=f'{self.gnu_time_binary} --version')
-        self.validate_binary(cmd=f'{self.leviosam2_binary}', lenient=True)
-        self.validate_binary(cmd=f'{self.aligner_binary}', lenient=True)
+            self.validate_exe(cmd=f'{self.gtime} --version')
+        self.validate_exe(cmd=f'{self.leviosam2}', lenient=True)
+        self.validate_exe(cmd=f'{self.aligner_exe}', lenient=True)
 
     def run_leviosam2(
         self,
         clft: str,
-        fn_input: pathlib.Path,
         lift_commit_min_mapq: typing.Union[int, None],
         lift_commit_min_score: typing.Union[int, None],
         lift_commit_max_frac_clipped: typing.Union[float, None],
@@ -247,11 +246,8 @@ class Leviosam2Workflow:
         lift_realign_config_arg = f'-x {lift_realign_config}' \
             if lift_realign_config else ''
 
-        fn_out_committed = (self.path_out_prefix.parent /
-                            f'{self.path_out_prefix.name}-committed.bam')
-
-        cmd = (f'{self.time_cmd} {self.leviosam2_binary} lift -C {clft} '
-               f'-a {fn_input} -p {self.path_out_prefix} '
+        cmd = (f'{self.time_cmd} {self.leviosam2} lift -C {clft} '
+               f'-a {self.fn_input_alignment} -p {self.path_out_prefix} '
                f'-t {self.num_threads} -m -f {self.fn_target_fasta} '
                f'{lift_commit_min_mapq_arg} '
                f'{lift_commit_min_score_arg} '
@@ -265,10 +261,10 @@ class Leviosam2Workflow:
         if self.dryrun:
             return cmd
         else:
-            self.check_input_exists(fn_input)
-            if (not self.forcerun) and fn_out_committed.is_file():
+            self.check_input_exists(self.fn_input_alignment)
+            if (not self.forcerun) and self.fn_committed.is_file():
                 print('[Info] Skip run_leviosam2 -- '
-                      f'{fn_out_committed} exists')
+                      f'{self.fn_committed} exists')
                 return 'skip'
             return subprocess.run([cmd], shell=True)
 
@@ -281,21 +277,16 @@ class Leviosam2Workflow:
         Subprocess outputs:
             - <self.path_out_prefix>-committed-sorted.bam
         '''
-        fn_in_bam = (self.path_out_prefix.parent /
-                     f'{self.path_out_prefix.name}-committed.bam')
-        fn_out = (self.path_out_prefix.parent /
-                  f'{self.path_out_prefix.name}-committed-sorted.bam')
-
-        cmd = (
-            f'{self.time_cmd} {self.samtools_binary} sort -@ {self.num_threads} '
-            f'-o {fn_out} {fn_in_bam}')
+        cmd = (f'{self.time_cmd} '
+               f'{self.samtools} sort -@ {self.num_threads} '
+               f'-o {self.fn_committed_sorted} {self.fn_committed}')
         if self.dryrun:
             return cmd
         else:
-            self.check_input_exists(fn_in_bam)
-            if (not self.forcerun) and fn_out.is_file():
+            self.check_input_exists(self.fn_committed)
+            if (not self.forcerun) and self.fn_committed_sorted.is_file():
                 print('[Info] Skip run_sort_committed -- '
-                      f'{fn_out} exists')
+                      f'{self.fn_committed_sorted} exists')
                 return 'skip'
             return subprocess.run([cmd], shell=True)
 
@@ -310,29 +301,21 @@ class Leviosam2Workflow:
             - <self.path_out_prefix>-paired-deferred-R1.fq.gz
             - <self.path_out_prefix>-paired-deferred-R2.fq.gz
         '''
-        fn_in_committed = (self.path_out_prefix.parent /
-                           f'{self.path_out_prefix.name}-committed-sorted.bam')
-        fn_in_deferred = (self.path_out_prefix.parent /
-                          f'{self.path_out_prefix.name}-deferred.bam')
-        fn_out_prefix = (self.path_out_prefix.parent /
-                         f'{self.path_out_prefix.name}-paired')
-        fn_out_fq1 = (self.path_out_prefix.parent /
-                      f'{self.path_out_prefix.name}-deferred-R1.fq.gz')
-        fn_out_fq2 = (self.path_out_prefix.parent /
-                      f'{self.path_out_prefix.name}-deferred-R2.fq.gz')
-
-        cmd = (f'{self.time_cmd} {self.leviosam2_binary} collate '
-               f'-a {fn_in_committed} -b {fn_in_deferred} -p {fn_out_prefix}')
+        cmd = (f'{self.time_cmd} '
+               f'{self.leviosam2} collate '
+               f'-a {self.fn_committed_sorted} -b {self.fn_deferred} '
+               f'-p {self.prefix_deferred_pe}')
         if self.dryrun:
             return cmd
         else:
-            self.check_input_exists(fn_in_committed)
-            self.check_input_exists(fn_in_deferred)
+            self.check_input_exists(self.fn_committed_sorted)
+            self.check_input_exists(self.fn_deferred)
 
-            if (not self.forcerun
-                ) and fn_out_fq1.is_file() and fn_out_fq2.is_file():
+            if (not self.forcerun) and self.fn_deferred_pe_fq1.is_file(
+            ) and self.fn_deferred_pe_fq2.is_file():
                 print('[Info] Skip run_collate_pe -- '
-                      f'both {fn_out_fq1} and {fn_out_fq2} exist')
+                      f'both {self.fn_deferred_pe_fq1} and '
+                      f'{self.fn_deferred_pe_fq2} exist')
                 return 'skip'
             return subprocess.run([cmd], shell=True)
 
@@ -355,56 +338,47 @@ class Leviosam2Workflow:
             ]:
                 raise ValueError('We have not supported paired-end '
                                  f'mode for aligner {self.aligner}')
-            fn_in_fq1 = (
-                self.path_out_prefix.parent /
-                f'{self.path_out_prefix.name}-paired-deferred-R1.fq.gz')
-            fn_in_fq2 = (
-                self.path_out_prefix.parent /
-                f'{self.path_out_prefix.name}-paired-deferred-R2.fq.gz')
-            fn_out = (self.path_out_prefix.parent /
-                      f'{self.path_out_prefix.name}-paired-realigned.bam')
-            cmd_samtools = f'{self.time_cmd} {self.samtools_binary} view -hbo {fn_out}'
+            fn_out = self.fn_deferred_realigned_pe
+            cmd_samtools = f'{self.time_cmd} {self.samtools} view -hbo {fn_out}'
         else:
             num_threads_sort = max(1, self.num_threads // 5)
             num_threads_aln = max(1, self.num_threads - num_threads_sort)
-            fn_in_fq = (self.path_out_prefix.parent /
-                        f'{self.path_out_prefix.name}-deferred.fq.gz')
-            fn_out = (self.path_out_prefix.parent /
-                      f'{self.path_out_prefix.name}-realigned.bam')
+            fn_out = self.fn_deferred_realigned_se
             cmd_samtools = (
-                f'{self.time_cmd} {self.samtools_binary} sort -@ {num_threads_aln} '
-                f'-o {fn_out}')
+                f'{self.time_cmd} '
+                f'{self.samtools} sort -@ {num_threads_aln} -o {fn_out}')
 
         if self.aligner == 'bowtie2':
             if not self.is_single_end:
-                reads = '-1 {fn_in_fq1} -2 {fn_in_fq2}'
+                reads = (f'-1 {self.fn_deferred_pe_fq1} '
+                         f'-2 {self.fn_deferred_pe_fq2}')
             else:
-                reads = '-U {fn_in_fq}'
-            cmd = (
-                f'{self.time_cmd} {self.aligner_binary} {rg_string} -p {num_threads_aln} '
-                f'-x {target_fasta_index} {reads} | '
-                f'{cmd_samtools}')
+                reads = f'-U {self.fn_deferred_fq_se}'
+            cmd = (f'{self.time_cmd} {self.aligner_exe} {rg_string} '
+                   f'-p {num_threads_aln} -x {target_fasta_index} {reads} | '
+                   f'{cmd_samtools}')
         elif self.aligner in ['bwamem', 'bwamem2']:
             if rg_string != '':
                 rg_string = f'-R {rg_string}'
             if not self.is_single_end:
-                reads = '{fn_in_fq1} {fn_in_fq2}'
+                reads = (f'{self.fn_deferred_pe_fq1} '
+                         f'{self.fn_deferred_pe_fq2}')
             else:
-                reads = '{fn_in_fq}'
-            cmd = (f'{self.time_cmd} {self.aligner_binary} mem {rg_string} '
+                reads = f'{self.fn_deferred_fq_se}'
+            cmd = (f'{self.time_cmd} {self.aligner_exe} mem {rg_string} '
                    f'-t {num_threads_aln} {target_fasta_index} {reads} | '
                    f'{cmd_samtools}')
         elif self.aligner == 'strobealign':
             if rg_string != '':
                 rg_string = f'--rg {rg_string}'
             if not self.is_single_end:
-                reads = '{fn_in_fq1} {fn_in_fq2}'
+                reads = (f'{self.fn_deferred_pe_fq1} '
+                         f'{self.fn_deferred_pe_fq2}')
             else:
-                reads = '{fn_in_fq}'
-            cmd = (
-                f'{self.time_cmd} {self.aligner_binary} {rg_string} -t {num_threads_aln} '
-                f'{self.fn_target_fasta} {reads} | '
-                f'{cmd_samtools}')
+                reads = f'{self.fn_deferred_fq_se}'
+            cmd = (f'{self.time_cmd} {self.aligner_exe} {rg_string} '
+                   f'-t {num_threads_aln} {self.fn_target_fasta} {reads} | '
+                   f'{cmd_samtools}')
         elif self.aligner in ['minimap2', 'winnowmap2']:
             # Do not use a prefix other than 'map-hifi' and 'map-ont' modes.
             preset = ''
@@ -415,19 +389,20 @@ class Leviosam2Workflow:
             if rg_string != '':
                 rg_string = f'-R {rg_string}'
             if not self.is_single_end:
-                reads = '{fn_in_fq1} {fn_in_fq2}'
+                reads = (f'{self.fn_deferred_pe_fq1} '
+                         f'{self.fn_deferred_pe_fq2}')
             else:
-                reads = '{fn_in_fq}'
-            cmd = (
-                f'{self.time_cmd} {self.aligner_binary} {rg_string} -a {preset} --MD '
-                f'-t {num_threads_aln} {self.fn_target_fasta} {reads} | '
-                f'{cmd_samtools}')
+                reads = f'{self.fn_deferred_fq_se}'
+            cmd = (f'{self.time_cmd} '
+                   f'{self.aligner_exe} {rg_string} -a {preset} --MD '
+                   f'-t {num_threads_aln} {self.fn_target_fasta} {reads} | '
+                   f'{cmd_samtools}')
 
         if self.dryrun:
             return cmd
         else:
-            self.check_input_exists(fn_in_fq1)
-            self.check_input_exists(fn_in_fq2)
+            self.check_input_exists(self.fn_deferred_pe_fq1)
+            self.check_input_exists(self.fn_deferred_pe_fq2)
 
             if (not self.forcerun) and fn_out.is_file():
                 print(f'[Info] Skip run_realign_deferred -- {fn_out} exists')
@@ -435,84 +410,73 @@ class Leviosam2Workflow:
             return subprocess.run([cmd], shell=True)
 
     def run_refflow_merge_pe(
-        self,
-        source_label: str,
-        target_label: str,
-    ) -> typing.Union[str, 'subprocess.CompletedProcess[bytes]']:
+            self) -> typing.Union[str, 'subprocess.CompletedProcess[bytes]']:
         '''(Paired-end) reference flow-style merging of deferred/realigned BAMs.
+
+        Subprocess inputs:
+            - self.fn_deferred_realigned_pe
+            - self.fn_deferred_pe
+        Subprocess outputs:
+            - (tmp) self.fn_deferred_realigned_pe_sortn
+            - (tmp) self.fn_deferred_pe_sortn
+            - self.fn_deferred_reconciled
         '''
-        fn_in_realigned = (self.path_out_prefix.parent /
-                           f'{self.path_out_prefix.name}-paired-realigned.bam')
-        fn_in_deferred = (self.path_out_prefix.parent /
-                          f'{self.path_out_prefix.name}-paired-deferred.bam')
-        fn_realigned_sort_n = (
-            self.path_out_prefix.parent /
-            f'{self.path_out_prefix.name}--paired-realigned-sorted_n.bam')
-        fn_deferred_sort_n = (
-            self.path_out_prefix.parent /
-            f'{self.path_out_prefix.name}--paired-deferred-sorted_n.bam')
-        fn_out = (
-            self.path_out_prefix.parent /
-            f'{self.path_out_prefix.name}-paired-deferred-reconciled-sorted.bam'
-        )
         cmd = ''
+        cmd += (f'{self.time_cmd} '
+                f'{self.samtools} sort -@ {self.num_threads} -n '
+                f'-o {self.fn_deferred_realigned_pe_sortn} '
+                f'{self.fn_deferred_realigned_pe} && ')
+        cmd += (f'{self.time_cmd} '
+                f'{self.samtools} sort -@ {self.num_threads} -n '
+                f'-o {self.fn_deferred_pe_sortn} {self.fn_deferred_pe} && ')
         cmd += (
-            f'{self.time_cmd} {self.samtools_binary} sort -@ {self.num_threads} -n '
-            f'-o {fn_realigned_sort_n} {fn_in_realigned} && ')
-        cmd += (
-            f'{self.time_cmd} {self.samtools_binary} sort -@ {self.num_threads} -n '
-            f'-o {fn_deferred_sort_n} {fn_in_deferred} && ')
-        cmd += (
-            f'{self.time_cmd} {self.leviosam2_binary} reconcile '
-            f'-s {source_label}:{fn_deferred_sort_n} '
-            f'-s {target_label}:{fn_realigned_sort_n} '
+            f'{self.time_cmd} '
+            f'{self.leviosam2} reconcile '
+            f'-s {self.source_label}:{self.fn_deferred_pe_sortn} '
+            f'-s {self.target_label}:{self.fn_deferred_realigned_pe_sortn} '
             f'-m -o - | '
-            f'{self.time_cmd} {self.samtools_binary} sort -@ {self.num_threads} -o {fn_out}'
-        )
+            f'{self.time_cmd} '
+            f'{self.samtools} sort -@ {self.num_threads} '
+            f'-o {self.fn_deferred_reconciled}')
 
         if self.dryrun:
             return cmd
         else:
-            self.check_input_exists(fn_in_realigned)
-            self.check_input_exists(fn_in_deferred)
+            self.check_input_exists(self.fn_deferred_realigned_pe)
+            self.check_input_exists(self.fn_deferred_pe)
 
-            if (not self.forcerun) and fn_out.is_file():
-                print(f'[Info] Skip run_refflow_merge_pe -- {fn_out} exists')
+            if (not self.forcerun) and self.fn_deferred_reconciled.is_file():
+                print('[Info] Skip run_refflow_merge_pe -- '
+                      f'{self.fn_deferred_reconciled} exists')
                 return 'skip'
             return subprocess.run([cmd], shell=True)
 
     def run_merge_and_index(
-        self, ) -> typing.Union[str, 'subprocess.CompletedProcess[bytes]']:
+            self) -> typing.Union[str, 'subprocess.CompletedProcess[bytes]']:
         '''Merge all processed BAMs and index.
         '''
-        fn_in_committed = (
-            self.path_out_prefix.parent /
-            f'{self.path_out_prefix.name}-committed-sorted.bam ')
         if not self.is_single_end:
-            fn_in_deferred = (
-                self.path_out_prefix.parent /
-                f'{self.path_out_prefix.name}-paired-deferred-reconciled-sorted.bam'
-            )
+            fn_in_deferred = self.fn_deferred_reconciled
         else:
-            fn_in_deferred = (self.path_out_prefix.parent /
-                              f'{self.path_out_prefix.name}-realigned.bam')
-        fn_out = (self.path_out_prefix.parent /
-                  f'{self.path_out_prefix.name}-final.bam')
+            fn_in_deferred = self.fn_deferred_realigned_se
 
         cmd = ''
-        cmd += (
-            f'{self.time_cmd} {self.samtools_binary} merge -@ {self.num_threads} --write-index '
-            f'-o {fn_out} {fn_in_committed} {fn_in_deferred} && ')
-        cmd += (f'{self.time_cmd} {self.samtools_binary} index {fn_out}')
+        cmd += (f'{self.time_cmd} '
+                f'{self.samtools} merge -@ {self.num_threads} --write-index '
+                f'-o {self.fn_final} {self.fn_committed_sorted} '
+                f'{fn_in_deferred} && ')
+        cmd += (f'{self.time_cmd} {self.samtools} index {self.fn_final}')
 
         if self.dryrun:
             return cmd
         else:
-            self.check_input_exists(fn_in_committed)
+            self.check_input_exists(self.fn_committed_sorted)
             self.check_input_exists(fn_in_deferred)
 
-            if (not self.forcerun) and fn_out.is_file():
-                print(f'[Info] Skip run_merge_and_index -- {fn_out} exists')
+            if (not self.forcerun) and self.fn_final.is_file():
+                print(
+                    f'[Info] Skip run_merge_and_index -- {self.fn_final} exists'
+                )
                 return 'skip'
             return subprocess.run([cmd], shell=True)
 
@@ -520,31 +484,59 @@ class Leviosam2Workflow:
             self) -> typing.Union[str, 'subprocess.CompletedProcess[bytes]']:
         '''(Single-end) Convert deferred BAM to FASTQ.
         '''
-        fn_in_bam = (self.path_out_prefix.parent /
-                     f'{self.path_out_prefix.name}-deferred.bam')
-        fn_out = (self.path_out_prefix.parent /
-                  f'{self.path_out_prefix.name}-deferred.fq.gz')
-        cmd = (
-            f'{self.time_cmd} {self.samtools_binary} fastq index {fn_in_bam} | '
-            f'{self.time_cmd} > {fn_out}')
+        cmd = (f'{self.time_cmd} '
+               f'{self.samtools} fastq index {self.fn_deferred} | '
+               f'{self.time_cmd} > {self.fn_deferred_fq_se}')
 
         if self.dryrun:
             return cmd
         else:
-            self.check_input_exists(fn_in_bam)
+            self.check_input_exists(self.fn_deferred)
 
-            if (not self.forcerun) and fn_out.is_file():
-                print(f'[Info] Skip run_bam_to_fastq_se -- {fn_out} exists')
+            if (not self.forcerun) and self.fn_deferred_fq_se.is_file():
+                print('[Info] Skip run_bam_to_fastq_se -- '
+                      f'{self.fn_deferred_fq_se} exists')
                 return 'skip'
             return subprocess.run([cmd], shell=True)
+
+    def _set_filenames(self):
+        '''Update filenames potentially used when running the workflow.'''
+        o_dir = self.path_out_prefix.parent
+        o_prefix = self.path_out_prefix.name
+
+        self.fn_committed = (o_dir / f'{o_prefix}-committed.bam')
+        self.fn_committed_sorted = (o_dir / f'{o_prefix}-committed-sorted.bam')
+        self.fn_deferred = (o_dir / f'{o_prefix}-deferred.bam')
+        self.fn_final = (o_dir / f'{o_prefix}-final.bam')
+
+        # paired-end
+        self.prefix_deferred_pe = (o_dir / f'{o_prefix}-paired')
+        self.fn_deferred_pe_fq1 = (o_dir /
+                                   f'{o_prefix}-paired-deferred-R1.fq.gz')
+        self.fn_deferred_pe_fq2 = (o_dir /
+                                   f'{o_prefix}-paired-deferred-R2.fq.gz')
+        self.fn_deferred_pe = (o_dir / f'{o_prefix}-paired-deferred.bam')
+        self.fn_deferred_pe_sortn = (
+            o_dir / f'{o_prefix}-paired-deferred-sorted_n.bam')
+        self.fn_deferred_realigned_pe = (o_dir /
+                                         f'{o_prefix}-paired-realigned.bam')
+        self.fn_deferred_realigned_pe_sortn = (
+            o_dir / f'{o_prefix}-paired-realigned-sorted_n.bam')
+        self.fn_deferred_reconciled = (
+            o_dir / f'{o_prefix}-paired-deferred-reconciled-sorted.bam')
+
+        # single-end
+        self.fn_deferred_fq_se = (o_dir / f'{o_prefix}-deferred.fq.gz')
+        self.fn_deferred_realigned_se = (o_dir / f'{o_prefix}-realigned.bam')
 
     def _run_workflow(self):
         # TODO
         # run_intial_align()
 
+        self._set_filenames()
+
         self.run_leviosam2(
             clft=args.leviosam2_index,
-            fn_input=fn_input_alignment,
             lift_commit_min_mapq=args.lift_commit_min_mapq,
             lift_commit_min_score=args.lift_commit_min_score,
             lift_commit_max_frac_clipped=args.lift_commit_max_frac_clipped,
@@ -561,13 +553,9 @@ class Leviosam2Workflow:
         if not self.is_single_end:
             self.run_collate_pe()
             self.run_realign_deferred()
-            self.run_refflow_merge_pe(
-                source_label=args.source_label,
-                target_label=args.target_label,
-            )
+            self.run_refflow_merge_pe()
         else:
             self.run_bam_to_fastq_se()
-
             self.run_realign_deferred()
 
         self.run_merge_and_index()
@@ -575,28 +563,29 @@ class Leviosam2Workflow:
 
     def __init__(self, args: argparse.Namespace) -> None:
         self.aligner = args.aligner
-        self.aligner_binary = args.aligner_binary
-        if self.aligner_binary == 'auto':
-            self._infer_aligner_binary()
+        self.aligner_exe = args.aligner_exe
+        if self.aligner_exe == 'auto':
+            self._infer_aligner_exe()
         self.sequence_type = args.sequence_type
         self.is_single_end = (self.sequence_type not in ['ilmn_pe'])
-        # self.out_prefix = args.out_prefix
         self.path_out_prefix = pathlib.Path(args.out_prefix)
         self.num_threads = args.num_threads
+        self.source_label = args.source_label
+        self.target_label = args.target_label
         self.dryrun = args.dryrun
         self.forcerun = args.forcerun
 
         # executables
-        self.samtools_binary = args.samtools_binary
-        self.bgzip_binary = args.bgzip_binary
-        # self.gnu_time_binary = args.gnu_time_binary
-        self.leviosam2_binary = args.leviosam2_binary
+        self.samtools = args.samtools_binary
+        self.bgzip = args.bgzip_binary
+        self.gtime = args.gnu_time_binary
+        self.leviosam2 = args.leviosam2_binary
 
         # Computational performance measurement related
         # self.measure_time = args.measure_time
         self.time_cmd = ''
         if args.measure_time:
-            self.time_cmd = (f'{args.gnu_time_binary} -v '
+            self.time_cmd = (f'{self.gtime} -v '
                              f'-ao {self.path_out_prefix}.time_log')
 
         # Pathify
@@ -609,16 +598,14 @@ class Leviosam2Workflow:
         self.check_input_exists(self.fn_input_alignment)
 
         # Check if executables are valid
-        self._validate_binary()
+        self._validate_exe()
 
+        # Run workflow
         self._run_workflow()
 
 
 def run_workflow(args: argparse.Namespace):
-
     workflow = Leviosam2Workflow(args)
-
-    return 0
 
 
 if __name__ == '__main__':

@@ -12,9 +12,9 @@ TIME_CMDS = ['', 'time -v -ao test.time_log']
 
 class WorkflowStatic(unittest.TestCase):
 
-    def test_validate_binary(self):
+    def test_validate_exe(self):
         # `ls` should not fail
-        leviosam2.Leviosam2Workflow.validate_binary(cmd='ls')
+        leviosam2.Leviosam2Workflow.validate_exe(cmd='ls')
 
     def test_check_input_exists(self):
         leviosam2.Leviosam2Workflow.check_input_exists(pathlib.Path.cwd() /
