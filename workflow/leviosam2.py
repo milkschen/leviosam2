@@ -125,6 +125,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('-fi',
                         '--target_fasta_index',
                         type=str,
+                        default='',
                         help=('Path to the target reference index '
                               'for `--aligner`'))
     parser.add_argument('-s',
@@ -221,9 +222,9 @@ class Leviosam2Workflow:
         lift_commit_max_isize: typing.Union[int, None] = None,
         lift_commit_max_hdist: typing.Union[int, None] = None,
         lift_max_gap: typing.Union[int, None] = None,
-        lift_bed_commit_source: typing.Union[int, None] = None,
-        lift_bed_defer_target: typing.Union[int, None] = None,
-        lift_realign_config: typing.Union[int, None] = None,
+        lift_bed_commit_source: typing.Union[str, None] = None,
+        lift_bed_defer_target: typing.Union[str, None] = None,
+        lift_realign_config: typing.Union[str, None] = None,
     ) -> typing.Union[str, 'subprocess.CompletedProcess[bytes]']:
         '''Run leviosam2.
         '''
@@ -246,7 +247,8 @@ class Leviosam2Workflow:
         lift_realign_config_arg = f'-x {lift_realign_config} ' \
             if lift_realign_config else ''
 
-        cmd = (f'{self.time_cmd} {self.leviosam2} lift -C {clft} '
+        cmd = (f'{self.time_cmd}'
+               f'{self.leviosam2} lift -C {clft} '
                f'-a {self.fn_input_alignment} -p {self.path_out_prefix} '
                f'-t {self.num_threads} -m -f {self.fn_target_fasta} '
                f'{lift_commit_min_mapq_arg}'
@@ -277,7 +279,7 @@ class Leviosam2Workflow:
         Subprocess outputs:
             - <self.path_out_prefix>-committed-sorted.bam
         '''
-        cmd = (f'{self.time_cmd} '
+        cmd = (f'{self.time_cmd}'
                f'{self.samtools} sort -@ {self.num_threads} '
                f'-o {self.fn_committed_sorted} {self.fn_committed}')
         if self.dryrun:
@@ -301,7 +303,7 @@ class Leviosam2Workflow:
             - <self.path_out_prefix>-paired-deferred-R1.fq.gz
             - <self.path_out_prefix>-paired-deferred-R2.fq.gz
         '''
-        cmd = (f'{self.time_cmd} '
+        cmd = (f'{self.time_cmd}'
                f'{self.leviosam2} collate '
                f'-a {self.fn_committed_sorted} -b {self.fn_deferred} '
                f'-p {self.prefix_deferred_pe}')
@@ -320,7 +322,9 @@ class Leviosam2Workflow:
             return subprocess.run([cmd], shell=True)
 
     def run_realign_deferred(
-        self, target_fasta_index: str, rg_string: str
+        self,
+        target_fasta_index: str = '',
+        rg_string: str = ''
     ) -> typing.Union[str, 'subprocess.CompletedProcess[bytes]']:
         '''Re-align deferred reads.
 
@@ -331,7 +335,20 @@ class Leviosam2Workflow:
             - single-end: alignment=`num_threads`-sort, sort=`num_threads//5`
         '''
 
-        if not self.is_single_end:
+        if self.is_single_end:
+            num_threads_sort = max(1, self.num_threads // 5)
+            num_threads_aln = max(1, self.num_threads - num_threads_sort)
+            fn_out = self.fn_deferred_realigned_se
+
+            if self.aligner == 'bowtie2':
+                reads = f'-U {self.fn_deferred_fq_se}'
+            else:
+                reads = f'{self.fn_deferred_fq_se}'
+
+            cmd_samtools = (
+                f'{self.time_cmd}'
+                f'{self.samtools} sort -@ {num_threads_aln} -o {fn_out}')
+        else:
             num_threads_aln = max(1, self.num_threads - 1)
             if self.aligner not in [
                     'bowtie2', 'bwamem', 'bwamem2', 'strobealign'
@@ -339,44 +356,33 @@ class Leviosam2Workflow:
                 raise ValueError('We have not supported paired-end '
                                  f'mode for aligner {self.aligner}')
             fn_out = self.fn_deferred_realigned_pe
-            cmd_samtools = f'{self.time_cmd} {self.samtools} view -hbo {fn_out}'
-        else:
-            num_threads_sort = max(1, self.num_threads // 5)
-            num_threads_aln = max(1, self.num_threads - num_threads_sort)
-            fn_out = self.fn_deferred_realigned_se
-            cmd_samtools = (
-                f'{self.time_cmd} '
-                f'{self.samtools} sort -@ {num_threads_aln} -o {fn_out}')
 
-        if self.aligner == 'bowtie2':
-            if not self.is_single_end:
+            if self.aligner == 'bowtie2':
                 reads = (f'-1 {self.fn_deferred_pe_fq1} '
                          f'-2 {self.fn_deferred_pe_fq2}')
             else:
-                reads = f'-U {self.fn_deferred_fq_se}'
-            cmd = (f'{self.time_cmd} {self.aligner_exe} {rg_string} '
+                reads = (f'{self.fn_deferred_pe_fq1} '
+                         f'{self.fn_deferred_pe_fq2}')
+
+            cmd_samtools = f'{self.time_cmd} {self.samtools} view -hbo {fn_out}'
+
+        if self.aligner == 'bowtie2':
+            cmd = (f'{self.time_cmd}'
+                   f'{self.aligner_exe} {rg_string} '
                    f'-p {num_threads_aln} -x {target_fasta_index} {reads} | '
                    f'{cmd_samtools}')
         elif self.aligner in ['bwamem', 'bwamem2']:
             if rg_string != '':
                 rg_string = f'-R {rg_string}'
-            if not self.is_single_end:
-                reads = (f'{self.fn_deferred_pe_fq1} '
-                         f'{self.fn_deferred_pe_fq2}')
-            else:
-                reads = f'{self.fn_deferred_fq_se}'
-            cmd = (f'{self.time_cmd} {self.aligner_exe} mem {rg_string} '
+            cmd = (f'{self.time_cmd}'
+                   f'{self.aligner_exe} mem {rg_string} '
                    f'-t {num_threads_aln} {target_fasta_index} {reads} | '
                    f'{cmd_samtools}')
         elif self.aligner == 'strobealign':
             if rg_string != '':
                 rg_string = f'--rg {rg_string}'
-            if not self.is_single_end:
-                reads = (f'{self.fn_deferred_pe_fq1} '
-                         f'{self.fn_deferred_pe_fq2}')
-            else:
-                reads = f'{self.fn_deferred_fq_se}'
-            cmd = (f'{self.time_cmd} {self.aligner_exe} {rg_string} '
+            cmd = (f'{self.time_cmd}'
+                   f'{self.aligner_exe} {rg_string} '
                    f'-t {num_threads_aln} {self.fn_target_fasta} {reads} | '
                    f'{cmd_samtools}')
         elif self.aligner in ['minimap2', 'winnowmap2']:
@@ -388,12 +394,7 @@ class Leviosam2Workflow:
                 preset = '-x map-ont'
             if rg_string != '':
                 rg_string = f'-R {rg_string}'
-            if not self.is_single_end:
-                reads = (f'{self.fn_deferred_pe_fq1} '
-                         f'{self.fn_deferred_pe_fq2}')
-            else:
-                reads = f'{self.fn_deferred_fq_se}'
-            cmd = (f'{self.time_cmd} '
+            cmd = (f'{self.time_cmd}'
                    f'{self.aligner_exe} {rg_string} -a {preset} --MD '
                    f'-t {num_threads_aln} {self.fn_target_fasta} {reads} | '
                    f'{cmd_samtools}')
@@ -422,20 +423,20 @@ class Leviosam2Workflow:
             - self.fn_deferred_reconciled
         '''
         cmd = ''
-        cmd += (f'{self.time_cmd} '
+        cmd += (f'{self.time_cmd}'
                 f'{self.samtools} sort -@ {self.num_threads} -n '
                 f'-o {self.fn_deferred_realigned_pe_sortn} '
                 f'{self.fn_deferred_realigned_pe} && ')
-        cmd += (f'{self.time_cmd} '
+        cmd += (f'{self.time_cmd}'
                 f'{self.samtools} sort -@ {self.num_threads} -n '
                 f'-o {self.fn_deferred_pe_sortn} {self.fn_deferred_pe} && ')
         cmd += (
-            f'{self.time_cmd} '
+            f'{self.time_cmd}'
             f'{self.leviosam2} reconcile '
             f'-s {self.source_label}:{self.fn_deferred_pe_sortn} '
             f'-s {self.target_label}:{self.fn_deferred_realigned_pe_sortn} '
             f'-m -o - | '
-            f'{self.time_cmd} '
+            f'{self.time_cmd}'
             f'{self.samtools} sort -@ {self.num_threads} '
             f'-o {self.fn_deferred_reconciled}')
 
@@ -461,11 +462,12 @@ class Leviosam2Workflow:
             fn_in_deferred = self.fn_deferred_realigned_se
 
         cmd = ''
-        cmd += (f'{self.time_cmd} '
+        cmd += (f'{self.time_cmd}'
                 f'{self.samtools} merge -@ {self.num_threads} --write-index '
                 f'-o {self.fn_final} {self.fn_committed_sorted} '
                 f'{fn_in_deferred} && ')
-        cmd += (f'{self.time_cmd} {self.samtools} index {self.fn_final}')
+        cmd += (f'{self.time_cmd}'
+                f'{self.samtools} index {self.fn_final}')
 
         if self.dryrun:
             return cmd
@@ -484,9 +486,10 @@ class Leviosam2Workflow:
             self) -> typing.Union[str, 'subprocess.CompletedProcess[bytes]']:
         '''(Single-end) Convert deferred BAM to FASTQ.
         '''
-        cmd = (f'{self.time_cmd} '
+        cmd = (f'{self.time_cmd}'
                f'{self.samtools} fastq index {self.fn_deferred} | '
-               f'{self.time_cmd} > {self.fn_deferred_fq_se}')
+               f'{self.time_cmd}'
+               f'> {self.fn_deferred_fq_se}')
 
         if self.dryrun:
             return cmd
@@ -550,13 +553,17 @@ class Leviosam2Workflow:
 
         self.run_sort_committed()
 
-        if not self.is_single_end:
-            self.run_collate_pe()
-            self.run_realign_deferred()
-            self.run_refflow_merge_pe()
-        else:
+        if self.is_single_end:
             self.run_bam_to_fastq_se()
-            self.run_realign_deferred()
+            self.run_realign_deferred(
+                target_fasta_index=args.target_fasta_index,
+                rg_string=args.read_group)
+        else:
+            self.run_collate_pe()
+            self.run_realign_deferred(
+                target_fasta_index=args.target_fasta_index,
+                rg_string=args.read_group)
+            self.run_refflow_merge_pe()
 
         self.run_merge_and_index()
         # self.run_clean()
@@ -591,7 +598,7 @@ class Leviosam2Workflow:
         self.time_cmd = ''
         if args.measure_time:
             self.time_cmd = (f'{self.gtime} -v '
-                             f'-ao {self.path_out_prefix}.time_log')
+                             f'-ao {self.path_out_prefix}.time_log ')
 
         # Pathify
         self.fn_target_fasta = pathlib.Path(args.target_fasta)

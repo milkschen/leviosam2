@@ -28,11 +28,12 @@ class WorkflowStatic(unittest.TestCase):
 class Workflow(unittest.TestCase):
 
     @classmethod
-    def setUpClass(cls) -> None:
+    def setUp(cls) -> None:
+        '''Set up for every test.'''
         args = argparse.Namespace
-        args.aligner = 'TBD'
-        args.aligner_exe = 'TBD'
-        args.sequence_type = 'TBD'
+        args.aligner = 'bowtie2'
+        args.aligner_exe = 'auto'
+        args.sequence_type = 'ilmn_pe'
         args.out_prefix = 'out/prefix'
         args.num_threads = 4
         args.source_label = 'source'
@@ -50,6 +51,14 @@ class Workflow(unittest.TestCase):
         cls.workflow = leviosam2.Leviosam2Workflow(args)
         cls.workflow._set_filenames()
 
+    # TODO
+    # def test_set_filenames_single_end(self):
+    #     pass
+
+    # TODO
+    # def test_set_filenames_paired_end(self):
+    #     pass
+
     def test_infer_aligner_exe(self):
         for aln in ['bowtie2', 'minimap2', 'winnowmap2', 'strobealign']:
             self.workflow.aligner = aln
@@ -66,7 +75,7 @@ class Workflow(unittest.TestCase):
 
     def test_run_leviosam2_basic(self):
         result = self.workflow.run_leviosam2(clft='test.clft')
-        expected = (f' leviosam2 lift -C test.clft -a input/aln.bam '
+        expected = (f'leviosam2 lift -C test.clft -a input/aln.bam '
                     f'-p out/prefix -t 4 -m -f target.fasta ')
         self.assertEqual(result, expected)
 
@@ -74,7 +83,7 @@ class Workflow(unittest.TestCase):
         result = self.workflow.run_leviosam2(clft='test.clft',
                                              lift_commit_min_mapq=10,
                                              lift_commit_min_score=-10)
-        expected = (f' leviosam2 lift -C test.clft -a input/aln.bam '
+        expected = (f'leviosam2 lift -C test.clft -a input/aln.bam '
                     f'-p out/prefix -t 4 -m -f target.fasta '
                     f'-S mapq:10 -S aln_score:-10 ')
         self.assertEqual(result, expected)
@@ -91,7 +100,7 @@ class Workflow(unittest.TestCase):
             lift_bed_commit_source='commit/source.bed',
             lift_bed_defer_target='defer/target.bed',
             lift_realign_config='configs/ilmn.yaml')
-        expected = (f' leviosam2 lift -C test.clft -a input/aln.bam '
+        expected = (f'leviosam2 lift -C test.clft -a input/aln.bam '
                     f'-p out/prefix -t 4 -m -f target.fasta '
                     f'-S mapq:30 -S aln_score:100 -S clipped_frac:0.95 '
                     f'-S isize:1000 -S hdist:5 -G 20 '
@@ -100,7 +109,7 @@ class Workflow(unittest.TestCase):
         self.assertEqual(result, expected)
 
     def test_run_sort_committed(self):
-        self.workflow.time_cmd = 'gtime -v -ao test.time_log'
+        self.workflow.time_cmd = 'gtime -v -ao test.time_log '
 
         result = self.workflow.run_sort_committed()
         expected = (
@@ -110,14 +119,30 @@ class Workflow(unittest.TestCase):
 
     def test_run_collate_pe(self):
         result = self.workflow.run_collate_pe()
-        expected = (f' leviosam2 collate '
+        expected = (f'leviosam2 collate '
                     '-a out/prefix-committed-sorted.bam '
                     '-b out/prefix-deferred.bam -p out/prefix-paired')
         self.assertEqual(result, expected)
 
-    # def test_run_realign_deferred_pe(self):
-    #     raise NotImplementedError
-    #     # leviosam2.run_realign_deferred_pe()
+    def test_run_realign_deferred_bt2(self):
+        result = self.workflow.run_realign_deferred(
+            target_fasta_index='bt2/target.fa', rg_string='rg')
+        expected = (f'bowtie2 rg -p 3 -x bt2/target.fa '
+                    f'-1 out/prefix-paired-deferred-R1.fq.gz '
+                    f'-2 out/prefix-paired-deferred-R2.fq.gz |  '
+                    f'samtools view -hbo out/prefix-paired-realigned.bam')
+        self.assertEqual(result, expected)
+
+    def test_run_realign_deferred_bwa(self):
+        self.workflow.aligner = 'bwamem'
+        self.workflow.aligner_exe = 'bwa'
+        result = self.workflow.run_realign_deferred(
+            target_fasta_index='bwa/target.fa', rg_string='rg')
+        expected = (f'bwa mem -R rg -t 3 bwa/target.fa '
+                    f'out/prefix-paired-deferred-R1.fq.gz '
+                    f'out/prefix-paired-deferred-R2.fq.gz |  '
+                    f'samtools view -hbo out/prefix-paired-realigned.bam')
+        self.assertEqual(result, expected)
 
 
 if __name__ == '__main__':
