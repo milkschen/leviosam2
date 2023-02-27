@@ -188,7 +188,7 @@ class Leviosam2Workflow:
                                  '```')
 
     @staticmethod
-    def check_input_exists(fn: pathlib.Path) -> None:
+    def _check_input_exists(fn: pathlib.Path) -> None:
         if not fn.is_file():
             raise FileNotFoundError(f'{fn} is not a file')
 
@@ -204,7 +204,7 @@ class Leviosam2Workflow:
         else:
             raise ValueError(f'Unsupported aligner: {self.aligner}')
 
-    def _validate_exe(self):
+    def validate_executables(self):
         self.validate_exe(cmd=f'{self.samtools} --version')
         self.validate_exe(cmd=f'{self.bgzip} --version')
         if self.measure_time:
@@ -215,53 +215,53 @@ class Leviosam2Workflow:
     def run_leviosam2(
         self,
         clft: str,
-        lift_commit_min_mapq: typing.Union[int, None],
-        lift_commit_min_score: typing.Union[int, None],
-        lift_commit_max_frac_clipped: typing.Union[float, None],
-        lift_commit_max_isize: typing.Union[int, None],
-        lift_commit_max_hdist: typing.Union[int, None],
-        lift_max_gap: typing.Union[int, None],
-        lift_bed_commit_source: str,
-        lift_bed_defer_target: str,
-        lift_realign_config: str,
+        lift_commit_min_mapq: typing.Union[int, None] = None,
+        lift_commit_min_score: typing.Union[int, None] = None,
+        lift_commit_max_frac_clipped: typing.Union[float, None] = None,
+        lift_commit_max_isize: typing.Union[int, None] = None,
+        lift_commit_max_hdist: typing.Union[int, None] = None,
+        lift_max_gap: typing.Union[int, None] = None,
+        lift_bed_commit_source: typing.Union[int, None] = None,
+        lift_bed_defer_target: typing.Union[int, None] = None,
+        lift_realign_config: typing.Union[int, None] = None,
     ) -> typing.Union[str, 'subprocess.CompletedProcess[bytes]']:
         '''Run leviosam2.
         '''
-        lift_commit_min_mapq_arg = f'-S mapq:{lift_commit_min_mapq}' \
+        lift_commit_min_mapq_arg = f'-S mapq:{lift_commit_min_mapq} ' \
             if lift_commit_min_mapq else ''
-        lift_commit_min_score_arg = f'-S aln_score:{lift_commit_min_score}' \
+        lift_commit_min_score_arg = f'-S aln_score:{lift_commit_min_score} ' \
             if lift_commit_min_score else ''
         lift_commit_max_frac_clipped_arg = \
-            f'-S clipped_frac:{lift_commit_max_frac_clipped}' \
+            f'-S clipped_frac:{lift_commit_max_frac_clipped} ' \
                 if lift_commit_max_frac_clipped else ''
-        lift_commit_max_isize_arg = f'-S isize:{lift_commit_max_isize}' \
+        lift_commit_max_isize_arg = f'-S isize:{lift_commit_max_isize} ' \
             if lift_commit_max_isize else ''
-        lift_commit_max_hdist_arg = f'-S hdist:{lift_commit_max_hdist}' \
+        lift_commit_max_hdist_arg = f'-S hdist:{lift_commit_max_hdist} ' \
             if lift_commit_max_hdist else ''
-        lift_max_gap_arg = f'-G {lift_max_gap}' if lift_max_gap else ''
-        lift_bed_commit_source_arg = f'-r {lift_bed_commit_source}' \
+        lift_max_gap_arg = f'-G {lift_max_gap} ' if lift_max_gap else ''
+        lift_bed_commit_source_arg = f'-r {lift_bed_commit_source} ' \
             if lift_bed_commit_source else ''
-        lift_bed_defer_target_arg = f'-D {lift_bed_defer_target}' \
+        lift_bed_defer_target_arg = f'-D {lift_bed_defer_target} ' \
             if lift_bed_defer_target else ''
-        lift_realign_config_arg = f'-x {lift_realign_config}' \
+        lift_realign_config_arg = f'-x {lift_realign_config} ' \
             if lift_realign_config else ''
 
         cmd = (f'{self.time_cmd} {self.leviosam2} lift -C {clft} '
                f'-a {self.fn_input_alignment} -p {self.path_out_prefix} '
                f'-t {self.num_threads} -m -f {self.fn_target_fasta} '
-               f'{lift_commit_min_mapq_arg} '
-               f'{lift_commit_min_score_arg} '
-               f'{lift_commit_max_frac_clipped_arg} '
-               f'{lift_commit_max_hdist_arg} '
-               f'{lift_commit_max_isize_arg} '
-               f'{lift_max_gap_arg} '
-               f'{lift_bed_commit_source_arg} '
-               f'{lift_bed_defer_target_arg} '
+               f'{lift_commit_min_mapq_arg}'
+               f'{lift_commit_min_score_arg}'
+               f'{lift_commit_max_frac_clipped_arg}'
+               f'{lift_commit_max_isize_arg}'
+               f'{lift_commit_max_hdist_arg}'
+               f'{lift_max_gap_arg}'
+               f'{lift_bed_commit_source_arg}'
+               f'{lift_bed_defer_target_arg}'
                f'{lift_realign_config_arg}')
         if self.dryrun:
             return cmd
         else:
-            self.check_input_exists(self.fn_input_alignment)
+            self._check_input_exists(self.fn_input_alignment)
             if (not self.forcerun) and self.fn_committed.is_file():
                 print('[Info] Skip run_leviosam2 -- '
                       f'{self.fn_committed} exists')
@@ -283,7 +283,7 @@ class Leviosam2Workflow:
         if self.dryrun:
             return cmd
         else:
-            self.check_input_exists(self.fn_committed)
+            self._check_input_exists(self.fn_committed)
             if (not self.forcerun) and self.fn_committed_sorted.is_file():
                 print('[Info] Skip run_sort_committed -- '
                       f'{self.fn_committed_sorted} exists')
@@ -308,8 +308,8 @@ class Leviosam2Workflow:
         if self.dryrun:
             return cmd
         else:
-            self.check_input_exists(self.fn_committed_sorted)
-            self.check_input_exists(self.fn_deferred)
+            self._check_input_exists(self.fn_committed_sorted)
+            self._check_input_exists(self.fn_deferred)
 
             if (not self.forcerun) and self.fn_deferred_pe_fq1.is_file(
             ) and self.fn_deferred_pe_fq2.is_file():
@@ -401,8 +401,8 @@ class Leviosam2Workflow:
         if self.dryrun:
             return cmd
         else:
-            self.check_input_exists(self.fn_deferred_pe_fq1)
-            self.check_input_exists(self.fn_deferred_pe_fq2)
+            self._check_input_exists(self.fn_deferred_pe_fq1)
+            self._check_input_exists(self.fn_deferred_pe_fq2)
 
             if (not self.forcerun) and fn_out.is_file():
                 print(f'[Info] Skip run_realign_deferred -- {fn_out} exists')
@@ -442,8 +442,8 @@ class Leviosam2Workflow:
         if self.dryrun:
             return cmd
         else:
-            self.check_input_exists(self.fn_deferred_realigned_pe)
-            self.check_input_exists(self.fn_deferred_pe)
+            self._check_input_exists(self.fn_deferred_realigned_pe)
+            self._check_input_exists(self.fn_deferred_pe)
 
             if (not self.forcerun) and self.fn_deferred_reconciled.is_file():
                 print('[Info] Skip run_refflow_merge_pe -- '
@@ -470,8 +470,8 @@ class Leviosam2Workflow:
         if self.dryrun:
             return cmd
         else:
-            self.check_input_exists(self.fn_committed_sorted)
-            self.check_input_exists(fn_in_deferred)
+            self._check_input_exists(self.fn_committed_sorted)
+            self._check_input_exists(fn_in_deferred)
 
             if (not self.forcerun) and self.fn_final.is_file():
                 print(
@@ -491,7 +491,7 @@ class Leviosam2Workflow:
         if self.dryrun:
             return cmd
         else:
-            self.check_input_exists(self.fn_deferred)
+            self._check_input_exists(self.fn_deferred)
 
             if (not self.forcerun) and self.fn_deferred_fq_se.is_file():
                 print('[Info] Skip run_bam_to_fastq_se -- '
@@ -529,7 +529,7 @@ class Leviosam2Workflow:
         self.fn_deferred_fq_se = (o_dir / f'{o_prefix}-deferred.fq.gz')
         self.fn_deferred_realigned_se = (o_dir / f'{o_prefix}-realigned.bam')
 
-    def _run_workflow(self):
+    def run_workflow(self):
         # TODO
         # run_intial_align()
 
@@ -561,6 +561,11 @@ class Leviosam2Workflow:
         self.run_merge_and_index()
         # self.run_clean()
 
+    def check_inputs(self) -> None:
+        '''Check if input files exist.'''
+        self._check_input_exists(self.fn_target_fasta)
+        self._check_input_exists(self.fn_input_alignment)
+
     def __init__(self, args: argparse.Namespace) -> None:
         self.aligner = args.aligner
         self.aligner_exe = args.aligner_exe
@@ -589,23 +594,15 @@ class Leviosam2Workflow:
                              f'-ao {self.path_out_prefix}.time_log')
 
         # Pathify
-        # path_out_prefix = pathlib.Path(args.out_prefix)
         self.fn_target_fasta = pathlib.Path(args.target_fasta)
         self.fn_input_alignment = pathlib.Path(args.input_alignment)
-
-        # Check inputs
-        self.check_input_exists(self.fn_target_fasta)
-        self.check_input_exists(self.fn_input_alignment)
-
-        # Check if executables are valid
-        self._validate_exe()
-
-        # Run workflow
-        self._run_workflow()
 
 
 def run_workflow(args: argparse.Namespace):
     workflow = Leviosam2Workflow(args)
+    workflow.check_inputs()
+    workflow.validate_executables()
+    workflow.run_workflow()
 
 
 if __name__ == '__main__':
