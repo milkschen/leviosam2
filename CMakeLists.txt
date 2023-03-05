@@ -154,7 +154,13 @@ mark_as_advanced(SSE2_FOUND SSE3_FOUND SSSE3_FOUND SSE4_1_FOUND SSE4_2_FOUND)
 
 ENDMACRO(FindSSE)
 
-FindSSE()
+if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "(aarch|arm)64")
+    include_directories(${PROJECT_SOURCE_DIR}/src/sse2neon)
+    add_definitions(-D__ARM_NEON__ -D__SSE2__ -D__SSE4_1__)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=armv8-a+fp+simd")
+else()
+    FindSSE()
+endif()
 
 
 file(GLOB LIB_SOURCES   src/reconcile.cpp src/lift_bed.cpp src/collate.cpp src/chain.cpp
