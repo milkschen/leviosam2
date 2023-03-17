@@ -4,15 +4,23 @@
 #include "ksw2.h"
 
 #ifdef __SSE2__
+#ifdef __ARM_NEON__
+#include <sse2neon.h>
+#else
 #include <emmintrin.h>
+#endif // __ARM_NEON__
 
 #ifdef KSW_SSE2_ONLY
 #undef __SSE4_1__
 #endif
 
 #ifdef __SSE4_1__
+#ifdef __ARM_NEON__
+#include <sse2neon.h>
+#else
 #include <smmintrin.h>
-#endif
+#endif // __ARM_NEON__
+#endif // __SSE4_1__
 
 #ifdef KSW_CPU_DISPATCH
 #ifdef __SSE4_1__
@@ -392,3 +400,4 @@ void ksw_extd2_sse(void *km, int qlen, const uint8_t *query, int tlen, const uin
     }
 }
 #endif // __SSE2__
+
