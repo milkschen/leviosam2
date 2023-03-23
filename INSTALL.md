@@ -65,6 +65,9 @@ mkdir build
 cd build
 cmake ..
 make
+# make install
+# or 
+# make install DESTDIR=/path/to/install
 ```
 
 If you installed the dependencies manually, you might have to modify the `cmake` command to specify their library and
@@ -72,7 +75,7 @@ include directory locations like so:
 
 ```
 cmake -D CMAKE_LIBRARY_PATH="/path/to/libsdsl/;/path/to/libhts/" \
-      -D CMAKE_INCLUDE_PATH="/path/to/include/" ..
+      -D CMAKE_INCLUDE_PATH="/path/to/libsdsl/include/;/path/to/libhts/include/" ..
 ```
 
 
