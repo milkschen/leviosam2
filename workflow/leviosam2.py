@@ -454,8 +454,7 @@ class Leviosam2Workflow:
 
     def run_merge_and_index(
             self) -> typing.Union[str, 'subprocess.CompletedProcess[bytes]']:
-        '''Merge all processed BAMs and index.
-        '''
+        '''Merge all processed BAMs and index.'''
         if not self.is_single_end:
             fn_in_deferred = self.fn_deferred_reconciled
         else:
@@ -484,8 +483,7 @@ class Leviosam2Workflow:
 
     def run_bam_to_fastq_se(
             self) -> typing.Union[str, 'subprocess.CompletedProcess[bytes]']:
-        '''(Single-end) Convert deferred BAM to FASTQ.
-        '''
+        '''(Single-end) Convert deferred BAM to FASTQ.'''
         cmd = (f'{self.time_cmd}'
                f'{self.samtools} fastq index {self.fn_deferred} | '
                f'{self.time_cmd}'
@@ -501,6 +499,38 @@ class Leviosam2Workflow:
                       f'{self.fn_deferred_fq_se} exists')
                 return 'skip'
             return subprocess.run([cmd], shell=True)
+
+    def run_clean(
+            self) -> typing.Union[str, 'subprocess.CompletedProcess[bytes]']:
+        if self.dryrun:
+            print(f'[dryrun] [Info] Clean up the below files:')
+            print(f'{self.fn_committed}')
+            print(f'{self.fn_committed_sorted}')
+            print(f'{self.fn_deferred}')
+            if self.is_single_end:
+                print(f'{self.fn_deferred_fq_se}')
+            else:
+                print(f'{self.fn_deferred_pe_fq1}')
+                print(f'{self.fn_deferred_pe_fq2}')
+                print(f'{self.fn_deferred_pe}')
+                print(f'{self.fn_deferred_pe_sortn}')
+                print(f'{self.fn_deferred_realigned_pe}')
+                print(f'{self.fn_deferred_realigned_pe_sortn}')
+                print(f'{self.fn_deferred_reconciled}')
+        else:
+            self.fn_committed.unlink()
+            self.fn_committed_sorted.unlink()
+            self.fn_deferred.unlink()
+            if self.is_single_end:
+                self.fn_deferred_fq_se.unlink()
+            else:
+                self.fn_deferred_pe_fq1.unlink()
+                self.fn_deferred_pe_fq2.unlink()
+                self.fn_deferred_pe.unlink()
+                self.fn_deferred_pe_sortn.unlink()
+                self.fn_deferred_realigned_pe.unlink()
+                self.fn_deferred_realigned_pe_sortn.unlink()
+                self.fn_deferred_reconciled.unlink()
 
     def _set_filenames(self):
         '''Update filenames potentially used when running the workflow.'''
@@ -566,7 +596,7 @@ class Leviosam2Workflow:
             self.run_refflow_merge_pe()
 
         self.run_merge_and_index()
-        # self.run_clean()
+        self.run_clean()
 
     def check_inputs(self) -> None:
         '''Check if input files exist.'''
