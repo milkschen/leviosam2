@@ -86,3 +86,14 @@ We provide an end-to-end test and a set of unit tests for levioSAM.
 - The end-to-end test can be run with `python leviosam-test.py`. This test includes running levioSAM on several test files in `testdata`. We also use `picard` to test if the lifted SAM files are valid.
 
 - The unit test can be run `cd build; ctest` if you use cmake to build levioSAM; or `make gtest; cd testdata; ../gtest` if you use make to build levioSAM2.
+
+
+## ARM64
+
+LevioSAM2 supports the arm64 architecture. Note that the distributed libraries of the dependencies (namely `htslib` and `sdsl-lite`) on Conda or other package managers might not support arm64. Thus, you might need to build the dependent libraries from source. Both `htslib` and `sdsl-lite` can be built under the arm64 architecture.
+
+Notes:
+
+1. `sdsl-lite==v2.1.1` also installs `gtest` and this can result in errors when building levioSAM2 due to duplicated declarations. A work-around is to remove the `gtest` headers installed along with `sdsl-lite`.
+
+2. There can be dynamic library linking errors when executing levioSAM2. This can be solved by `export DYLD_LIBRARY_PATH=/path/to/libsdsl/:/path/to/libhts/:$DYLD_LIBRARY_PATH`.
