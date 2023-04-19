@@ -353,7 +353,6 @@ else
     fi
 
     # Reference flow-style merging
-    # if [ ! -s ${PFX}-paired-deferred-reconciled.bam ]; then
     if [ ! -s ${PFX}-paired-deferred-reconciled-sorted.bam ]; then
         ${MT} samtools sort -@ ${THR} -n \
             -o ${PFX}-paired-realigned-sorted_n.bam ${PFX}-paired-realigned.bam
@@ -377,7 +376,7 @@ else
     if [[ ${KEEP_TMP} < 1 ]]; then
         rm ${PFX}-paired-deferred.bam ${PFX}-paired-deferred-sorted_n.bam
         rm ${PFX}-paired-realigned.bam ${PFX}-paired-realigned-sorted_n.bam
-        rm ${PFX}-paired-deferred-reconciled.bam ${PFX}-paired-committed.bam
+        rm ${PFX}-paired-committed.bam
         rm ${PFX}-paired-deferred-R1.fq.gz ${PFX}-paired-deferred-R2.fq.gz
         rm ${PFX}-committed.bam ${PFX}-committed-sorted.bam ${PFX}-deferred.bam
         rm ${PFX}-paired-deferred-reconciled-sorted.bam
