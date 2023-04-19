@@ -3,7 +3,7 @@ FROM ubuntu:20.04
 MAINTAINER naechyun@jhu.edu
 
 ENV TZ=America/New_York
-ENV VERSION 0.3.0
+ENV VERSION 0.4.0
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 RUN apt-get update && apt-get install -y curl git build-essential cmake libsdsl-dev wget libbz2-dev zlib1g-dev liblzma-dev libncurses-dev zip
 RUN wget https://github.com/samtools/htslib/releases/download/1.16/htslib-1.16.tar.bz2 && \
