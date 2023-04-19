@@ -34,6 +34,8 @@
 #define VERBOSE_DEBUG 2
 #define VERBOSE_DEV 3
 
+#define OPT_VERSION 1000
+
 using NameMap = std::vector<std::pair<std::string, std::string>>;
 using LengthMap = std::vector<std::pair<std::string, int32_t>>;
 using BedMap =

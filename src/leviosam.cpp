@@ -579,6 +579,7 @@ int main(int argc, char **argv) {
             {"chunk_size", required_argument, 0, 'T'},
             {"vcf", required_argument, 0, 'v'},
             {"verbose", required_argument, 0, 'V'},
+            {"version", no_argument, 0, OPT_VERSION},
             {"realign_yaml", required_argument, 0, 'x'},
     };
     int long_index = 0;
@@ -667,6 +668,9 @@ int main(int argc, char **argv) {
             case 'x':
                 args.realign_yaml = optarg;
                 break;
+            case OPT_VERSION:
+                std::cout << VERSION << std::endl;
+                exit(0);
             default:
                 fprintf(stderr, "ignoring option %c\n", c);
                 exit(1);
