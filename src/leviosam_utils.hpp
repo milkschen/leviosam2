@@ -121,7 +121,7 @@ void debug_print_cigar(uint32_t* cigar, size_t n_cigar);
 void remove_nm_md_tag(bam1_t* aln);
 std::string get_read(const bam1_t* rec);
 std::string get_read_as_is(const bam1_t* rec);
-void update_flag_unmap(bam1_t* aln, const bool first_seg);
+void update_flag_unmap(bam1_t* aln, const bool first_seg, const bool keep_mapq);
 
 std::vector<std::string> str_to_vector(const std::string str,
                                        const std::string regex_str);

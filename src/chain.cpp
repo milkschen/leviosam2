@@ -1010,7 +1010,7 @@ bool ChainMap::lift_segment(bam1_t *aln, sam_hdr_t *hdr_source,
 // Pass `dest_contig` by reference because we need it when updating the MD
 // string.
 void ChainMap::lift_aln(bam1_t *aln, sam_hdr_t *hdr_source, sam_hdr_t *hdr_dest,
-                        std::string &dest_contig) {
+                        std::string &dest_contig, const bool keep_mapq = false) {
     bam1_core_t *c = &(aln->core);
     uint16_t flag = c->flag;
     hts_pos_t pos = c->pos;
@@ -1019,7 +1019,7 @@ void ChainMap::lift_aln(bam1_t *aln, sam_hdr_t *hdr_source, sam_hdr_t *hdr_dest,
     bool r1_liftable =
         lift_segment(aln, hdr_source, hdr_dest, true, dest_contig);
     if (!r1_liftable) {
-        LevioSamUtils::update_flag_unmap(aln, true);
+        LevioSamUtils::update_flag_unmap(aln, true, keep_mapq);
     }
 
     size_t lift_status;
@@ -1030,7 +1030,7 @@ void ChainMap::lift_aln(bam1_t *aln, sam_hdr_t *hdr_source, sam_hdr_t *hdr_dest,
         std::string null_mdest_contig;
         bool r2_liftable =
             lift_segment(aln, hdr_source, hdr_dest, false, null_mdest_contig);
-        if (!r2_liftable) LevioSamUtils::update_flag_unmap(aln, false);
+        if (!r2_liftable) LevioSamUtils::update_flag_unmap(aln, false, keep_mapq);
 
         // We currently don't use the "unliftable" category -
         // an unliftable read is considered as unmapped.
