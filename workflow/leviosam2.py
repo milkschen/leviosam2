@@ -205,7 +205,7 @@ class Leviosam2Workflow:
     """LevioSAM2 workflow module."""
 
     @staticmethod
-    def validate_exe(cmd: str, lenient: bool = False) -> None:
+    def validate_executable(cmd: str, lenient: bool = False) -> None:
         """Validate if an executable is valid.
 
         Args:
@@ -257,12 +257,12 @@ class Leviosam2Workflow:
             raise ValueError(f"Unsupported aligner: {self.aligner}")
 
     def validate_executables(self):
-        self.validate_exe(cmd=f"{self.samtools} --version")
-        self.validate_exe(cmd=f"{self.bgzip} --version")
+        self.validate_executable(cmd=f"{self.samtools} --version")
+        self.validate_executable(cmd=f"{self.bgzip} --version")
         if self.measure_time:
-            self.validate_exe(cmd=f"{self.gtime} --version")
-        self.validate_exe(cmd=f"{self.leviosam2}", lenient=True)
-        self.validate_exe(cmd=f"{self.aligner_exe}", lenient=True)
+            self.validate_executable(cmd=f"{self.gtime} --version")
+        self.validate_executable(cmd=f"{self.leviosam2}", lenient=True)
+        self.validate_executable(cmd=f"{self.aligner_exe}", lenient=True)
 
     def run_leviosam2(
         self,
