@@ -4,7 +4,7 @@ project(leviosam2 CXX C)
 
 set(PROJECT_URL "https://github.com/milkschen/leviosam2")
 set(PROJECT_DESCRIPTION "leviosam2")
-set(PROJECT_VER "0.3.0")
+set(PROJECT_VER "0.4.0")
 set(CMAKE_CXX_STANDARD 14)
 
 find_library(HTS_LIB hts)
