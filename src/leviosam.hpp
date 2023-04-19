@@ -79,7 +79,7 @@ struct lift_opts {
     BedUtils::Bed bed_commit_source;
     BedUtils::Bed bed_commit_dest;
     // 0: take any overlap, >1: base pairs, 1>=value>0: fraction
-    float bed_isec_threshold = 0; 
+    float bed_isec_threshold = 0;
     bool keep_mapq = false;
 };
 
@@ -661,9 +661,11 @@ class LiftMap {
 
     // Note that a mapped read is always liftable
     // under the VcfMap framework.
-    void lift_aln(bam1_t *aln, bam_hdr_t *hdr,
-                  bam_hdr_t *hdr_dest,  // unused
-                  std::string &dest_contig) {
+    void lift_aln(bam1_t *aln, bam_hdr_t *hdr, bam_hdr_t *hdr_dest,
+                  // unused
+                  std::string &dest_contig,
+                  // unused
+                  const bool keep_mapq) {
         bam1_core_t c = aln->core;
         size_t pos;
         std::string source_contig;
