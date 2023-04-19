@@ -7,3 +7,4 @@ test_*.*am
 docker/*
 v*/
 figures/*
+build/*
