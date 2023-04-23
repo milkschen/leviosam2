@@ -132,9 +132,8 @@ void serialize_run(lift_opts args) {
         std::cerr << "[I::serialize_run] levioSAM ChainMap saved to "
                   << fn_index << "\n";
     } else {
-        std::cerr
-            << "[E::serialize_run] Cannot build a levioSAM index. Please set "
-               "-v or -c properly\n";
+        std::cerr << "[E::serialize_run] Cannot build a levioSAM index. "
+                  << "Please set -v or -c properly\n";
         print_serialize_help_msg();
         exit(1);
     }
@@ -230,7 +229,8 @@ void read_and_lift(T *lift_map, std::mutex *mutex_fread,
                     (aln_vec[i]->core.flag & BAM_FPAIRED)
                         ? (aln_vec[i]->core.flag & BAM_FREAD1) ? true : false
                         : true;
-                LevioSamUtils::update_flag_unmap(aln_vec[i], first_seg, args.keep_mapq);
+                LevioSamUtils::update_flag_unmap(aln_vec[i], first_seg,
+                                                 args.keep_mapq);
                 if (args.verbose >= VERBOSE_INFO) {
                     std::cerr << "[I::read_and_lift] Zero-length new cigar for "
                               << bam_get_qname(aln_vec[i])
@@ -557,33 +557,33 @@ int main(int argc, char **argv) {
     int c;
     lift_opts args;
     args.cmd = LevioSamUtils::make_cmd(argc, argv);
-    static struct option long_options[] {
+    static struct option long_options[]{
         {"sam", required_argument, 0, 'a'},
-            {"bed_isec_threshold", required_argument, 0, 'B'},
-            {"chain", required_argument, 0, 'c'},
-            {"chainmap", required_argument, 0, 'C'},
-            {"bed_defer_source", required_argument, 0, 'd'},
-            {"bed_defer_dest", required_argument, 0, 'D'},
-            {"reference", required_argument, 0, 'f'},
-            {"dest_fai", required_argument, 0, 'F'},
-            {"haplotype", required_argument, 0, 'g'},
-            {"allowed_cigar_changes", required_argument, 0, 'G'},
-            {"leviosam", required_argument, 0, 'l'},
-            {"md", no_argument, 0, 'm'}, {"namemap", required_argument, 0, 'n'},
-            {"out_format", required_argument, 0, 'O'},
-            {"prefix", required_argument, 0, 'p'},
-            {"bed_commit_source", required_argument, 0, 'r'},
-            {"bed_commit_dest", required_argument, 0, 'R'},
-            {"sample", required_argument, 0, 's'},
-            {"split_mode", required_argument, 0, 'S'},
-            {"threads", required_argument, 0, 't'},
-            {"chunk_size", required_argument, 0, 'T'},
-            {"vcf", required_argument, 0, 'v'},
-            {"verbose", required_argument, 0, 'V'},
-            {"realign_yaml", required_argument, 0, 'x'},
-            {"version", no_argument, 0, OPT_VERSION},
-            {"keep_mapq", no_argument, 0, OPT_KEEP_MAPQ}
-    };
+        {"bed_isec_threshold", required_argument, 0, 'B'},
+        {"chain", required_argument, 0, 'c'},
+        {"chainmap", required_argument, 0, 'C'},
+        {"bed_defer_source", required_argument, 0, 'd'},
+        {"bed_defer_dest", required_argument, 0, 'D'},
+        {"reference", required_argument, 0, 'f'},
+        {"dest_fai", required_argument, 0, 'F'},
+        {"haplotype", required_argument, 0, 'g'},
+        {"allowed_cigar_changes", required_argument, 0, 'G'},
+        {"leviosam", required_argument, 0, 'l'},
+        {"md", no_argument, 0, 'm'},
+        {"namemap", required_argument, 0, 'n'},
+        {"out_format", required_argument, 0, 'O'},
+        {"prefix", required_argument, 0, 'p'},
+        {"bed_commit_source", required_argument, 0, 'r'},
+        {"bed_commit_dest", required_argument, 0, 'R'},
+        {"sample", required_argument, 0, 's'},
+        {"split_mode", required_argument, 0, 'S'},
+        {"threads", required_argument, 0, 't'},
+        {"chunk_size", required_argument, 0, 'T'},
+        {"vcf", required_argument, 0, 'v'},
+        {"verbose", required_argument, 0, 'V'},
+        {"realign_yaml", required_argument, 0, 'x'},
+        {"version", no_argument, 0, OPT_VERSION},
+        {"keep_mapq", no_argument, 0, OPT_KEEP_MAPQ}};
     int long_index = 0;
     while ((c = getopt_long(argc, argv,
                             "hma:B:c:C:d:D:f:F:g:G:l:n:O:p:r:R:s:S:t:T:v:V:x:",
@@ -714,8 +714,8 @@ int main(int argc, char **argv) {
     }
     if (args.realign_yaml != "") {
         if (args.ref_name == "") {
-            std::cerr
-                << "[E::main] Option `-f` must be set when `-x` is not empty\n";
+            std::cerr << "[E::main] Option `-f` must be set "
+                      << "when `-x` is not empty\n";
             exit(1);
         } else {
             const char *fc = args.realign_yaml.c_str();
