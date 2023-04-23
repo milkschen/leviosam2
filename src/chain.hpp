@@ -98,7 +98,7 @@ class ChainMap {
     bool lift_segment(bam1_t *aln, sam_hdr_t *hdr_source, sam_hdr_t *hdr_dest,
                       bool first_seg, std::string &dest_contig);
     void lift_aln(bam1_t *aln, sam_hdr_t *hdr_source, sam_hdr_t *hdr_dest,
-                  std::string &dest_contig);
+                  std::string &dest_contig, const bool keep_mapq);
 
     void parse_chain_line(std::string line, std::string &source,
                           std::string &target, int32_t &source_len,

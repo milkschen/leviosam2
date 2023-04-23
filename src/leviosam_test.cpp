@@ -195,6 +195,9 @@ TEST(LiftMap, SimpleBamLift) {
     EXPECT_EQ(err, 0);
     x = lmap.lift_pos(sam_hdr->target_name[aln->core.tid], aln->core.pos);
     EXPECT_EQ(x, 5315929);
+
+    sam_hdr_destroy(sam_hdr);
+    sam_close(sam_fp);
 }
 
 TEST(LiftMap, SimpleBamCigarLift) {
@@ -223,6 +226,9 @@ TEST(LiftMap, SimpleBamCigarLift) {
     EXPECT_EQ(test_cigar[0], bam_cigar_gen( 15, BAM_CMATCH));
     EXPECT_EQ(test_cigar[1], bam_cigar_gen( 1, BAM_CDEL));
     EXPECT_EQ(test_cigar[2], bam_cigar_gen( 5, BAM_CMATCH));
+
+    sam_hdr_destroy(sam_hdr);
+    sam_close(sam_fp);
 }
 
 TEST(LiftMap, DelInIndelBamCigarLift) {
@@ -251,6 +257,9 @@ TEST(LiftMap, DelInIndelBamCigarLift) {
     EXPECT_EQ(test_cigar[0], bam_cigar_gen( 8, BAM_CMATCH));
     EXPECT_EQ(test_cigar[1], bam_cigar_gen( 10, BAM_CDEL));
     EXPECT_EQ(test_cigar[2], bam_cigar_gen( 8, BAM_CMATCH));
+
+    sam_hdr_destroy(sam_hdr);
+    sam_close(sam_fp);
 }
 
 TEST(LiftMap, SimpleSplicedBamCigarLift) {
@@ -279,6 +288,9 @@ TEST(LiftMap, SimpleSplicedBamCigarLift) {
     EXPECT_EQ(test_cigar[0], bam_cigar_gen( 8, BAM_CMATCH));
     EXPECT_EQ(test_cigar[1], bam_cigar_gen( 10, BAM_CREF_SKIP));
     EXPECT_EQ(test_cigar[2], bam_cigar_gen( 8, BAM_CMATCH));
+
+    sam_hdr_destroy(sam_hdr);
+    sam_close(sam_fp);
 }
 
 
@@ -315,6 +327,26 @@ TEST(UtilsTest, StrToSet) {
     EXPECT_EQ(s.find("c"), s.end());
 }
 
+
+TEST(UtilsTest, UpdateFlagUnmap) {
+    samFile* sam_fp = sam_open("simple_example.sam", "r");
+    sam_hdr_t* sam_hdr = sam_hdr_read(sam_fp);
+    bam1_t* aln = bam_init1();
+    int err;
+    size_t x;
+    err = sam_read1(sam_fp, sam_hdr, aln);
+    EXPECT_EQ(err, 0);
+    LevioSamUtils::update_flag_unmap(aln, true, false);
+    EXPECT_EQ(aln->core.qual, 0);
+
+    err = sam_read1(sam_fp, sam_hdr, aln);
+    EXPECT_EQ(err, 0);
+    LevioSamUtils::update_flag_unmap(aln, true, true);
+    EXPECT_EQ(aln->core.qual, 60);
+
+    sam_hdr_destroy(sam_hdr);
+    sam_close(sam_fp);
+}
 
 int main(int argc, char **argv){
     testing::InitGoogleTest(&argc, argv);

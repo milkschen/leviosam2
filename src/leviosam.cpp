@@ -176,7 +176,7 @@ void read_and_lift(T *lift_map, std::mutex *mutex_fread,
             // Need to test scenarios with `NameMap`
             std::string null_dest_contig;
             lift_map->lift_aln(aln_vec[i], hdr_source, hdr_dest,
-                               null_dest_contig);
+                               null_dest_contig, args.keep_mapq);
             // Skip update MD, NM tags and realignment if `md_flag` is not set
             if (!args.md_flag) {
                 // strip MD and NM tags if `md_flag` not set bc liftover
@@ -230,7 +230,7 @@ void read_and_lift(T *lift_map, std::mutex *mutex_fread,
                     (aln_vec[i]->core.flag & BAM_FPAIRED)
                         ? (aln_vec[i]->core.flag & BAM_FREAD1) ? true : false
                         : true;
-                LevioSamUtils::update_flag_unmap(aln_vec[i], first_seg);
+                LevioSamUtils::update_flag_unmap(aln_vec[i], first_seg, args.keep_mapq);
                 if (args.verbose >= VERBOSE_INFO) {
                     std::cerr << "[I::read_and_lift] Zero-length new cigar for "
                               << bam_get_qname(aln_vec[i])
@@ -532,6 +532,7 @@ void print_main_help_msg() {
     std::cerr << "          reconcile   Reconcile alignments.\n";
     std::cerr << "Options:  -h          Print detailed usage.\n";
     std::cerr << "          -V          Verbose level [0].\n";
+    std::cerr << "          --version   Print version.\n";
     std::cerr << "\n";
 }
 
@@ -579,8 +580,9 @@ int main(int argc, char **argv) {
             {"chunk_size", required_argument, 0, 'T'},
             {"vcf", required_argument, 0, 'v'},
             {"verbose", required_argument, 0, 'V'},
-            {"version", no_argument, 0, OPT_VERSION},
             {"realign_yaml", required_argument, 0, 'x'},
+            {"version", no_argument, 0, OPT_VERSION},
+            {"keep_mapq", no_argument, 0, OPT_KEEP_MAPQ}
     };
     int long_index = 0;
     while ((c = getopt_long(argc, argv,
@@ -671,6 +673,9 @@ int main(int argc, char **argv) {
             case OPT_VERSION:
                 std::cout << VERSION << std::endl;
                 exit(0);
+            case OPT_KEEP_MAPQ:
+                args.keep_mapq = true;
+                break;
             default:
                 fprintf(stderr, "ignoring option %c\n", c);
                 exit(1);
