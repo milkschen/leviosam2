@@ -199,6 +199,14 @@ void read_and_lift(T *lift_map, std::mutex *mutex_fread,
             }
             bam_fillmd1(aln_vec[i], ref.data(), args.md_flag, 1);
 
+            // Tags specific to Ultima Genomics reads
+            if (args.is_ultima_genomics == true) {
+                bool reversely_lifted = (aln_vec_clone[i]->core.flag & BAM_FREVERSE) ^
+                                        (aln_vec[i]->core.flag & BAM_FREVERSE);
+                LevioSamUtils::update_ultima_genomics_tags(aln_vec[i],
+                                                           reversely_lifted);
+            }
+
             // Skip re-alignment if `-x` is not set
             if (args.realign_yaml == "") continue;
             uint8_t *nm_ptr = bam_aux_get(aln_vec[i], "NM");
@@ -230,7 +238,8 @@ void read_and_lift(T *lift_map, std::mutex *mutex_fread,
                     (aln_vec[i]->core.flag & BAM_FPAIRED)
                         ? (aln_vec[i]->core.flag & BAM_FREAD1) ? true : false
                         : true;
-                LevioSamUtils::update_flag_unmap(aln_vec[i], first_seg, args.keep_mapq);
+                LevioSamUtils::update_flag_unmap(aln_vec[i], first_seg,
+                                                 args.keep_mapq);
                 if (args.verbose >= VERBOSE_INFO) {
                     std::cerr << "[I::read_and_lift] Zero-length new cigar for "
                               << bam_get_qname(aln_vec[i])
@@ -557,34 +566,35 @@ int main(int argc, char **argv) {
     int c;
     lift_opts args;
     args.cmd = LevioSamUtils::make_cmd(argc, argv);
-    static struct option long_options[] {
+    static struct option long_options[]{
         {"sam", required_argument, 0, 'a'},
-            {"bed_isec_threshold", required_argument, 0, 'B'},
-            {"chain", required_argument, 0, 'c'},
-            {"chainmap", required_argument, 0, 'C'},
-            {"bed_defer_source", required_argument, 0, 'd'},
-            {"bed_defer_dest", required_argument, 0, 'D'},
-            {"reference", required_argument, 0, 'f'},
-            {"dest_fai", required_argument, 0, 'F'},
-            {"haplotype", required_argument, 0, 'g'},
-            {"allowed_cigar_changes", required_argument, 0, 'G'},
-            {"leviosam", required_argument, 0, 'l'},
-            {"md", no_argument, 0, 'm'}, {"namemap", required_argument, 0, 'n'},
-            {"out_format", required_argument, 0, 'O'},
-            {"prefix", required_argument, 0, 'p'},
-            {"bed_commit_source", required_argument, 0, 'r'},
-            {"bed_commit_dest", required_argument, 0, 'R'},
-            {"sample", required_argument, 0, 's'},
-            {"split_mode", required_argument, 0, 'S'},
-            {"threads", required_argument, 0, 't'},
-            {"chunk_size", required_argument, 0, 'T'},
-            {"vcf", required_argument, 0, 'v'},
-            {"verbose", required_argument, 0, 'V'},
-            {"realign_yaml", required_argument, 0, 'x'},
-            {"help", no_argument, 0, OPT_HELP},
-            {"version", no_argument, 0, OPT_VERSION},
-            {"keep_mapq", no_argument, 0, OPT_KEEP_MAPQ}
-    };
+        {"bed_isec_threshold", required_argument, 0, 'B'},
+        {"chain", required_argument, 0, 'c'},
+        {"chainmap", required_argument, 0, 'C'},
+        {"bed_defer_source", required_argument, 0, 'd'},
+        {"bed_defer_dest", required_argument, 0, 'D'},
+        {"reference", required_argument, 0, 'f'},
+        {"dest_fai", required_argument, 0, 'F'},
+        {"haplotype", required_argument, 0, 'g'},
+        {"allowed_cigar_changes", required_argument, 0, 'G'},
+        {"leviosam", required_argument, 0, 'l'},
+        {"md", no_argument, 0, 'm'},
+        {"namemap", required_argument, 0, 'n'},
+        {"out_format", required_argument, 0, 'O'},
+        {"prefix", required_argument, 0, 'p'},
+        {"bed_commit_source", required_argument, 0, 'r'},
+        {"bed_commit_dest", required_argument, 0, 'R'},
+        {"sample", required_argument, 0, 's'},
+        {"split_mode", required_argument, 0, 'S'},
+        {"threads", required_argument, 0, 't'},
+        {"chunk_size", required_argument, 0, 'T'},
+        {"vcf", required_argument, 0, 'v'},
+        {"verbose", required_argument, 0, 'V'},
+        {"realign_yaml", required_argument, 0, 'x'},
+        {"is_ultima_genomics", no_argument, 0, OPT_IS_ULTIMA_GENOMICS},
+        {"help", no_argument, 0, OPT_HELP},
+        {"version", no_argument, 0, OPT_VERSION},
+        {"keep_mapq", no_argument, 0, OPT_KEEP_MAPQ}};
     int long_index = 0;
     while ((c = getopt_long(argc, argv,
                             "hma:B:c:C:d:D:f:F:g:G:l:n:O:p:r:R:s:S:t:T:v:V:x:",
@@ -672,6 +682,9 @@ int main(int argc, char **argv) {
             case 'x':
                 args.realign_yaml = optarg;
                 break;
+            case OPT_IS_ULTIMA_GENOMICS:
+                args.is_ultima_genomics = true;
+                break;
             case OPT_VERSION:
                 std::cout << VERSION << std::endl;
                 exit(0);
@@ -679,18 +692,19 @@ int main(int argc, char **argv) {
                 args.keep_mapq = true;
                 break;
             default:
-                fprintf(stderr, "ignoring option %c\n", c);
+                std::cerr << "[E::main] Invalid flag value " << c << "\n";
                 exit(1);
         }
     }
 
     if (args.haplotype != "0" && args.haplotype != "1") {
-        fprintf(stderr, "Invalid haplotype %s\n", args.haplotype.c_str());
+        std::cerr << "[E::main] Invalid haplotype " << args.haplotype.c_str()
+                  << "\n";
         exit(1);
     }
     if (args.out_format != "sam" && args.out_format != "bam") {
-        fprintf(stderr, "Not supported extension format %s\n",
-                args.out_format.c_str());
+        std::cerr << "[E::main] Not supported extension format "
+                  << args.out_format.c_str() << "\n";
         exit(1);
     }
 

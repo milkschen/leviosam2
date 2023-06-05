@@ -402,6 +402,20 @@ std::set<std::string> str_to_set(const std::string str,
     return list;
 }
 
+/* Updates BAM tags specific to Ultima Genomics.*/
+void update_ultima_genomics_tags(bam1_t *aln, bool rev) { 
+    uint8_t *tp_ptr = bam_aux_get(aln, "tp");
+    if (tp_ptr != NULL) {
+        std::vector<int8_t> tp_array;
+        for (int8_t i = 0; i < bam_auxB_len(tp_ptr); i++) {
+            tp_array.push_back(bam_auxB2i(tp_ptr, i));
+        }
+        std::reverse(tp_array.begin(),tp_array.end());
+        bam_aux_update_array(aln, "tp", 'c', tp_array.size(), tp_array.data());
+    }
+    // uint8_t *t0_ptr = bam_aux_get(aln, "t0");
+}
+
 /* Update SEQ and QUAL if in a reversed chain */
 int reverse_seq_and_qual(bam1_t* aln) {
     bam1_core_t* c = &(aln->core);
