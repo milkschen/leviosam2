@@ -581,6 +581,7 @@ int main(int argc, char **argv) {
             {"vcf", required_argument, 0, 'v'},
             {"verbose", required_argument, 0, 'V'},
             {"realign_yaml", required_argument, 0, 'x'},
+            {"help", no_argument, 0, OPT_HELP},
             {"version", no_argument, 0, OPT_VERSION},
             {"keep_mapq", no_argument, 0, OPT_KEEP_MAPQ}
     };
@@ -590,6 +591,7 @@ int main(int argc, char **argv) {
                             long_options, &long_index)) != -1) {
         switch (c) {
             case 'h':
+            case OPT_HELP:
                 print_main_help_msg();
                 print_serialize_help_msg();
                 print_lift_help_msg();
