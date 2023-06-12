@@ -294,8 +294,7 @@ void update_flag_unmap(bam1_t* aln, const bool first_seg,
         c->flag |= BAM_FUNMAP;
         c->flag &= ~BAM_FPROPER_PAIR;
         c->flag &= ~BAM_FREVERSE;
-        if (!keep_mapq)
-            c->qual = 0;
+        if (!keep_mapq) c->qual = 0;
         c->pos = -1;
         c->tid = -1;
     } else {
@@ -402,18 +401,41 @@ std::set<std::string> str_to_set(const std::string str,
     return list;
 }
 
-/* Updates BAM tags specific to Ultima Genomics.*/
-void update_ultima_genomics_tags(bam1_t *aln, bool rev) { 
-    uint8_t *tp_ptr = bam_aux_get(aln, "tp");
+/// @brief Returns true if a bam record is reversely lifted.
+/// @param aln_orig The original bam record
+/// @param aln_lft  The lifted bam record
+/// @return true if reverse
+bool is_reversedly_lifted(bam1_t* aln_orig, bam1_t* aln_lft) {
+    return ((aln_orig->core.flag & BAM_FREVERSE) ^
+            (aln_lft->core.flag & BAM_FREVERSE));
+}
+
+/// @brief Updates BAM tags specific to Ultima Genomics.
+/// @param aln aln The bam record to read and update
+/// @param rev Whether to reverse the record
+void update_ultima_genomics_tags(bam1_t* aln, bool rev) {
+    // TP tag
+    uint8_t* tp_ptr = bam_aux_get(aln, "tp");
     if (tp_ptr != NULL) {
         std::vector<int8_t> tp_array;
-        for (int8_t i = 0; i < bam_auxB_len(tp_ptr); i++) {
+        for (uint32_t i = 0; i < bam_auxB_len(tp_ptr); i++) {
             tp_array.push_back(bam_auxB2i(tp_ptr, i));
         }
-        std::reverse(tp_array.begin(),tp_array.end());
-        bam_aux_update_array(aln, "tp", 'c', tp_array.size(), tp_array.data());
+        std::reverse(tp_array.begin(), tp_array.end());
+        if (bam_aux_update_array(aln, "tp", 'c', tp_array.size(),
+                                 tp_array.data()) != 0) {
+            std::cerr << "[W::update_ultima_genomics_tags] Failed to update "
+                         "the tp tag\n";
+        }
     }
-    // uint8_t *t0_ptr = bam_aux_get(aln, "t0");
+    // T0 tag
+    uint8_t* t0_ptr = bam_aux_get(aln, "t0");
+    std::string t0_str = bam_aux2Z(t0_ptr);
+    std::reverse(t0_str.begin(), t0_str.end());
+    if (bam_aux_update_str(aln, "t0", t0_str.length(), t0_str.c_str()) != 0) {
+        std::cerr << "[W::update_ultima_genomics_tags] Failed to update "
+                     "the t0 tag\n";
+    }
 }
 
 /* Update SEQ and QUAL if in a reversed chain */

@@ -1,0 +1,3 @@
+@HD	VN:1.6	GO:query	SO:coordinate
+@SQ	SN:chr1	LN:100000
+1	16	chr1	200	0	10M	*	0	0	AACCCTAACC	7777IIIIII	t0:Z:22222IIIII	tm:Z:Q	tp:B:c,-1,1,1,1,1,-1,1,0,-1,-1	rq:f:0.14	RG:Z:test
