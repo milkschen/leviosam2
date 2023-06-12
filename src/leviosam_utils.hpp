@@ -128,6 +128,12 @@ std::vector<std::string> str_to_vector(const std::string str,
 std::set<std::string> str_to_set(const std::string str,
                                  const std::string regex_str);
 
+/// @brief Returns true if a bam record is reversely lifted. 
+bool is_reversedly_lifted(bam1_t* aln_orig, bam1_t* aln_lft);
+
+/// @brief Updates BAM tags specific to Ultima Genomics.
+void update_ultima_genomics_tags(bam1_t *aln, bool rev);
+
 int reverse_seq_and_qual(bam1_t* aln);
 sam_hdr_t* fai_to_hdr(std::string fai_fn, const sam_hdr_t* const hdr_orig);
 std::vector<std::pair<std::string, int32_t>> fai_to_map(std::string fai_fn);

@@ -34,8 +34,10 @@
 #define VERBOSE_DEBUG 2
 #define VERBOSE_DEV 3
 
-#define OPT_VERSION 1000
-#define OPT_KEEP_MAPQ 1001
+#define OPT_HELP 1000
+#define OPT_VERSION 1001
+#define OPT_KEEP_MAPQ 1002
+#define OPT_ULTIMA_GENOMICS 2001
 
 using NameMap = std::vector<std::pair<std::string, std::string>>;
 using LengthMap = std::vector<std::pair<std::string, int32_t>>;
@@ -81,6 +83,8 @@ struct lift_opts {
     // 0: take any overlap, >1: base pairs, 1>=value>0: fraction
     float bed_isec_threshold = 0;
     bool keep_mapq = false;
+
+    bool ultima_genomics = false;
 };
 
 #define LIFT_R_L 0           // unpaired, liftable

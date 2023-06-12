@@ -348,6 +348,37 @@ TEST(UtilsTest, UpdateFlagUnmap) {
     sam_close(sam_fp);
 }
 
+
+TEST(UltimaGenomicsTest, UpdateFlags) {
+    samFile* sam_fp = sam_open("ultima_small.sam", "r");
+    sam_hdr_t* sam_hdr = sam_hdr_read(sam_fp);
+    bam1_t* aln = bam_init1();
+    int err;
+    size_t x;
+    err = sam_read1(sam_fp, sam_hdr, aln);
+    EXPECT_EQ(err, 0);
+    LevioSamUtils::update_ultima_genomics_tags(aln, true);
+
+    // Tests the tp tag
+    uint8_t *tp_ptr = bam_aux_get(aln, "tp");
+    EXPECT_EQ(bam_auxB_len(tp_ptr), 10);
+    std::vector<int8_t> exp_tp_array {
+        -1,-1,0,1,-1,1,1,1,1,-1
+    };
+    for (uint32_t i = 0; i < 10; i++) {
+        EXPECT_EQ(bam_auxB2i(tp_ptr, i), exp_tp_array[i]); 
+    }
+
+    // Tests the t0 tag
+    uint8_t *t0_ptr = bam_aux_get(aln, "t0");
+    std::string t0_str = bam_aux2Z(t0_ptr);
+    EXPECT_EQ(t0_str, "IIIII22222");
+
+    sam_hdr_destroy(sam_hdr);
+    sam_close(sam_fp);
+}
+
+
 int main(int argc, char **argv){
     testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
