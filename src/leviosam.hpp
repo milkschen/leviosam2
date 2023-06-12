@@ -84,7 +84,7 @@ struct lift_opts {
     float bed_isec_threshold = 0;
     bool keep_mapq = false;
 
-    bool is_ultima_genomics = false;
+    bool ultima_genomics = false;
 };
 
 #define LIFT_R_L 0           // unpaired, liftable

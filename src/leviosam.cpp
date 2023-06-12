@@ -200,7 +200,7 @@ void read_and_lift(T *lift_map, std::mutex *mutex_fread,
             bam_fillmd1(aln_vec[i], ref.data(), args.md_flag, 1);
 
             // Tags specific to Ultima Genomics reads
-            if (args.is_ultima_genomics == true) {
+            if (args.ultima_genomics == true) {
                 bool reversely_lifted = LevioSamUtils::is_reversedly_lifted(
                     aln_vec_clone[i], aln_vec[i]);
                 LevioSamUtils::update_ultima_genomics_tags(aln_vec[i],
@@ -682,8 +682,8 @@ int main(int argc, char **argv) {
             case 'x':
                 args.realign_yaml = optarg;
                 break;
-            case OPT_IS_ULTIMA_GENOMICS:
-                args.is_ultima_genomics = true;
+            case OPT_ULTIMA_GENOMICS:
+                args.ultima_genomics = true;
                 break;
             case OPT_VERSION:
                 std::cout << VERSION << std::endl;

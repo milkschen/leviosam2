@@ -425,16 +425,28 @@ void update_ultima_genomics_tags(bam1_t* aln, bool rev) {
         if (bam_aux_update_array(aln, "tp", 'c', tp_array.size(),
                                  tp_array.data()) != 0) {
             std::cerr << "[W::update_ultima_genomics_tags] Failed to update "
-                         "the tp tag\n";
+                         "the tp tag for read "
+                      << bam_get_qname(aln) << "\n";
         }
+    } else {
+        std::cerr
+            << "[W::update_ultima_genomics_tags] No tp tag is found for read "
+            << bam_get_qname(aln) << "\n";
     }
     // T0 tag
     uint8_t* t0_ptr = bam_aux_get(aln, "t0");
-    std::string t0_str = bam_aux2Z(t0_ptr);
-    std::reverse(t0_str.begin(), t0_str.end());
-    if (bam_aux_update_str(aln, "t0", t0_str.length(), t0_str.c_str()) != 0) {
-        std::cerr << "[W::update_ultima_genomics_tags] Failed to update "
-                     "the t0 tag\n";
+    if (t0_ptr != NULL) {
+        std::string t0_str = bam_aux2Z(t0_ptr);
+        std::reverse(t0_str.begin(), t0_str.end());
+        if (bam_aux_update_str(aln, "t0", t0_str.length(), t0_str.c_str()) !=
+            0) {
+            std::cerr << "[W::update_ultima_genomics_tags] Failed to update "
+                         "the t0 tag\n";
+        }
+    } else {
+        std::cerr
+            << "[W::update_ultima_genomics_tags] No t0 tag is found for read "
+            << bam_get_qname(aln) << "\n";
     }
 }
 
