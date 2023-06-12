@@ -359,10 +359,6 @@ TEST(UltimaGenomicsTest, UpdateFlags) {
     EXPECT_EQ(err, 0);
     LevioSamUtils::update_ultima_genomics_tags(aln, true);
 
-    samFile* t_sam_fp = sam_open("tmp_ultima_small.sam", "w");
-    sam_hdr_write(t_sam_fp, sam_hdr);
-    sam_write1(t_sam_fp, sam_hdr, aln);
-
     // Tests the tp tag
     uint8_t *tp_ptr = bam_aux_get(aln, "tp");
     EXPECT_EQ(bam_auxB_len(tp_ptr), 10);
@@ -380,7 +376,6 @@ TEST(UltimaGenomicsTest, UpdateFlags) {
 
     sam_hdr_destroy(sam_hdr);
     sam_close(sam_fp);
-    sam_close(t_sam_fp);
 }
 
 
