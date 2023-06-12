@@ -591,7 +591,7 @@ int main(int argc, char **argv) {
         {"vcf", required_argument, 0, 'v'},
         {"verbose", required_argument, 0, 'V'},
         {"realign_yaml", required_argument, 0, 'x'},
-        {"is_ultima_genomics", no_argument, 0, OPT_IS_ULTIMA_GENOMICS},
+        {"ultima_genomics", no_argument, 0, OPT_ULTIMA_GENOMICS},
         {"help", no_argument, 0, OPT_HELP},
         {"version", no_argument, 0, OPT_VERSION},
         {"keep_mapq", no_argument, 0, OPT_KEEP_MAPQ}};
