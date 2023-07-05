@@ -368,7 +368,7 @@ else
     # Merge, sort, and clean
     if [ ! -s ${PFX}-final.bam ]; then
         ${MT} samtools merge -@ ${THR} --write-index -o ${PFX}-final.bam \
-            ${PFX}-committed-sorted.bam ${PFX}-paired-deferred-reconciled-sorted.bam
+            ${PFX}-paired-committed.bam ${PFX}-paired-deferred-reconciled-sorted.bam
         ${MT} samtools index ${PFX}-final.bam
     fi
 

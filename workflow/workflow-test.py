@@ -1,7 +1,12 @@
 """
+Nae-Chyun Chen
+Johns Hopkins University
+2021-2023
+
 Tests of the workflow/leviosam2.py workflow.
 """
 import argparse
+import copy
 import pathlib
 import sys
 import unittest
@@ -35,18 +40,30 @@ class Workflow(unittest.TestCase):
         args.aligner_exe = "auto"
         args.sequence_type = "ilmn_pe"
         args.out_prefix = "out/prefix"
+        args.leviosam2_index = "test.clft"
         args.num_threads = 4
         args.source_label = "source"
         args.target_label = "target"
         args.dryrun = True
         args.forcerun = False
-        args.samtools_binary = "samtools"
-        args.bgzip_binary = "bgzip"
-        args.gnu_time_binary = "gtime"
-        args.leviosam2_binary = "leviosam2"
+        args.samtools_exe = "samtools"
+        args.bgzip_exe = "bgzip"
+        args.gnu_time_exe = "gtime"
+        args.leviosam2_exe = "leviosam2"
         args.measure_time = False
         args.target_fasta = "target.fasta"
-        args.input_alignment = "input/aln.bam"
+        args.target_aligner_index = "target.idx"
+        args.input_bam = "input/aln.bam"
+        args.read_group = "rg"
+        args.lift_commit_min_mapq = None
+        args.lift_commit_min_score = None
+        args.lift_commit_max_frac_clipped = None
+        args.lift_commit_max_isize = None
+        args.lift_commit_max_hdist = None
+        args.lift_max_gap = None
+        args.lift_bed_commit_source = None
+        args.lift_bed_defer_target = None
+        args.lift_realign_config = None
 
         cls.workflow = leviosam2.Leviosam2Workflow(args)
         cls.workflow._set_filenames()
@@ -74,39 +91,40 @@ class Workflow(unittest.TestCase):
         self.assertEqual(self.workflow.aligner_exe, "bwa-mem2")
 
     def test_run_leviosam2_basic(self):
-        result = self.workflow.run_leviosam2(clft="test.clft")
+        result = self.workflow.run_leviosam2()
         expected = (
-            f"leviosam2 lift -C test.clft -a input/aln.bam "
+            f"leviosam2 lift -C test.clft -O bam -a input/aln.bam "
             f"-p out/prefix -t 4 -m -f target.fasta "
         )
         self.assertEqual(result, expected)
 
     def test_run_leviosam2_defer(self):
-        result = self.workflow.run_leviosam2(
-            clft="test.clft", lift_commit_min_mapq=10, lift_commit_min_score=-10
-        )
+        new_workflow = copy.deepcopy(self.workflow)
+        new_workflow.lift_commit_min_mapq = 10
+        new_workflow.lift_commit_min_score = -10
+        result = new_workflow.run_leviosam2()
         expected = (
-            f"leviosam2 lift -C test.clft -a input/aln.bam "
+            f"leviosam2 lift -C test.clft -O bam -a input/aln.bam "
             f"-p out/prefix -t 4 -m -f target.fasta "
             f"-S mapq:10 -S aln_score:-10 "
         )
         self.assertEqual(result, expected)
 
     def test_run_leviosam2_defer_comprehensive(self):
-        result = self.workflow.run_leviosam2(
-            clft="test.clft",
-            lift_commit_min_mapq=30,
-            lift_commit_min_score=100,
-            lift_commit_max_frac_clipped=0.95,
-            lift_commit_max_isize=1000,
-            lift_commit_max_hdist=5,
-            lift_max_gap=20,
-            lift_bed_commit_source="commit/source.bed",
-            lift_bed_defer_target="defer/target.bed",
-            lift_realign_config="configs/ilmn.yaml",
-        )
+        new_workflow = copy.deepcopy(self.workflow)
+        new_workflow.lift_commit_min_mapq=30
+        new_workflow.lift_commit_min_score=100
+        new_workflow.lift_commit_max_frac_clipped=0.95
+        new_workflow.lift_commit_max_isize=1000
+        new_workflow.lift_commit_max_hdist=5
+        new_workflow.lift_max_gap=20
+        new_workflow.lift_bed_commit_source="commit/source.bed"
+        new_workflow.lift_bed_defer_target="defer/target.bed"
+        new_workflow.lift_realign_config="configs/ilmn.yaml"
+
+        result = new_workflow.run_leviosam2()
         expected = (
-            f"leviosam2 lift -C test.clft -a input/aln.bam "
+            f"leviosam2 lift -C test.clft -O bam -a input/aln.bam "
             f"-p out/prefix -t 4 -m -f target.fasta "
             f"-S mapq:30 -S aln_score:100 -S clipped_frac:0.95 "
             f"-S isize:1000 -S hdist:5 -G 20 "
@@ -135,11 +153,9 @@ class Workflow(unittest.TestCase):
         self.assertEqual(result, expected)
 
     def test_run_realign_deferred_bt2(self):
-        result = self.workflow.run_realign_deferred(
-            target_fasta_index="bt2/target.fa", rg_string="rg"
-        )
+        result = self.workflow.run_realign_deferred()
         expected = (
-            f"bowtie2 rg -p 3 -x bt2/target.fa "
+            f"bowtie2 rg -p 3 -x target.idx "
             f"-1 out/prefix-paired-deferred-R1.fq.gz "
             f"-2 out/prefix-paired-deferred-R2.fq.gz |  "
             f"samtools view -hbo out/prefix-paired-realigned.bam"
@@ -149,11 +165,9 @@ class Workflow(unittest.TestCase):
     def test_run_realign_deferred_bwa(self):
         self.workflow.aligner = "bwamem"
         self.workflow.aligner_exe = "bwa"
-        result = self.workflow.run_realign_deferred(
-            target_fasta_index="bwa/target.fa", rg_string="rg"
-        )
+        result = self.workflow.run_realign_deferred()
         expected = (
-            f"bwa mem -R rg -t 3 bwa/target.fa "
+            f"bwa mem -R rg -t 3 target.idx "
             f"out/prefix-paired-deferred-R1.fq.gz "
             f"out/prefix-paired-deferred-R2.fq.gz |  "
             f"samtools view -hbo out/prefix-paired-realigned.bam"
