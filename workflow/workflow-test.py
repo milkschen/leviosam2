@@ -40,13 +40,15 @@ class Workflow(unittest.TestCase):
         args.target_label = "target"
         args.dryrun = True
         args.forcerun = False
-        args.samtools_binary = "samtools"
-        args.bgzip_binary = "bgzip"
-        args.gnu_time_binary = "gtime"
-        args.leviosam2_binary = "leviosam2"
+        args.samtools_exe = "samtools"
+        args.bgzip_exe = "bgzip"
+        args.gnu_time_exe = "gtime"
+        args.leviosam2_exe = "leviosam2"
         args.measure_time = False
         args.target_fasta = "target.fasta"
-        args.input_alignment = "input/aln.bam"
+        args.target_aligner_index = "target.idx"
+        args.input_bam = "input/aln.bam"
+        args.read_group = "rg"
 
         cls.workflow = leviosam2.Leviosam2Workflow(args)
         cls.workflow._set_filenames()
@@ -76,7 +78,7 @@ class Workflow(unittest.TestCase):
     def test_run_leviosam2_basic(self):
         result = self.workflow.run_leviosam2(clft="test.clft")
         expected = (
-            f"leviosam2 lift -C test.clft -a input/aln.bam "
+            f"leviosam2 lift -C test.clft -O bam -a input/aln.bam "
             f"-p out/prefix -t 4 -m -f target.fasta "
         )
         self.assertEqual(result, expected)
@@ -86,7 +88,7 @@ class Workflow(unittest.TestCase):
             clft="test.clft", lift_commit_min_mapq=10, lift_commit_min_score=-10
         )
         expected = (
-            f"leviosam2 lift -C test.clft -a input/aln.bam "
+            f"leviosam2 lift -C test.clft -O bam -a input/aln.bam "
             f"-p out/prefix -t 4 -m -f target.fasta "
             f"-S mapq:10 -S aln_score:-10 "
         )
@@ -106,7 +108,7 @@ class Workflow(unittest.TestCase):
             lift_realign_config="configs/ilmn.yaml",
         )
         expected = (
-            f"leviosam2 lift -C test.clft -a input/aln.bam "
+            f"leviosam2 lift -C test.clft -O bam -a input/aln.bam "
             f"-p out/prefix -t 4 -m -f target.fasta "
             f"-S mapq:30 -S aln_score:100 -S clipped_frac:0.95 "
             f"-S isize:1000 -S hdist:5 -G 20 "
@@ -135,11 +137,9 @@ class Workflow(unittest.TestCase):
         self.assertEqual(result, expected)
 
     def test_run_realign_deferred_bt2(self):
-        result = self.workflow.run_realign_deferred(
-            target_fasta_index="bt2/target.fa", rg_string="rg"
-        )
+        result = self.workflow.run_realign_deferred()
         expected = (
-            f"bowtie2 rg -p 3 -x bt2/target.fa "
+            f"bowtie2 rg -p 3 -x target.idx "
             f"-1 out/prefix-paired-deferred-R1.fq.gz "
             f"-2 out/prefix-paired-deferred-R2.fq.gz |  "
             f"samtools view -hbo out/prefix-paired-realigned.bam"
@@ -149,11 +149,9 @@ class Workflow(unittest.TestCase):
     def test_run_realign_deferred_bwa(self):
         self.workflow.aligner = "bwamem"
         self.workflow.aligner_exe = "bwa"
-        result = self.workflow.run_realign_deferred(
-            target_fasta_index="bwa/target.fa", rg_string="rg"
-        )
+        result = self.workflow.run_realign_deferred()
         expected = (
-            f"bwa mem -R rg -t 3 bwa/target.fa "
+            f"bwa mem -R rg -t 3 target.idx "
             f"out/prefix-paired-deferred-R1.fq.gz "
             f"out/prefix-paired-deferred-R2.fq.gz |  "
             f"samtools view -hbo out/prefix-paired-realigned.bam"
