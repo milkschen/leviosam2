@@ -26,6 +26,23 @@ bash leviosam2.sh \
     -R suppress_annotations.bed # optional
 ```
 
+or use the Python workflow (added in v0.4.0! beta mode):
+
+```
+python leviosam2.py \
+    -t 16 \
+    -i ilmn-pe.bam \
+    -o ilmn-pe-lifted \
+    -C chm13v2-grch38.clft \
+    -f grch38.fna \
+    -fi bt2/grch38.fna \
+    --sequence_type ilmn_pe \
+    -a bowtie2 \
+    --use_preset True \
+    --lift_bed_commit_source suppress_annotations.bed \  # optional
+    --lift_bed_defer_target defer_annotations.bed   # optional
+```
+
 BWA MEM example:
 ```
 bash leviosam2.sh \
@@ -36,9 +53,27 @@ bash leviosam2.sh \
     -b bwa/grch38.fna \
     -C chm13v2-grch38.clft \
     -t 16 \
-    -D defer_annotations.bed \ # optional
-    -R suppress_annotations.bed # optional
+    -D defer_annotations.bed \  # optional
+    -R suppress_annotations.bed  # optional
 ```
+
+or use the Python workflow (added in v0.4.0! beta mode):
+
+```
+python leviosam2.py \
+    -t 16 \
+    -i ilmn-pe.bam \
+    -o ilmn-pe-lifted \
+    -C chm13v2-grch38.clft \
+    -f grch38.fna \
+    -fi bwa/grch38.fna \
+    --sequence_type ilmn_pe \
+    -a bwamem \
+    --use_preset True \
+    --lift_bed_commit_source suppress_annotations.bed \  # optional
+    --lift_bed_defer_target defer_annotations.bed   # optional
+```
+
 
 ## Single-end workflows
 
@@ -62,6 +97,22 @@ bash leviosam2.sh \
     -R suppress_annotations.bed # optional
 ```
 
+or use the Python workflow (added in v0.4.0! beta mode):
+
+```
+python leviosam2.py \
+    -t 16 \
+    -i pacbio.bam \
+    -o pacbio-lifted \
+    -C chm13v2-grch38.clft \
+    -f grch38.fna \
+    --sequence_type pb_hifi \
+    -a minimap2 \
+    --use_preset True \
+    --lift_realign_config ../configs/pacbio_all.yaml \
+    --lift_bed_commit_source suppress_annotations.bed  # optional
+```
+
 Minimap2 example with Nanopore (ultra-long reads are not fully supported):
 ```
 bash leviosam2.sh \
@@ -73,6 +124,22 @@ bash leviosam2.sh \
     -C chm13v2-grch38.clft \
     -t 16 \
     -R suppress_annotations.bed # optional
+```
+
+or use the Python workflow (added in v0.4.0! beta mode):
+
+```
+python leviosam2.py \
+    -t 16 \
+    -i ont.bam \
+    -o ont-lifted \
+    -C chm13v2-grch38.clft \
+    -f grch38.fna \
+    --sequence_type ont \
+    -a minimap2 \
+    --use_preset True \
+    --lift_realign_config ../configs/ont_all.yaml \
+    --lift_bed_commit_source suppress_annotations.bed  # optional
 ```
 
 ## Output files

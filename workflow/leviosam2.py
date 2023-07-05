@@ -1,7 +1,7 @@
 """
 Nae-Chyun Chen
 Johns Hopkins University
-2021-2022
+2021-2023
 """
 
 import argparse
@@ -103,32 +103,37 @@ def parse_args() -> argparse.Namespace:
         "--lift_max_gap",
         type=int,
         help="[lift] Max chain gap size allowed",
-        default=0,
+        default=None,
     )
     parser.add_argument(
-        "--lift_commit_min_mapq", type=int, help="[lift] Min MAPQ to commit", default=10
+        "--lift_commit_min_mapq",
+        type=int,
+        help="[lift] Min MAPQ to commit",
+        default=None,
     )
     parser.add_argument(
         "--lift_commit_min_score",
         type=int,
         help="[lift] Min alignment score (AS:i tag) to commit",
-        default=-10,
+        default=None,
     )
     parser.add_argument(
         "--lift_commit_max_frac_clipped",
         type=float,
         help="[lift] Min fraction of clipped bases to commit",
+        default=None,
     )
     parser.add_argument(
         "--lift_commit_max_isize",
         type=int,
         help="[lift] Max template length (isize) to commit",
+        default=None,
     )
     parser.add_argument(
         "--lift_commit_max_hdist",
         type=int,
         help="[lift] Max edit distance (NM:i tag) to commit",
-        default=5,
+        default=None,
     )
     parser.add_argument(
         "--lift_bed_commit_source",
@@ -138,6 +143,7 @@ def parse_args() -> argparse.Namespace:
             "where reads in the regions are always "
             "committed (often for suppress annotations)"
         ),
+        default=None,
     )
     parser.add_argument(
         "--lift_bed_defer_target",
@@ -147,11 +153,13 @@ def parse_args() -> argparse.Namespace:
             "where reads in the regions are always "
             "deferred"
         ),
+        default=None,
     )
     parser.add_argument(
         "--lift_realign_config",
         type=str,
         help=("[lift] Path to the config file for realignment"),
+        default=None,
     )
     parser.add_argument(
         "-i",
@@ -196,6 +204,12 @@ def parse_args() -> argparse.Namespace:
     #     type=str,
     #     help=("Path to the source reference index " "for `--aligner`"),
     # )
+    parser.add_argument(
+        "--use_preset",
+        type=bool,
+        default=True,
+        help="Use default workflow parameters",
+    )
     parser.add_argument(
         "--dryrun", action="store_true", help="Activate the dryrun mode"
     )
@@ -274,49 +288,45 @@ class Leviosam2Workflow:
 
     def run_leviosam2(
         self,
-        clft: str,
-        lift_commit_min_mapq: Optional[int] = None,
-        lift_commit_min_score: Optional[int] = None,
-        lift_commit_max_frac_clipped: Optional[float] = None,
-        lift_commit_max_isize: Optional[int] = None,
-        lift_commit_max_hdist: Optional[int] = None,
-        lift_max_gap: Optional[int] = None,
-        lift_bed_commit_source: Optional[str] = None,
-        lift_bed_defer_target: Optional[str] = None,
-        lift_realign_config: Optional[str] = None,
     ) -> Union[str, "subprocess.CompletedProcess[bytes]"]:
         """Run leviosam2."""
         lift_commit_min_mapq_arg = (
-            f"-S mapq:{lift_commit_min_mapq} " if lift_commit_min_mapq else ""
+            f"-S mapq:{self.lift_commit_min_mapq} " if self.lift_commit_min_mapq else ""
         )
         lift_commit_min_score_arg = (
-            f"-S aln_score:{lift_commit_min_score} " if lift_commit_min_score else ""
+            f"-S aln_score:{self.lift_commit_min_score} "
+            if self.lift_commit_min_score
+            else ""
         )
         lift_commit_max_frac_clipped_arg = (
-            f"-S clipped_frac:{lift_commit_max_frac_clipped} "
-            if lift_commit_max_frac_clipped
+            f"-S clipped_frac:{self.lift_commit_max_frac_clipped} "
+            if self.lift_commit_max_frac_clipped
             else ""
         )
         lift_commit_max_isize_arg = (
-            f"-S isize:{lift_commit_max_isize} " if lift_commit_max_isize else ""
+            f"-S isize:{self.lift_commit_max_isize} "
+            if self.lift_commit_max_isize
+            else ""
         )
         lift_commit_max_hdist_arg = (
-            f"-S hdist:{lift_commit_max_hdist} " if lift_commit_max_hdist else ""
+            f"-S hdist:{self.lift_commit_max_hdist} "
+            if self.lift_commit_max_hdist
+            else ""
         )
-        lift_max_gap_arg = f"-G {lift_max_gap} " if lift_max_gap else ""
+        lift_max_gap_arg = f"-G {self.lift_max_gap} " if self.lift_max_gap else ""
         lift_bed_commit_source_arg = (
-            f"-r {lift_bed_commit_source} " if lift_bed_commit_source else ""
+            f"-r {self.lift_bed_commit_source} " if self.lift_bed_commit_source else ""
         )
         lift_bed_defer_target_arg = (
-            f"-D {lift_bed_defer_target} " if lift_bed_defer_target else ""
+            f"-D {self.lift_bed_defer_target} " if self.lift_bed_defer_target else ""
         )
         lift_realign_config_arg = (
-            f"-x {lift_realign_config} " if lift_realign_config else ""
+            f"-x {self.lift_realign_config} " if self.lift_realign_config else ""
         )
 
         cmd = (
             f"{self.time_cmd}"
-            f"{self.leviosam2} lift -C {clft} -O bam "
+            f"{self.leviosam2} lift -C {self.leviosam2_index} -O bam "
             f"-a {self.input_bam} -p {self.out_prefix} "
             f"-t {self.num_threads} -m -f {self.target_fasta} "
             f"{lift_commit_min_mapq_arg}"
@@ -598,7 +608,8 @@ class Leviosam2Workflow:
             return cmd
         else:
             self._check_input_exists(self._fn_deferred_pe_fq1)
-            self._check_input_exists(self._fn_deferred_pe_fq2)
+            if not self.is_single_end:
+                self._check_input_exists(self._fn_deferred_pe_fq2)
 
             if (not self.forcerun) and fn_out.is_file():
                 logger.info(f"Skip run_realign_deferred -- {fn_out} exists")
@@ -778,18 +789,7 @@ class Leviosam2Workflow:
 
         self._set_filenames()
 
-        self.run_leviosam2(
-            clft=args.leviosam2_index,
-            lift_commit_min_mapq=args.lift_commit_min_mapq,
-            lift_commit_min_score=args.lift_commit_min_score,
-            lift_commit_max_frac_clipped=args.lift_commit_max_frac_clipped,
-            lift_commit_max_isize=args.lift_commit_max_isize,
-            lift_commit_max_hdist=args.lift_commit_max_hdist,
-            lift_max_gap=args.lift_max_gap,
-            lift_bed_commit_source=args.lift_bed_commit_source,
-            lift_bed_defer_target=args.lift_bed_defer_target,
-            lift_realign_config=args.lift_realign_config,
-        )
+        self.run_leviosam2()
 
         self.run_sort_committed()
 
@@ -837,18 +837,109 @@ class Leviosam2Workflow:
         if args.measure_time:
             self.time_cmd = f"{self.gtime} -v " f"-ao {self.out_prefix}.time_log "
 
-        # Converts file name to pathlib.Path()
+        # Converts file name strings to pathlib.Path()
         self.target_fasta = pathlib.Path(args.target_fasta)
         self.input_bam = pathlib.Path(args.input_bam)
         self.out_prefix = pathlib.Path(args.out_prefix)
+        self.leviosam2_index = pathlib.Path(args.leviosam2_index)
         if args.target_aligner_index:
             self.target_aligner_index = pathlib.Path(args.target_aligner_index)
         else:
             self.target_aligner_index = pathlib.Path(args.target_fasta)
 
+        self.lift_commit_min_mapq = args.lift_commit_min_mapq
+        self.lift_commit_min_score = args.lift_commit_min_score
+        self.lift_commit_max_frac_clipped = args.lift_commit_max_frac_clipped
+        self.lift_commit_max_isize = args.lift_commit_max_isize
+        self.lift_commit_max_hdist = args.lift_commit_max_hdist
+        self.lift_max_gap = args.lift_max_gap
+        self.lift_bed_commit_source = args.lift_bed_commit_source
+        self.lift_bed_defer_target = args.lift_bed_defer_target
+        self.lift_realign_config = args.lift_realign_config
+
+
+class Leviosam2WorkflowIlmnPreset(Leviosam2Workflow):
+    """Workflow for Ilmn reads."""
+
+    def __init__(self, args: argparse.Namespace) -> None:
+        super().__init__(args=args)
+        if self.sequence_type not in ["ilmn_se", "ilmn_pe"]:
+            raise ValueError(
+                "Invalid sequence type for Leviosam2WorkflowIlmn: "
+                f"`{self.sequence_type}`"
+            )
+        if self.aligner not in ["bowtie2", "bwamem", "bwamem2"]:
+            raise ValueError(
+                f"Invalid aligner for Leviosam2WorkflowIlmn: `{self.aligner}`"
+            )
+        if args.use_preset:
+            self.lift_max_gap = 0
+            self.lift_commit_max_hdist = 5
+            if self.aligner == "bowtie2":
+                self.lift_commit_min_mapq = 10
+                self.lift_commit_min_score = -10
+            elif self.aligner in ["bwamem", "bwamem2"]:
+                self.lift_commit_min_mapq = 30
+                self.lift_commit_min_score = 100
+
+
+class Leviosam2WorkflowPacbioHifiPreset(Leviosam2Workflow):
+    """Workflow for Ilmn reads."""
+
+    def __init__(self, args: argparse.Namespace) -> None:
+        super().__init__(args=args)
+        if self.sequence_type not in ["pb_hifi"]:
+            raise ValueError(
+                "Invalid sequence type for Leviosam2WorkflowPacbioHifiPreset: "
+                f"`{self.sequence_type}`"
+            )
+        if self.aligner not in ["minimap2", "winnowmap2"]:
+            raise ValueError(
+                "Invalid aligner for Leviosam2WorkflowPacbioHifiPreset: "
+                f"`{self.aligner}`"
+            )
+        if args.use_preset:
+            self.lift_max_gap = 1000
+            self.lift_commit_max_hdit = 100
+
+
+class Leviosam2WorkflowOntPreset(Leviosam2Workflow):
+    """Workflow for Ilmn reads."""
+
+    def __init__(self, args: argparse.Namespace) -> None:
+        super().__init__(args=args)
+        if self.sequence_type not in ["ont"]:
+            raise ValueError(
+                "Invalid sequence type for Leviosam2WorkflowOntPreset: "
+                f"`{self.sequence_type}`"
+            )
+        if self.aligner not in ["minimap2", "winnowmap2"]:
+            raise ValueError(
+                "Invalid aligner for Leviosam2WorkflowOntPreset: " f"`{self.aligner}`"
+            )
+        if args.use_preset:
+            self.lift_max_gap = 1500
+            self.lift_commit_max_hdit = 6000
+
 
 def run_workflow(args: argparse.Namespace):
-    workflow = Leviosam2Workflow(args)
+    if args.use_preset:
+        if args.sequence_type in ["ilmn_se", "ilmn_pe"]:
+            if args.aligner in ["bowtie2", "bwamem", "bwamem2"]:
+                workflow = Leviosam2WorkflowIlmnPreset(args)
+        elif args.sequence_type == "pb_hifi":
+            if args.aligner in ["minimap2", "winnowmap2"]:
+                workflow = Leviosam2WorkflowPacbioHifiPreset(args)
+        elif args.sequence_type == "ont":
+            if args.aligner in ["minimap2", "winnowmap2"]:
+                workflow = Leviosam2WorkflowOntPreset(args)
+        else:
+            raise ValueError(
+                "There is no preset for the sequence_type and aligner combination of "
+                f"{args.sequence_type} and {args.aligner}"
+            )
+    else:
+        workflow = Leviosam2Workflow(args)
     workflow.check_inputs()
     workflow.validate_executables()
     workflow.run_workflow()
