@@ -24,6 +24,7 @@ def parse_args() -> argparse.Namespace:
         "-t", "--num_threads", type=int, default=4, help="Number of threads to use"
     )
     parser.add_argument(
+        "-s",
         "--sequence_type",
         type=str,
         required=True,
@@ -142,7 +143,7 @@ def parse_args() -> argparse.Namespace:
         "--lift_bed_defer_target",
         type=str,
         help=(
-            "[lift] Path to a BED (target cooridnates"
+            "[lift] Path to a BED (target cooridnates)"
             "where reads in the regions are always "
             "deferred"
         ),
@@ -150,7 +151,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--lift_realign_config",
         type=str,
-        help=("[lift] Path to the config file for " "realignment"),
+        help=("[lift] Path to the config file for realignment"),
     )
     parser.add_argument(
         "-i",
@@ -181,7 +182,7 @@ def parse_args() -> argparse.Namespace:
         "--target_aligner_index",
         type=str,
         default="",
-        help=("Path to the target reference index " "for `--aligner`"),
+        help=("Path to the target reference index for `--aligner`"),
     )
     # parser.add_argument(
     #     "-s",
