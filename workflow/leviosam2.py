@@ -201,7 +201,7 @@ def parse_args() -> argparse.Namespace:
         "--target_aligner_index",
         type=str,
         default="",
-        help=("Path to the target reference index for `--aligner`"),
+        help="Path to the target reference index for `--aligner`",
     )
     # parser.add_argument(
     #     "-s",
@@ -415,7 +415,7 @@ class Leviosam2Workflow:
             f"{self.time_cmd}"
             f"{self.leviosam2} collate "
             f"-a {self._fn_committed_sorted} -b {self._fn_deferred} "
-            f"-p {self.prefix_deferred_pe}"
+            f"-p {self._prefix_deferred_pe}"
         )
         if self.dryrun:
             return cmd
@@ -797,7 +797,7 @@ class Leviosam2Workflow:
         self._fn_final = o_dir / f"{o_prefix}-final.bam"
 
         # paired-end
-        self.prefix_deferred_pe = o_dir / f"{o_prefix}-paired"
+        self._prefix_deferred_pe = o_dir / f"{o_prefix}-paired"
         self._fn_deferred_pe_fq1 = (
             o_dir / f"{o_prefix}-paired-deferred-R1.fq.gz"
         )
@@ -887,6 +887,9 @@ class Leviosam2Workflow:
         if args.target_aligner_index:
             self.target_aligner_index = pathlib.Path(args.target_aligner_index)
         else:
+            logger.info(
+                f"`--target_aligner_index` is empty. Set to {args.target_fasta}"
+            )
             self.target_aligner_index = pathlib.Path(args.target_fasta)
 
         self.lift_commit_min_mapq = args.lift_commit_min_mapq
