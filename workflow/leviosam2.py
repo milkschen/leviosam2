@@ -21,7 +21,11 @@ logger = logging.getLogger(__name__)
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "-t", "--num_threads", type=int, default=4, help="Number of threads to use"
+        "-t",
+        "--num_threads",
+        type=int,
+        default=4,
+        help="Number of threads to use",
     )
     parser.add_argument(
         "-s",
@@ -58,7 +62,10 @@ def parse_args() -> argparse.Namespace:
         help="Path to the samtools executable",
     )
     parser.add_argument(
-        "--bgzip_exe", default="bgzip", type=str, help="Path to the bgzip executable"
+        "--bgzip_exe",
+        default="bgzip",
+        type=str,
+        help="Path to the bgzip executable",
     )
     parser.add_argument(
         "--gnu_time_exe",
@@ -83,7 +90,9 @@ def parse_args() -> argparse.Namespace:
         "--aligner_exe",
         type=str,
         default="auto",
-        help=("Path to the aligner executable. If empty, inferred using `--aligner`"),
+        help=(
+            "Path to the aligner executable. If empty, inferred using `--aligner`"
+        ),
     )
     parser.add_argument(
         "--source_label",
@@ -97,7 +106,9 @@ def parse_args() -> argparse.Namespace:
         default="target",
         help="Label of the target reference",
     )
-    parser.add_argument("--read_group", type=str, default="", help="Read group string")
+    parser.add_argument(
+        "--read_group", type=str, default="", help="Read group string"
+    )
     parser.add_argument(
         "-g",
         "--lift_max_gap",
@@ -190,7 +201,7 @@ def parse_args() -> argparse.Namespace:
         "--target_aligner_index",
         type=str,
         default="",
-        help=("Path to the target reference index for `--aligner`"),
+        help="Path to the target reference index for `--aligner`",
     )
     # parser.add_argument(
     #     "-s",
@@ -291,7 +302,9 @@ class Leviosam2Workflow:
     ) -> Union[str, "subprocess.CompletedProcess[bytes]"]:
         """Run leviosam2."""
         lift_commit_min_mapq_arg = (
-            f"-S mapq:{self.lift_commit_min_mapq} " if self.lift_commit_min_mapq else ""
+            f"-S mapq:{self.lift_commit_min_mapq} "
+            if self.lift_commit_min_mapq
+            else ""
         )
         lift_commit_min_score_arg = (
             f"-S aln_score:{self.lift_commit_min_score} "
@@ -313,15 +326,23 @@ class Leviosam2Workflow:
             if self.lift_commit_max_hdist
             else ""
         )
-        lift_max_gap_arg = f"-G {self.lift_max_gap} " if self.lift_max_gap else ""
+        lift_max_gap_arg = (
+            f"-G {self.lift_max_gap} " if self.lift_max_gap else ""
+        )
         lift_bed_commit_source_arg = (
-            f"-r {self.lift_bed_commit_source} " if self.lift_bed_commit_source else ""
+            f"-r {self.lift_bed_commit_source} "
+            if self.lift_bed_commit_source
+            else ""
         )
         lift_bed_defer_target_arg = (
-            f"-D {self.lift_bed_defer_target} " if self.lift_bed_defer_target else ""
+            f"-D {self.lift_bed_defer_target} "
+            if self.lift_bed_defer_target
+            else ""
         )
         lift_realign_config_arg = (
-            f"-x {self.lift_realign_config} " if self.lift_realign_config else ""
+            f"-x {self.lift_realign_config} "
+            if self.lift_realign_config
+            else ""
         )
 
         cmd = (
@@ -344,7 +365,9 @@ class Leviosam2Workflow:
         else:
             self._check_input_exists(self.input_bam)
             if (not self.forcerun) and self._fn_committed.is_file():
-                logger.info(f"Skip run_leviosam2 -- {self._fn_committed} exists")
+                logger.info(
+                    f"Skip run_leviosam2 -- {self._fn_committed} exists"
+                )
                 return "skip"
             logger.info(cmd)
             return subprocess.run([cmd], shell=True)
@@ -376,7 +399,9 @@ class Leviosam2Workflow:
             logger.info(cmd)
             return subprocess.run([cmd], shell=True)
 
-    def run_collate_pe(self) -> Union[str, "subprocess.CompletedProcess[bytes]"]:
+    def run_collate_pe(
+        self,
+    ) -> Union[str, "subprocess.CompletedProcess[bytes]"]:
         """[Paired-end] Collate committed/deferred BAMs to properly paired FASTQs.
 
         Subprocess inputs:
@@ -390,7 +415,7 @@ class Leviosam2Workflow:
             f"{self.time_cmd}"
             f"{self.leviosam2} collate "
             f"-a {self._fn_committed_sorted} -b {self._fn_deferred} "
-            f"-p {self.prefix_deferred_pe}"
+            f"-p {self._prefix_deferred_pe}"
         )
         if self.dryrun:
             return cmd
@@ -545,7 +570,12 @@ class Leviosam2Workflow:
                 f"{self.samtools} sort -@ {num_threads_samtools} -o {fn_out}"
             )
         else:
-            if self.aligner not in ["bowtie2", "bwamem", "bwamem2", "strobealign"]:
+            if self.aligner not in [
+                "bowtie2",
+                "bwamem",
+                "bwamem2",
+                "strobealign",
+            ]:
                 raise ValueError(
                     "We have not supported paired-end "
                     f"mode for aligner {self.aligner}"
@@ -694,7 +724,9 @@ class Leviosam2Workflow:
             self._check_input_exists(fn_in_deferred)
 
             if (not self.forcerun) and self._fn_final.is_file():
-                logger.info(f"Skip run_merge_and_index -- {self._fn_final} exists")
+                logger.info(
+                    f"Skip run_merge_and_index -- {self._fn_final} exists"
+                )
                 return "skip"
             logger.info(cmd)
             return subprocess.run([cmd], shell=True)
@@ -765,13 +797,21 @@ class Leviosam2Workflow:
         self._fn_final = o_dir / f"{o_prefix}-final.bam"
 
         # paired-end
-        self.prefix_deferred_pe = o_dir / f"{o_prefix}-paired"
-        self._fn_deferred_pe_fq1 = o_dir / f"{o_prefix}-paired-deferred-R1.fq.gz"
-        self._fn_deferred_pe_fq2 = o_dir / f"{o_prefix}-paired-deferred-R2.fq.gz"
+        self._prefix_deferred_pe = o_dir / f"{o_prefix}-paired"
+        self._fn_deferred_pe_fq1 = (
+            o_dir / f"{o_prefix}-paired-deferred-R1.fq.gz"
+        )
+        self._fn_deferred_pe_fq2 = (
+            o_dir / f"{o_prefix}-paired-deferred-R2.fq.gz"
+        )
         self._fn_committed_pe = o_dir / f"{o_prefix}-paired-committed.bam"
         self._fn_deferred_pe = o_dir / f"{o_prefix}-paired-deferred.bam"
-        self._fn_deferred_pe_sortn = o_dir / f"{o_prefix}-paired-deferred-sorted_n.bam"
-        self._fn_deferred_realigned_pe = o_dir / f"{o_prefix}-paired-realigned.bam"
+        self._fn_deferred_pe_sortn = (
+            o_dir / f"{o_prefix}-paired-deferred-sorted_n.bam"
+        )
+        self._fn_deferred_realigned_pe = (
+            o_dir / f"{o_prefix}-paired-realigned.bam"
+        )
         self._fn_deferred_realigned_pe_sortn = (
             o_dir / f"{o_prefix}-paired-realigned-sorted_n.bam"
         )
@@ -835,7 +875,9 @@ class Leviosam2Workflow:
         self.measure_time = args.measure_time
         self.time_cmd = ""
         if args.measure_time:
-            self.time_cmd = f"{self.gtime} -v " f"-ao {self.out_prefix}.time_log "
+            self.time_cmd = (
+                f"{self.gtime} -v " f"-ao {self.out_prefix}.time_log "
+            )
 
         # Converts file name strings to pathlib.Path()
         self.target_fasta = pathlib.Path(args.target_fasta)
@@ -845,6 +887,9 @@ class Leviosam2Workflow:
         if args.target_aligner_index:
             self.target_aligner_index = pathlib.Path(args.target_aligner_index)
         else:
+            logger.info(
+                f"`--target_aligner_index` is empty. Set to {args.target_fasta}"
+            )
             self.target_aligner_index = pathlib.Path(args.target_fasta)
 
         self.lift_commit_min_mapq = args.lift_commit_min_mapq
@@ -915,7 +960,8 @@ class Leviosam2WorkflowOntPreset(Leviosam2Workflow):
             )
         if self.aligner not in ["minimap2", "winnowmap2"]:
             raise ValueError(
-                "Invalid aligner for Leviosam2WorkflowOntPreset: " f"`{self.aligner}`"
+                "Invalid aligner for Leviosam2WorkflowOntPreset: "
+                f"`{self.aligner}`"
             )
         if args.use_preset:
             self.lift_max_gap = 1500
