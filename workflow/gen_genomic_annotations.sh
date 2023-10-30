@@ -29,8 +29,7 @@ L="0.98"
 KE_STR="k${K}_e${E}"
 
 # Calculate mappability annotations
-# Check out https://github.com/cpockrandt/genmap#pre-built-indices for
-# detailed instructions
+# Check out https://github.com/cpockrandt/genmap for detailed instructions
 # genmap map -K ${K} -E ${E} -I ${SOURCE_GENMAP_IDX} -O ./ -bg
 # genmap map -K ${K} -E ${E} -I ${TARGET_GENMAP_IDX} -O ./ -bg
 SOURCE_BG="/path/to/source.genmap.bedgraph"
