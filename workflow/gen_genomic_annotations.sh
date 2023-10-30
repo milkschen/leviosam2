@@ -24,25 +24,28 @@ TARGET_LABEL="target"
 PFX="${SOURCE_LABEL}-${TARGET_LABEL}"
 
 K="100"
-E="0.01"
+E="1"
 L="0.98"
+KE_STR="k${K}_e${E}"
 
 # Calculate mappability annotations
-# genmap2 has not been released
-# genmap2 -k ${K} -e ${E} -s 10 -bg ${SOURCE_REF}
-# genmap2 -k ${K} -e ${E} -s 10 -bg ${TARGET_REF}
-SOURCE_BG="/path/to/source_${K}_${E}_10_1.0.bedgraph"
-TARGET_BG="/path/to/target_${K}_${E}_10_1.0.bedgraph"
+# Check out https://github.com/cpockrandt/genmap for detailed instructions
+# genmap map -K ${K} -E ${E} -I ${SOURCE_GENMAP_IDX} -O ./ -bg
+# genmap map -K ${K} -E ${E} -I ${TARGET_GENMAP_IDX} -O ./ -bg
+SOURCE_BG="/path/to/source.genmap.bedgraph"
+TARGET_BG="/path/to/target.genmap.bedgraph"
 
 MIN_SEG_SIZE="5000"
 
 ### END_EDIT
 
-SOURCE_HIGHMAP="${SOURCE_LABEL}-k${K}_e${E}-high.bed"
-# SOURCE_LOWMAP="${SOURCE_LABEL}-k${K}_e${E}-low.bed"
-SOURCE_TO_TARGET_HIGHMAP="${SOURCE_LABEL}_to_${TARGET_LABEL}-k${K}_e${E}-high.bed"
-TARGET_HIGHMAP="${TARGET_LABEL}-k${K}_e${E}-high.bed"
-TARGET_LOWMAP="${TARGET_LABEL}-k${K}_e${E}-low.bed"
+SOURCE_HIGHMAP="${SOURCE_LABEL}-${KE_STR}-high.bed"
+SOURCE_TO_TARGET_HIGHMAP="${SOURCE_LABEL}_to_${TARGET_LABEL}-${KE_STR}-high.bed"
+TARGET_HIGHMAP="${TARGET_LABEL}-${KE_STR}-high.bed"
+TARGET_LOWMAP="${TARGET_LABEL}-${KE_STR}-low.bed"
+TARGET_MAPREDUCED="${KE_STR}-${SOURCE_LABEL}_highmap-${TARGET_LABEL}_lowmap-${TARGET_LABEL}.bed"
+TARGET_CHAINLOWID="${PFX}-identity_lt${L}-${TARGET_LABEL}.bed"
+TARGET_CHAINLOWID_MAPREDUCED="${SOURCE_LABEL}-${TARGET_LABEL}-lt${L}-map_reduction_${KE_STR}.bed"
 
 ##############################################
 #### Generate low-mappability annotations ####
@@ -55,9 +58,9 @@ if [ ! -s ${PFX}.summary ]; then
     python ${DIR_LEVIOSAM}/scripts/verbosify_chain.py -c ${CHAIN} -o ${PFX}.verbose.chain \
         -b ${PFX} -s ${PFX}.summary -f1 ${SOURCE_REF} -f2 ${TARGET_REF}
 fi
-if [ ! -s ${PFX}-identity_lt${L}-${TARGET_LABEL}.bed ]; then
+if [ ! -s ${TARGET_CHAINLOWID} ]; then
     python ${DIR_LEVIOSAM}/scripts/get_low_identity_regions.py -s ${PFX}.summary \
-        -l ${L} -o ${PFX}-identity_lt${L}-${TARGET_LABEL}.bed
+        -l ${L} -o ${TARGET_CHAINLOWID}
 fi
 
 if [ ! -s ${SOURCE_HIGHMAP} ]; then
@@ -81,16 +84,16 @@ fi
 
 # Low-mappability in TARGET; high-mappability in SOURCE
 # This is wrt the TARGET coordinates
-if [ ! -s k${K}_e${E}-${SOURCE_LABEL}_highmap-${TARGET_LABEL}_lowmap-${TARGET_LABEL}.bed ]; then
-    bedtools intersect -a ${SOURCE_TO_TARGET_HIGHMAP} -b ${TARGET_LOWMAP} > k${K}_e${E}-${SOURCE_LABEL}_highmap-${TARGET_LABEL}_lowmap-${TARGET_LABEL}.bed
+if [ ! -s ${TARGET_MAPREDUCED} ]; then
+    bedtools intersect -a ${SOURCE_TO_TARGET_HIGHMAP} -b ${TARGET_LOWMAP} > ${TARGET_MAPREDUCED}
 fi
 
 
 # Merge low-identity and mappability-reduced BED files
-cat ${PFX}-identity_lt${L}-${TARGET_LABEL}.bed k${K}_e${E}-${SOURCE_LABEL}_highmap-${TARGET_LABEL}_lowmap-${TARGET_LABEL}.bed |\
+cat ${TARGET_CHAINLOWID} ${TARGET_MAPREDUCED} |\
     bedtools intersect -a stdin -b ${TARGET_REF}.fai.bed |\
     bedtools sort -i stdin |\
-    bedtools merge -i stdin > ${SOURCE_LABEL}-${TARGET_LABEL}-lt${L}-map_reduction_k${K}_e${E}.bed
+    bedtools merge -i stdin > ${TARGET_CHAINLOWID_MAPREDUCED}
 
 
 ##########################################
