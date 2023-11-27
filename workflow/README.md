@@ -5,30 +5,16 @@
 All dependent software is included in our Docker/Singularity container.
 Users of other installation approaches may install the dependencies using conda, pre-built binary, or building from source.
 
-- Aligner: [minimap2](https://github.com/lh3/minimap2)/[winnowmap2](https://github.com/marbl/Winnowmap)/[bwa mem](https://github.com/lh3/bwa)/[Bowtie 2](http://bowtie-bio.sourceforge.net/bowtie2/manual.shtml) 
+- Aligner: [minimap2](https://github.com/lh3/minimap2)/[winnowmap2](https://github.com/marbl/Winnowmap)/[bwa mem](https://github.com/lh3/bwa)/[Bowtie 2](http://bowtie-bio.sourceforge.net/bowtie2/manual.shtml)
 - samtools, bgzip
 
 ## Paired-end workflows
 
-* Supported aligners: [bwa mem](https://github.com/lh3/bwa) and [Bowtie 2](http://bowtie-bio.sourceforge.net/bowtie2/manual.shtml) 
+- Supported aligners: [bwa mem](https://github.com/lh3/bwa) and [Bowtie 2](http://bowtie-bio.sourceforge.net/bowtie2/manual.shtml)
 
 Bowtie 2 example:
-```
-bash leviosam2.sh \
-    -a bowtie2 -A -10 -q 10 -H 5 \
-    -i ilmn-pe.bam \
-    -o ilmn-pe-lifted \
-    -f grch38.fna \
-    -b bt2/grch38 \
-    -C chm13v2-grch38.clft \
-    -t 16 \
-    -D defer_annotations.bed \ # optional
-    -R suppress_annotations.bed # optional
-```
 
-or use the Python workflow (added in v0.4.0! beta mode):
-
-```
+```shell
 python leviosam2.py \
     -t 16 \
     -i ilmn-pe.bam \
@@ -43,23 +29,24 @@ python leviosam2.py \
     --lift_bed_defer_target defer_annotations.bed   # optional
 ```
 
-BWA MEM example:
-```
+With the bash worklow (older workflow to be deprecated):
+
+```shell
 bash leviosam2.sh \
-    -a bwamem -A 100 -q 30 -H 5 \
+    -a bowtie2 -A -10 -q 10 -H 5 \
     -i ilmn-pe.bam \
     -o ilmn-pe-lifted \
     -f grch38.fna \
-    -b bwa/grch38.fna \
+    -b bt2/grch38 \
     -C chm13v2-grch38.clft \
     -t 16 \
-    -D defer_annotations.bed \  # optional
-    -R suppress_annotations.bed  # optional
+    -D defer_annotations.bed \ # optional
+    -R suppress_annotations.bed # optional
 ```
 
-or use the Python workflow (added in v0.4.0! beta mode):
+BWA MEM example:
 
-```
+```shell
 python leviosam2.py \
     -t 16 \
     -i ilmn-pe.bam \
@@ -74,6 +61,20 @@ python leviosam2.py \
     --lift_bed_defer_target defer_annotations.bed   # optional
 ```
 
+With the bash worklow (older workflow to be deprecated):
+
+```shell
+bash leviosam2.sh \
+    -a bwamem -A 100 -q 30 -H 5 \
+    -i ilmn-pe.bam \
+    -o ilmn-pe-lifted \
+    -f grch38.fna \
+    -b bwa/grch38.fna \
+    -C chm13v2-grch38.clft \
+    -t 16 \
+    -D defer_annotations.bed \  # optional
+    -R suppress_annotations.bed  # optional
+```
 
 ## Single-end workflows
 
@@ -85,21 +86,8 @@ For both short and long reads. Different parameters are recommended for each seq
 - `-g` sets the max allowed size of overlapping chain gaps of an alignment, `-H` is the max edit distance of an alignment (post-realignment) to be committed. Please adjust these parameters according to your long read platform and library preparation
 
 Minimap2 example with Pacbio:
-```
-bash leviosam2.sh \
-    -a minimap2 -g 1000 -H 100 -S -x ../configs/pacbio_all.yaml \
-    -l map-hifi \
-    -i pacbio.bam \
-    -o pacbio-lifted \
-    -f grch38.fna \
-    -C chm13v2-grch38.clft \
-    -t 16 \
-    -R suppress_annotations.bed # optional
-```
 
-or use the Python workflow (added in v0.4.0! beta mode):
-
-```
+```shell
 python leviosam2.py \
     -t 16 \
     -i pacbio.bam \
@@ -113,22 +101,23 @@ python leviosam2.py \
     --lift_bed_commit_source suppress_annotations.bed  # optional
 ```
 
-Minimap2 example with Nanopore (ultra-long reads are not fully supported):
-```
+With the bash worklow (older workflow to be deprecated):
+
+```shell
 bash leviosam2.sh \
-    -a minimap2 -g 1500 -H 6000 -S -x ../configs/ont_all.yaml \
-    -l map-ont \
-    -i ont.bam \
-    -o ont-lifted \
+    -a minimap2 -g 1000 -H 100 -S -x ../configs/pacbio_all.yaml \
+    -l map-hifi \
+    -i pacbio.bam \
+    -o pacbio-lifted \
     -f grch38.fna \
     -C chm13v2-grch38.clft \
     -t 16 \
     -R suppress_annotations.bed # optional
 ```
 
-or use the Python workflow (added in v0.4.0! beta mode):
+Minimap2 example with Nanopore (ultra-long reads are not fully supported):
 
-```
+```shell
 python leviosam2.py \
     -t 16 \
     -i ont.bam \
@@ -142,24 +131,37 @@ python leviosam2.py \
     --lift_bed_commit_source suppress_annotations.bed  # optional
 ```
 
+With the bash worklow (older workflow to be deprecated):
+
+```shell
+bash leviosam2.sh \
+    -a minimap2 -g 1500 -H 6000 -S -x ../configs/ont_all.yaml \
+    -l map-ont \
+    -i ont.bam \
+    -o ont-lifted \
+    -f grch38.fna \
+    -C chm13v2-grch38.clft \
+    -t 16 \
+    -R suppress_annotations.bed # optional
+```
+
 ## Output files
 
-* `<out_prefix>-final.bam`: The full lifted and realigned reads using the target coordinate system
-* `<out_prefix>-unliftable.bam`: The deferred and unliftable reads using the source coordinate system. See [#20](https://github.com/milkschen/leviosam2/issues/20) for discussions.
+- `<out_prefix>-final.bam`: The full lifted and realigned reads using the target coordinate system
+- `<out_prefix>-unliftable.bam`: The deferred and unliftable reads using the source coordinate system. See [#20](https://github.com/milkschen/leviosam2/issues/20) for discussions.
 
-By default, temporary files generated by the workflow are removed. These files can be kept by toggling the `-K` option. Temp files include deferred alignments (target coord.), realigned alignments (target coord.), and deferred reads (gzipped FASTQ). 
-
+By default, temporary files generated by the workflow are removed. These files can be kept by toggling the `-K` option. Temp files include deferred alignments (target coord.), realigned alignments (target coord.), and deferred reads (gzipped FASTQ).
 
 ## Case Study
 
 Please make sure `leviosam2` and `leviosam2.sh` is in your `$PATH` with command `leviosam2 -h` and `sh leviosam2.sh -h`.
 If it fails, please use the following command to set `$PATH` (paths need to be adjusted locally) and make sure you see the help message.
 
-```
+```shell
 PATH=<path/to/leviosam2/build>:<path/to/leviosam2/workflow>:${PATH}
 ```
 
-```
+```shell
 mkdir case_study
 cd case_study
 
