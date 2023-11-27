@@ -177,6 +177,14 @@ class Workflow(unittest.TestCase):
         )
         self.assertEqual(result, expected)
 
+    def test_run_bam_to_fastq_se(self):
+        result = self.workflow.run_bam_to_fastq_se()
+        expected = (
+            f"samtools fastq {self.args.out_prefix}-deferred.bam | "
+            f"bgzip > {self.args.out_prefix}-deferred.fq.gz"
+        )
+        self.assertEqual(result, expected)
+
 
 if __name__ == "__main__":
     unittest.main()
