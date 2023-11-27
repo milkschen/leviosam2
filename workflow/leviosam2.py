@@ -8,7 +8,7 @@ import argparse
 import logging
 import pathlib
 import subprocess
-from typing import Optional, Union
+from typing import Union
 
 logging.basicConfig(
     format="[%(asctime)s %(pathname)s:%(lineno)d %(levelname)s] %(message)s",
@@ -234,6 +234,12 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
+def check_file_exists(fn: pathlib.Path) -> None:
+    """Checks if a path is a file. Raises an error if not."""
+    if not fn.is_file():
+        raise FileNotFoundError(f"{fn} is not a file")
+
+
 class Leviosam2Workflow:
     """LevioSAM2 workflow module."""
 
@@ -274,12 +280,13 @@ class Leviosam2Workflow:
                     "```"
                 )
 
-    @staticmethod
-    def _check_input_exists(fn: pathlib.Path) -> None:
-        if not fn.is_file():
-            raise FileNotFoundError(f"{fn} is not a file")
+    # @staticmethod
+    # def _check_input_exists(fn: pathlib.Path) -> None:
+    #     if not fn.is_file():
+    #         raise FileNotFoundError(f"{fn} is not a file")
 
     def _infer_aligner_exe(self):
+        """Infers aligner executable name."""
         if self.aligner in ["bowtie2", "minimap2", "winnowmap2", "strobealign"]:
             self.aligner_exe = self.aligner
         elif self.aligner == "bwamem":
@@ -297,9 +304,7 @@ class Leviosam2Workflow:
         self.validate_executable(cmd=f"{self.leviosam2}", lenient=True)
         self.validate_executable(cmd=f"{self.aligner_exe}", lenient=True)
 
-    def run_leviosam2(
-        self,
-    ) -> Union[str, "subprocess.CompletedProcess[bytes]"]:
+    def run_leviosam2(self) -> Union[str, "subprocess.CompletedProcess[bytes]"]:
         """Run leviosam2."""
         lift_commit_min_mapq_arg = (
             f"-S mapq:{self.lift_commit_min_mapq} "
@@ -363,7 +368,7 @@ class Leviosam2Workflow:
         if self.dryrun:
             return cmd
         else:
-            self._check_input_exists(self.input_bam)
+            check_file_exists(self.input_bam)
             if (not self.forcerun) and self._fn_committed.is_file():
                 logger.info(
                     f"Skip run_leviosam2 -- {self._fn_committed} exists"
@@ -390,7 +395,7 @@ class Leviosam2Workflow:
         if self.dryrun:
             return cmd
         else:
-            self._check_input_exists(self._fn_committed)
+            check_file_exists(self._fn_committed)
             if (not self.forcerun) and self._fn_committed_sorted.is_file():
                 logger.info(
                     f"Skip run_sort_committed -- {self._fn_committed_sorted} exists"
@@ -420,8 +425,8 @@ class Leviosam2Workflow:
         if self.dryrun:
             return cmd
         else:
-            self._check_input_exists(self._fn_committed_sorted)
-            self._check_input_exists(self._fn_deferred)
+            check_file_exists(self._fn_committed_sorted)
+            check_file_exists(self._fn_deferred)
 
             if (
                 (not self.forcerun)
@@ -524,8 +529,8 @@ class Leviosam2Workflow:
     #     if self.dryrun:
     #         return cmd
     #     else:
-    #         self._check_input_exists(self.#TODO)
-    #         self._check_input_exists(self.#TODO)
+    #         check_file_exists(self.#TODO)
+    #         check_file_exists(self.#TODO)
 
     #         if (not self.forcerun) and fn_out.is_file():
     #             print(f"[Info] Skip run_intial_align -- {fn_out} exists")
@@ -637,9 +642,9 @@ class Leviosam2Workflow:
         if self.dryrun:
             return cmd
         else:
-            self._check_input_exists(self._fn_deferred_pe_fq1)
+            check_file_exists(self._fn_deferred_pe_fq1)
             if not self.is_single_end:
-                self._check_input_exists(self._fn_deferred_pe_fq2)
+                check_file_exists(self._fn_deferred_pe_fq2)
 
             if (not self.forcerun) and fn_out.is_file():
                 logger.info(f"Skip run_realign_deferred -- {fn_out} exists")
@@ -686,8 +691,8 @@ class Leviosam2Workflow:
         if self.dryrun:
             return cmd
         else:
-            self._check_input_exists(self._fn_deferred_realigned_pe)
-            self._check_input_exists(self._fn_deferred_pe)
+            check_file_exists(self._fn_deferred_realigned_pe)
+            check_file_exists(self._fn_deferred_pe)
 
             if (not self.forcerun) and self._fn_deferred_reconciled.is_file():
                 logger.info(
@@ -720,8 +725,8 @@ class Leviosam2Workflow:
         if self.dryrun:
             return cmd
         else:
-            self._check_input_exists(self._fn_committed_sorted)
-            self._check_input_exists(fn_in_deferred)
+            check_file_exists(self._fn_committed_sorted)
+            check_file_exists(fn_in_deferred)
 
             if (not self.forcerun) and self._fn_final.is_file():
                 logger.info(
@@ -745,7 +750,7 @@ class Leviosam2Workflow:
         if self.dryrun:
             return cmd
         else:
-            self._check_input_exists(self._fn_deferred)
+            check_file_exists(self._fn_deferred)
 
             if (not self.forcerun) and self._fn_deferred_fq_se.is_file():
                 logger.info(
@@ -846,8 +851,8 @@ class Leviosam2Workflow:
 
     def check_inputs(self) -> None:
         """Check if input files exist."""
-        self._check_input_exists(self.target_fasta)
-        self._check_input_exists(self.input_bam)
+        check_file_exists(self.target_fasta)
+        check_file_exists(self.input_bam)
 
     def __init__(self, args: argparse.Namespace) -> None:
         self.aligner = args.aligner

@@ -22,11 +22,9 @@ class WorkflowStatic(unittest.TestCase):
         leviosam2.Leviosam2Workflow.validate_executable(cmd="ls")
 
     def test_check_input_exists(self):
-        leviosam2.Leviosam2Workflow._check_input_exists(
-            pathlib.Path.cwd() / sys.argv[0]
-        )
+        leviosam2.check_file_exists(pathlib.Path.cwd() / sys.argv[0])
         with self.assertRaises(FileNotFoundError):
-            leviosam2.Leviosam2Workflow._check_input_exists(
+            leviosam2.check_file_exists(
                 pathlib.Path.cwd() / f"{sys.argv[0]}-not-a-file"
             )
 
@@ -112,15 +110,15 @@ class Workflow(unittest.TestCase):
 
     def test_run_leviosam2_defer_comprehensive(self):
         new_workflow = copy.deepcopy(self.workflow)
-        new_workflow.lift_commit_min_mapq=30
-        new_workflow.lift_commit_min_score=100
-        new_workflow.lift_commit_max_frac_clipped=0.95
-        new_workflow.lift_commit_max_isize=1000
-        new_workflow.lift_commit_max_hdist=5
-        new_workflow.lift_max_gap=20
-        new_workflow.lift_bed_commit_source="commit/source.bed"
-        new_workflow.lift_bed_defer_target="defer/target.bed"
-        new_workflow.lift_realign_config="configs/ilmn.yaml"
+        new_workflow.lift_commit_min_mapq = 30
+        new_workflow.lift_commit_min_score = 100
+        new_workflow.lift_commit_max_frac_clipped = 0.95
+        new_workflow.lift_commit_max_isize = 1000
+        new_workflow.lift_commit_max_hdist = 5
+        new_workflow.lift_max_gap = 20
+        new_workflow.lift_bed_commit_source = "commit/source.bed"
+        new_workflow.lift_bed_defer_target = "defer/target.bed"
+        new_workflow.lift_realign_config = "configs/ilmn.yaml"
 
         result = new_workflow.run_leviosam2()
         expected = (
