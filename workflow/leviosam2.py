@@ -639,8 +639,10 @@ class Leviosam2Workflow:
         if self.dryrun:
             return cmd
         else:
-            check_file_exists(self._fn_deferred_pe_fq1)
-            if not self.is_single_end:
+            if self.is_single_end:
+                check_file_exists(self._fn_deferred_fq_se)
+            elif not self.is_single_end:
+                check_file_exists(self._fn_deferred_pe_fq1)
                 check_file_exists(self._fn_deferred_pe_fq2)
 
             if (not self.forcerun) and fn_out.is_file():
