@@ -19,14 +19,12 @@ TIME_CMDS = ["", "time -v -ao test.time_log"]
 class WorkflowStatic(unittest.TestCase):
     def test_validate_exe(self):
         # `ls` should not fail
-        leviosam2.Leviosam2Workflow.validate_executable(cmd="ls")
+        leviosam2.validate_executable(cmd="ls")
 
     def test_check_input_exists(self):
-        leviosam2.Leviosam2Workflow._check_input_exists(
-            pathlib.Path.cwd() / sys.argv[0]
-        )
+        leviosam2.check_file_exists(pathlib.Path.cwd() / sys.argv[0])
         with self.assertRaises(FileNotFoundError):
-            leviosam2.Leviosam2Workflow._check_input_exists(
+            leviosam2.check_file_exists(
                 pathlib.Path.cwd() / f"{sys.argv[0]}-not-a-file"
             )
 
@@ -65,6 +63,7 @@ class Workflow(unittest.TestCase):
         args.lift_bed_defer_target = None
         args.lift_realign_config = None
 
+        cls.args = args
         cls.workflow = leviosam2.Leviosam2Workflow(args)
         cls.workflow._set_filenames()
 
@@ -93,8 +92,10 @@ class Workflow(unittest.TestCase):
     def test_run_leviosam2_basic(self):
         result = self.workflow.run_leviosam2()
         expected = (
-            f"leviosam2 lift -C test.clft -O bam -a input/aln.bam "
-            f"-p out/prefix -t 4 -m -f target.fasta "
+            f"{self.args.leviosam2_exe} lift -C {self.args.leviosam2_index} "
+            f"-O bam -a {self.args.input_bam} "
+            f"-p {self.args.out_prefix} -t 4 -m "
+            f"-f {self.args.target_fasta} "
         )
         self.assertEqual(result, expected)
 
@@ -104,28 +105,31 @@ class Workflow(unittest.TestCase):
         new_workflow.lift_commit_min_score = -10
         result = new_workflow.run_leviosam2()
         expected = (
-            f"leviosam2 lift -C test.clft -O bam -a input/aln.bam "
-            f"-p out/prefix -t 4 -m -f target.fasta "
+            f"{self.args.leviosam2_exe} lift -C {self.args.leviosam2_index} "
+            f"-O bam "
+            f"-a {self.args.input_bam} "
+            f"-p {self.args.out_prefix} -t 4 -m -f {self.args.target_fasta} "
             f"-S mapq:10 -S aln_score:-10 "
         )
         self.assertEqual(result, expected)
 
     def test_run_leviosam2_defer_comprehensive(self):
         new_workflow = copy.deepcopy(self.workflow)
-        new_workflow.lift_commit_min_mapq=30
-        new_workflow.lift_commit_min_score=100
-        new_workflow.lift_commit_max_frac_clipped=0.95
-        new_workflow.lift_commit_max_isize=1000
-        new_workflow.lift_commit_max_hdist=5
-        new_workflow.lift_max_gap=20
-        new_workflow.lift_bed_commit_source="commit/source.bed"
-        new_workflow.lift_bed_defer_target="defer/target.bed"
-        new_workflow.lift_realign_config="configs/ilmn.yaml"
+        new_workflow.lift_commit_min_mapq = 30
+        new_workflow.lift_commit_min_score = 100
+        new_workflow.lift_commit_max_frac_clipped = 0.95
+        new_workflow.lift_commit_max_isize = 1000
+        new_workflow.lift_commit_max_hdist = 5
+        new_workflow.lift_max_gap = 20
+        new_workflow.lift_bed_commit_source = "commit/source.bed"
+        new_workflow.lift_bed_defer_target = "defer/target.bed"
+        new_workflow.lift_realign_config = "configs/ilmn.yaml"
 
         result = new_workflow.run_leviosam2()
         expected = (
-            f"leviosam2 lift -C test.clft -O bam -a input/aln.bam "
-            f"-p out/prefix -t 4 -m -f target.fasta "
+            f"{self.args.leviosam2_exe} lift -C {self.args.leviosam2_index} "
+            f"-O bam -a {self.args.input_bam} "
+            f"-p {self.args.out_prefix} -t 4 -m -f {self.args.target_fasta} "
             f"-S mapq:30 -S aln_score:100 -S clipped_frac:0.95 "
             f"-S isize:1000 -S hdist:5 -G 20 "
             f"-r commit/source.bed -D defer/target.bed "
@@ -139,38 +143,74 @@ class Workflow(unittest.TestCase):
         result = self.workflow.run_sort_committed()
         expected = (
             f"gtime -v -ao test.time_log samtools sort -@ 4 "
-            "-o out/prefix-committed-sorted.bam out/prefix-committed.bam"
+            f"-o {self.args.out_prefix}-committed-sorted.bam "
+            f"{self.args.out_prefix}-committed.bam"
         )
         self.assertEqual(result, expected)
 
     def test_run_collate_pe(self):
         result = self.workflow.run_collate_pe()
         expected = (
-            f"leviosam2 collate "
-            "-a out/prefix-committed-sorted.bam "
-            "-b out/prefix-deferred.bam -p out/prefix-paired"
+            f"{self.args.leviosam2_exe} collate "
+            f"-a {self.args.out_prefix}-committed-sorted.bam "
+            f"-b {self.args.out_prefix}-deferred.bam "
+            f"-p {self.args.out_prefix}-paired"
         )
         self.assertEqual(result, expected)
 
     def test_run_realign_deferred_bt2(self):
+        """Tests realign deferred (bt2, paired-end)"""
         result = self.workflow.run_realign_deferred()
         expected = (
             f"bowtie2 rg -p 3 -x target.idx "
-            f"-1 out/prefix-paired-deferred-R1.fq.gz "
-            f"-2 out/prefix-paired-deferred-R2.fq.gz |  "
-            f"samtools view -hbo out/prefix-paired-realigned.bam"
+            f"-1 {self.args.out_prefix}-paired-deferred-R1.fq.gz "
+            f"-2 {self.args.out_prefix}-paired-deferred-R2.fq.gz |  "
+            f"samtools view -hbo {self.args.out_prefix}-paired-realigned.bam"
+        )
+        self.assertEqual(result, expected)
+
+    def test_run_realign_deferred_bt2_single_end(self):
+        """Tests realign deferred (bt2, single-end)"""
+        self.workflow.is_single_end = True
+        result = self.workflow.run_realign_deferred()
+        expected = (
+            f"bowtie2 rg -p 3 -x target.idx "
+            f"-U {self.args.out_prefix}-deferred.fq.gz | "
+            f"samtools sort -@ 1 -o {self.args.out_prefix}-realigned.bam"
         )
         self.assertEqual(result, expected)
 
     def test_run_realign_deferred_bwa(self):
+        """Tests realign deferred (bwa, paired-end)"""
         self.workflow.aligner = "bwamem"
         self.workflow.aligner_exe = "bwa"
         result = self.workflow.run_realign_deferred()
         expected = (
             f"bwa mem -R rg -t 3 target.idx "
-            f"out/prefix-paired-deferred-R1.fq.gz "
-            f"out/prefix-paired-deferred-R2.fq.gz |  "
-            f"samtools view -hbo out/prefix-paired-realigned.bam"
+            f"{self.args.out_prefix}-paired-deferred-R1.fq.gz "
+            f"{self.args.out_prefix}-paired-deferred-R2.fq.gz |  "
+            f"samtools view -hbo {self.args.out_prefix}-paired-realigned.bam"
+        )
+        self.assertEqual(result, expected)
+
+    def test_run_realign_deferred_bwa_single_end(self):
+        """Tests realign deferred (bwa, single-end)"""
+        self.workflow.is_single_end = True
+        self.workflow.aligner = "bwamem"
+        self.workflow.aligner_exe = "bwa"
+        result = self.workflow.run_realign_deferred()
+        expected = (
+            f"bwa mem -R rg -t 3 target.idx "
+            f"{self.args.out_prefix}-deferred.fq.gz | "
+            f"samtools sort -@ 1 -o {self.args.out_prefix}-realigned.bam"
+        )
+        self.assertEqual(result, expected)
+
+    def test_run_bam_to_fastq_se(self):
+        result = self.workflow.run_bam_to_fastq_se()
+        expected = (
+            f"samtools fastq {self.args.out_prefix}-deferred.bam | "
+            f"bgzip > {self.args.out_prefix}-deferred.fq.gz"
         )
         self.assertEqual(result, expected)
 

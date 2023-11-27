@@ -8,7 +8,7 @@ import argparse
 import logging
 import pathlib
 import subprocess
-from typing import Optional, Union
+from typing import Union
 
 logging.basicConfig(
     format="[%(asctime)s %(pathname)s:%(lineno)d %(levelname)s] %(message)s",
@@ -16,6 +16,8 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
+
+SKIP_MSG = "skip"
 
 
 def parse_args() -> argparse.Namespace:
@@ -234,52 +236,54 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-class Leviosam2Workflow:
-    """LevioSAM2 workflow module."""
+def check_file_exists(fn: pathlib.Path) -> None:
+    """Checks if a path is a file. Raises an error if not."""
+    if not fn.is_file():
+        raise FileNotFoundError(f"{fn} is not a file")
 
-    @staticmethod
-    def validate_executable(cmd: str, lenient: bool = False) -> None:
-        """Validate if an executable is valid.
 
-        Args:
-            cmd: command to run
-            lenient: lenient mode.
-                If False, return True a returncode of 0. If True, return True
-                when either stdout/stderr has >1 lines of output.
-                When a command does not exist, we get a "command not found"
-                stderr result, so we require >1 lines of output.
+def validate_executable(cmd: str, lenient: bool = False) -> None:
+    """Validates if an executable is valid.
 
-        Returns:
-            bool: True if a binary is valid
-        """
-        subprocess_out = subprocess.run([cmd], shell=True, capture_output=True)
-        if not lenient and subprocess_out.returncode != 0:
+    Args:
+        cmd: command to run
+        lenient: lenient mode.
+            If False, return True a returncode of 0. If True, return True
+            when either stdout/stderr has >1 lines of output.
+            When a command does not exist, we get a "command not found"
+            stderr result, so we require >1 lines of output.
+
+    Returns:
+        bool: True if a binary is valid
+    """
+    subprocess_out = subprocess.run([cmd], shell=True, capture_output=True)
+    if not lenient and subprocess_out.returncode != 0:
+        raise ValueError(
+            f"`{cmd}` has a non-zero return code `{subprocess_out.returncode}`"
+        )
+    else:
+
+        def _count_lines(bin_text):
+            return bin_text.decode("utf-8").count("\n")
+
+        if not (
+            _count_lines(subprocess_out.stdout) > 1
+            or _count_lines(subprocess_out.stderr) > 1
+        ):
             raise ValueError(
-                f"`{cmd}` has a non-zero return code `{subprocess_out.returncode}`"
+                f"`{cmd}` has an unexpected output:\n"
+                "```\n"
+                f"STDOUT = {subprocess_out.stdout}\n"
+                f"STDERR = {subprocess_out.stderr}\n"
+                "```"
             )
-        else:
 
-            def _count_lines(bin_text):
-                return bin_text.decode("utf-8").count("\n")
 
-            if not (
-                _count_lines(subprocess_out.stdout) > 1
-                or _count_lines(subprocess_out.stderr) > 1
-            ):
-                raise ValueError(
-                    f"`{cmd}` has an unexpected output:\n"
-                    "```\n"
-                    f"STDOUT = {subprocess_out.stdout}\n"
-                    f"STDERR = {subprocess_out.stderr}\n"
-                    "```"
-                )
-
-    @staticmethod
-    def _check_input_exists(fn: pathlib.Path) -> None:
-        if not fn.is_file():
-            raise FileNotFoundError(f"{fn} is not a file")
+class Leviosam2Workflow:
+    """LevioSAM2 workflow object."""
 
     def _infer_aligner_exe(self):
+        """Infers aligner executable name."""
         if self.aligner in ["bowtie2", "minimap2", "winnowmap2", "strobealign"]:
             self.aligner_exe = self.aligner
         elif self.aligner == "bwamem":
@@ -287,19 +291,17 @@ class Leviosam2Workflow:
         elif self.aligner == "bwamem2":
             self.aligner_exe = "bwa-mem2"
         else:
-            raise ValueError(f"Unsupported aligner: {self.aligner}")
+            raise KeyError(f"Unsupported aligner: {self.aligner}")
 
-    def validate_executables(self):
-        self.validate_executable(cmd=f"{self.samtools} --version")
-        self.validate_executable(cmd=f"{self.bgzip} --version")
+    def validate_executables(self) -> None:
+        validate_executable(cmd=f"{self.samtools} --version")
+        validate_executable(cmd=f"{self.bgzip} --version")
         if self.measure_time:
-            self.validate_executable(cmd=f"{self.gtime} --version")
-        self.validate_executable(cmd=f"{self.leviosam2}", lenient=True)
-        self.validate_executable(cmd=f"{self.aligner_exe}", lenient=True)
+            validate_executable(cmd=f"{self.gtime} --version")
+        validate_executable(cmd=f"{self.leviosam2}", lenient=True)
+        validate_executable(cmd=f"{self.aligner_exe}", lenient=True)
 
-    def run_leviosam2(
-        self,
-    ) -> Union[str, "subprocess.CompletedProcess[bytes]"]:
+    def run_leviosam2(self) -> Union[str, "subprocess.CompletedProcess[bytes]"]:
         """Run leviosam2."""
         lift_commit_min_mapq_arg = (
             f"-S mapq:{self.lift_commit_min_mapq} "
@@ -363,12 +365,12 @@ class Leviosam2Workflow:
         if self.dryrun:
             return cmd
         else:
-            self._check_input_exists(self.input_bam)
+            check_file_exists(self.input_bam)
             if (not self.forcerun) and self._fn_committed.is_file():
                 logger.info(
                     f"Skip run_leviosam2 -- {self._fn_committed} exists"
                 )
-                return "skip"
+                return SKIP_MSG
             logger.info(cmd)
             return subprocess.run([cmd], shell=True)
 
@@ -390,12 +392,12 @@ class Leviosam2Workflow:
         if self.dryrun:
             return cmd
         else:
-            self._check_input_exists(self._fn_committed)
+            check_file_exists(self._fn_committed)
             if (not self.forcerun) and self._fn_committed_sorted.is_file():
                 logger.info(
                     f"Skip run_sort_committed -- {self._fn_committed_sorted} exists"
                 )
-                return "skip"
+                return SKIP_MSG
             logger.info(cmd)
             return subprocess.run([cmd], shell=True)
 
@@ -420,8 +422,8 @@ class Leviosam2Workflow:
         if self.dryrun:
             return cmd
         else:
-            self._check_input_exists(self._fn_committed_sorted)
-            self._check_input_exists(self._fn_deferred)
+            check_file_exists(self._fn_committed_sorted)
+            check_file_exists(self._fn_deferred)
 
             if (
                 (not self.forcerun)
@@ -432,7 +434,7 @@ class Leviosam2Workflow:
                     f"Skip run_collate_pe -- both {self._fn_deferred_pe_fq1} and "
                     f"{self._fn_deferred_pe_fq2} exist"
                 )
-                return "skip"
+                return SKIP_MSG
             logger.info(cmd)
             return subprocess.run([cmd], shell=True)
 
@@ -524,12 +526,12 @@ class Leviosam2Workflow:
     #     if self.dryrun:
     #         return cmd
     #     else:
-    #         self._check_input_exists(self.#TODO)
-    #         self._check_input_exists(self.#TODO)
+    #         check_file_exists(self.#TODO)
+    #         check_file_exists(self.#TODO)
 
     #         if (not self.forcerun) and fn_out.is_file():
     #             print(f"[Info] Skip run_intial_align -- {fn_out} exists")
-    #             return "skip"
+    #             return SKIP_MSG
     #         return subprocess.run([cmd], shell=True)
 
     @staticmethod
@@ -637,13 +639,15 @@ class Leviosam2Workflow:
         if self.dryrun:
             return cmd
         else:
-            self._check_input_exists(self._fn_deferred_pe_fq1)
-            if not self.is_single_end:
-                self._check_input_exists(self._fn_deferred_pe_fq2)
+            if self.is_single_end:
+                check_file_exists(self._fn_deferred_fq_se)
+            elif not self.is_single_end:
+                check_file_exists(self._fn_deferred_pe_fq1)
+                check_file_exists(self._fn_deferred_pe_fq2)
 
             if (not self.forcerun) and fn_out.is_file():
                 logger.info(f"Skip run_realign_deferred -- {fn_out} exists")
-                return "skip"
+                return SKIP_MSG
             logger.info(cmd)
             return subprocess.run([cmd], shell=True)
 
@@ -686,15 +690,15 @@ class Leviosam2Workflow:
         if self.dryrun:
             return cmd
         else:
-            self._check_input_exists(self._fn_deferred_realigned_pe)
-            self._check_input_exists(self._fn_deferred_pe)
+            check_file_exists(self._fn_deferred_realigned_pe)
+            check_file_exists(self._fn_deferred_pe)
 
             if (not self.forcerun) and self._fn_deferred_reconciled.is_file():
                 logger.info(
                     "Skip run_refflow_merge_pe -- "
                     f"{self._fn_deferred_reconciled} exists"
                 )
-                return "skip"
+                return SKIP_MSG
             logger.info(cmd)
             return subprocess.run([cmd], shell=True)
 
@@ -720,14 +724,14 @@ class Leviosam2Workflow:
         if self.dryrun:
             return cmd
         else:
-            self._check_input_exists(self._fn_committed_sorted)
-            self._check_input_exists(fn_in_deferred)
+            check_file_exists(self._fn_committed_sorted)
+            check_file_exists(fn_in_deferred)
 
             if (not self.forcerun) and self._fn_final.is_file():
                 logger.info(
                     f"Skip run_merge_and_index -- {self._fn_final} exists"
                 )
-                return "skip"
+                return SKIP_MSG
             logger.info(cmd)
             return subprocess.run([cmd], shell=True)
 
@@ -736,22 +740,20 @@ class Leviosam2Workflow:
     ) -> Union[str, "subprocess.CompletedProcess[bytes]"]:
         """(Single-end) Convert deferred BAM to FASTQ."""
         cmd = (
-            f"{self.time_cmd}"
-            f"{self.samtools} fastq index {self._fn_deferred} | "
-            f"{self.time_cmd}"
-            f"> {self._fn_deferred_fq_se}"
+            f"{self.time_cmd}{self.samtools} fastq {self._fn_deferred} | "
+            f"{self.time_cmd}{self.bgzip} > {self._fn_deferred_fq_se}"
         )
 
         if self.dryrun:
             return cmd
         else:
-            self._check_input_exists(self._fn_deferred)
+            check_file_exists(self._fn_deferred)
 
             if (not self.forcerun) and self._fn_deferred_fq_se.is_file():
                 logger.info(
                     f"Skip run_bam_to_fastq_se -- {self._fn_deferred_fq_se} exists"
                 )
-                return "skip"
+                return SKIP_MSG
             logger.info(cmd)
             return subprocess.run([cmd], shell=True)
 
@@ -846,8 +848,8 @@ class Leviosam2Workflow:
 
     def check_inputs(self) -> None:
         """Check if input files exist."""
-        self._check_input_exists(self.target_fasta)
-        self._check_input_exists(self.input_bam)
+        check_file_exists(self.target_fasta)
+        check_file_exists(self.input_bam)
 
     def __init__(self, args: argparse.Namespace) -> None:
         self.aligner = args.aligner
