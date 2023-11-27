@@ -240,50 +240,45 @@ def check_file_exists(fn: pathlib.Path) -> None:
         raise FileNotFoundError(f"{fn} is not a file")
 
 
-class Leviosam2Workflow:
-    """LevioSAM2 workflow module."""
+def validate_executable(cmd: str, lenient: bool = False) -> None:
+    """Validates if an executable is valid.
 
-    @staticmethod
-    def validate_executable(cmd: str, lenient: bool = False) -> None:
-        """Validate if an executable is valid.
+    Args:
+        cmd: command to run
+        lenient: lenient mode.
+            If False, return True a returncode of 0. If True, return True
+            when either stdout/stderr has >1 lines of output.
+            When a command does not exist, we get a "command not found"
+            stderr result, so we require >1 lines of output.
 
-        Args:
-            cmd: command to run
-            lenient: lenient mode.
-                If False, return True a returncode of 0. If True, return True
-                when either stdout/stderr has >1 lines of output.
-                When a command does not exist, we get a "command not found"
-                stderr result, so we require >1 lines of output.
+    Returns:
+        bool: True if a binary is valid
+    """
+    subprocess_out = subprocess.run([cmd], shell=True, capture_output=True)
+    if not lenient and subprocess_out.returncode != 0:
+        raise ValueError(
+            f"`{cmd}` has a non-zero return code `{subprocess_out.returncode}`"
+        )
+    else:
 
-        Returns:
-            bool: True if a binary is valid
-        """
-        subprocess_out = subprocess.run([cmd], shell=True, capture_output=True)
-        if not lenient and subprocess_out.returncode != 0:
+        def _count_lines(bin_text):
+            return bin_text.decode("utf-8").count("\n")
+
+        if not (
+            _count_lines(subprocess_out.stdout) > 1
+            or _count_lines(subprocess_out.stderr) > 1
+        ):
             raise ValueError(
-                f"`{cmd}` has a non-zero return code `{subprocess_out.returncode}`"
+                f"`{cmd}` has an unexpected output:\n"
+                "```\n"
+                f"STDOUT = {subprocess_out.stdout}\n"
+                f"STDERR = {subprocess_out.stderr}\n"
+                "```"
             )
-        else:
 
-            def _count_lines(bin_text):
-                return bin_text.decode("utf-8").count("\n")
 
-            if not (
-                _count_lines(subprocess_out.stdout) > 1
-                or _count_lines(subprocess_out.stderr) > 1
-            ):
-                raise ValueError(
-                    f"`{cmd}` has an unexpected output:\n"
-                    "```\n"
-                    f"STDOUT = {subprocess_out.stdout}\n"
-                    f"STDERR = {subprocess_out.stderr}\n"
-                    "```"
-                )
-
-    # @staticmethod
-    # def _check_input_exists(fn: pathlib.Path) -> None:
-    #     if not fn.is_file():
-    #         raise FileNotFoundError(f"{fn} is not a file")
+class Leviosam2Workflow:
+    """LevioSAM2 workflow object."""
 
     def _infer_aligner_exe(self):
         """Infers aligner executable name."""
@@ -294,15 +289,15 @@ class Leviosam2Workflow:
         elif self.aligner == "bwamem2":
             self.aligner_exe = "bwa-mem2"
         else:
-            raise ValueError(f"Unsupported aligner: {self.aligner}")
+            raise KeyError(f"Unsupported aligner: {self.aligner}")
 
-    def validate_executables(self):
-        self.validate_executable(cmd=f"{self.samtools} --version")
-        self.validate_executable(cmd=f"{self.bgzip} --version")
+    def validate_executables(self) -> None:
+        validate_executable(cmd=f"{self.samtools} --version")
+        validate_executable(cmd=f"{self.bgzip} --version")
         if self.measure_time:
-            self.validate_executable(cmd=f"{self.gtime} --version")
-        self.validate_executable(cmd=f"{self.leviosam2}", lenient=True)
-        self.validate_executable(cmd=f"{self.aligner_exe}", lenient=True)
+            validate_executable(cmd=f"{self.gtime} --version")
+        validate_executable(cmd=f"{self.leviosam2}", lenient=True)
+        validate_executable(cmd=f"{self.aligner_exe}", lenient=True)
 
     def run_leviosam2(self) -> Union[str, "subprocess.CompletedProcess[bytes]"]:
         """Run leviosam2."""
