@@ -92,8 +92,9 @@ class Workflow(unittest.TestCase):
     def test_run_leviosam2_basic(self):
         result = self.workflow.run_leviosam2()
         expected = (
-            f"leviosam2 lift -C {self.args.leviosam2_index} -O bam "
-            f"-a {self.args.input_bam} -p {self.args.out_prefix} -t 4 -m "
+            f"{self.args.leviosam2_exe} lift -C {self.args.leviosam2_index} "
+            f"-O bam -a {self.args.input_bam} "
+            f"-p {self.args.out_prefix} -t 4 -m "
             f"-f {self.args.target_fasta} "
         )
         self.assertEqual(result, expected)
@@ -104,7 +105,8 @@ class Workflow(unittest.TestCase):
         new_workflow.lift_commit_min_score = -10
         result = new_workflow.run_leviosam2()
         expected = (
-            f"leviosam2 lift -C {self.args.leviosam2_index} -O bam "
+            f"{self.args.leviosam2_exe} lift -C {self.args.leviosam2_index} "
+            f"-O bam "
             f"-a {self.args.input_bam} "
             f"-p {self.args.out_prefix} -t 4 -m -f {self.args.target_fasta} "
             f"-S mapq:10 -S aln_score:-10 "
@@ -125,7 +127,8 @@ class Workflow(unittest.TestCase):
 
         result = new_workflow.run_leviosam2()
         expected = (
-            f"leviosam2 lift -C test.clft -O bam -a {self.args.input_bam} "
+            f"{self.args.leviosam2_exe} lift -C {self.args.leviosam2_index} "
+            f"-O bam -a {self.args.input_bam} "
             f"-p {self.args.out_prefix} -t 4 -m -f {self.args.target_fasta} "
             f"-S mapq:30 -S aln_score:100 -S clipped_frac:0.95 "
             f"-S isize:1000 -S hdist:5 -G 20 "
@@ -148,7 +151,7 @@ class Workflow(unittest.TestCase):
     def test_run_collate_pe(self):
         result = self.workflow.run_collate_pe()
         expected = (
-            f"leviosam2 collate "
+            f"{self.args.leviosam2_exe} collate "
             f"-a {self.args.out_prefix}-committed-sorted.bam "
             f"-b {self.args.out_prefix}-deferred.bam "
             f"-p {self.args.out_prefix}-paired"
@@ -156,6 +159,7 @@ class Workflow(unittest.TestCase):
         self.assertEqual(result, expected)
 
     def test_run_realign_deferred_bt2(self):
+        """Tests realign deferred (bt2, paired-end)"""
         result = self.workflow.run_realign_deferred()
         expected = (
             f"bowtie2 rg -p 3 -x target.idx "
@@ -165,7 +169,19 @@ class Workflow(unittest.TestCase):
         )
         self.assertEqual(result, expected)
 
+    def test_run_realign_deferred_bt2_single_end(self):
+        """Tests realign deferred (bt2, single-end)"""
+        self.workflow.is_single_end = True
+        result = self.workflow.run_realign_deferred()
+        expected = (
+            f"bowtie2 rg -p 3 -x target.idx "
+            f"-U {self.args.out_prefix}-deferred.fq.gz | "
+            f"samtools sort -@ 1 -o {self.args.out_prefix}-realigned.bam"
+        )
+        self.assertEqual(result, expected)
+
     def test_run_realign_deferred_bwa(self):
+        """Tests realign deferred (bwa, paired-end)"""
         self.workflow.aligner = "bwamem"
         self.workflow.aligner_exe = "bwa"
         result = self.workflow.run_realign_deferred()
@@ -174,6 +190,19 @@ class Workflow(unittest.TestCase):
             f"{self.args.out_prefix}-paired-deferred-R1.fq.gz "
             f"{self.args.out_prefix}-paired-deferred-R2.fq.gz |  "
             f"samtools view -hbo {self.args.out_prefix}-paired-realigned.bam"
+        )
+        self.assertEqual(result, expected)
+
+    def test_run_realign_deferred_bwa_single_end(self):
+        """Tests realign deferred (bwa, single-end)"""
+        self.workflow.is_single_end = True
+        self.workflow.aligner = "bwamem"
+        self.workflow.aligner_exe = "bwa"
+        result = self.workflow.run_realign_deferred()
+        expected = (
+            f"bwa mem -R rg -t 3 target.idx "
+            f"{self.args.out_prefix}-deferred.fq.gz | "
+            f"samtools sort -@ 1 -o {self.args.out_prefix}-realigned.bam"
         )
         self.assertEqual(result, expected)
 
