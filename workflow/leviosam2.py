@@ -17,6 +17,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+SKIP_MSG = "skip"
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -368,7 +370,7 @@ class Leviosam2Workflow:
                 logger.info(
                     f"Skip run_leviosam2 -- {self._fn_committed} exists"
                 )
-                return "skip"
+                return SKIP_MSG
             logger.info(cmd)
             return subprocess.run([cmd], shell=True)
 
@@ -395,7 +397,7 @@ class Leviosam2Workflow:
                 logger.info(
                     f"Skip run_sort_committed -- {self._fn_committed_sorted} exists"
                 )
-                return "skip"
+                return SKIP_MSG
             logger.info(cmd)
             return subprocess.run([cmd], shell=True)
 
@@ -432,7 +434,7 @@ class Leviosam2Workflow:
                     f"Skip run_collate_pe -- both {self._fn_deferred_pe_fq1} and "
                     f"{self._fn_deferred_pe_fq2} exist"
                 )
-                return "skip"
+                return SKIP_MSG
             logger.info(cmd)
             return subprocess.run([cmd], shell=True)
 
@@ -529,7 +531,7 @@ class Leviosam2Workflow:
 
     #         if (not self.forcerun) and fn_out.is_file():
     #             print(f"[Info] Skip run_intial_align -- {fn_out} exists")
-    #             return "skip"
+    #             return SKIP_MSG
     #         return subprocess.run([cmd], shell=True)
 
     @staticmethod
@@ -643,7 +645,7 @@ class Leviosam2Workflow:
 
             if (not self.forcerun) and fn_out.is_file():
                 logger.info(f"Skip run_realign_deferred -- {fn_out} exists")
-                return "skip"
+                return SKIP_MSG
             logger.info(cmd)
             return subprocess.run([cmd], shell=True)
 
@@ -694,7 +696,7 @@ class Leviosam2Workflow:
                     "Skip run_refflow_merge_pe -- "
                     f"{self._fn_deferred_reconciled} exists"
                 )
-                return "skip"
+                return SKIP_MSG
             logger.info(cmd)
             return subprocess.run([cmd], shell=True)
 
@@ -727,7 +729,7 @@ class Leviosam2Workflow:
                 logger.info(
                     f"Skip run_merge_and_index -- {self._fn_final} exists"
                 )
-                return "skip"
+                return SKIP_MSG
             logger.info(cmd)
             return subprocess.run([cmd], shell=True)
 
@@ -736,10 +738,8 @@ class Leviosam2Workflow:
     ) -> Union[str, "subprocess.CompletedProcess[bytes]"]:
         """(Single-end) Convert deferred BAM to FASTQ."""
         cmd = (
-            f"{self.time_cmd}"
-            f"{self.samtools} fastq index {self._fn_deferred} | "
-            f"{self.time_cmd}"
-            f"> {self._fn_deferred_fq_se}"
+            f"{self.time_cmd}{self.samtools} fastq {self._fn_deferred} | "
+            f"{self.time_cmd}{self.bgzip} > {self._fn_deferred_fq_se}"
         )
 
         if self.dryrun:
@@ -751,7 +751,7 @@ class Leviosam2Workflow:
                 logger.info(
                     f"Skip run_bam_to_fastq_se -- {self._fn_deferred_fq_se} exists"
                 )
-                return "skip"
+                return SKIP_MSG
             logger.info(cmd)
             return subprocess.run([cmd], shell=True)
 
