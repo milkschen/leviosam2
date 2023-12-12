@@ -101,10 +101,7 @@ See [this README](https://github.com/milkschen/leviosam2/blob/main/workflow/READ
 
 ## Publication
 
--  Nae-Chyun Chen, Luis Paulin, Fritz Sedlazeck, Sergey Koren, Adam Phillippy, Ben Langmead, Improved sequence mapping using a complete reference genome and lift-over, _bioRxiv_, 2022; https://www.biorxiv.org/content/10.1101/2022.04.27.489683
-- Taher Mun, Nae-Chyun Chen, Ben Langmead, LevioSAM: Fast lift-over of variant-aware reference alignments, _Bioinformatics_, 2021;, btab396, https://doi.org/10.1093/bioinformatics/btab396
-
+-  Nae-Chyun Chen, Luis Paulin, Fritz Sedlazeck, Sergey Koren, Adam Phillippy, Ben Langmead. Improved sequence mapping using a complete reference genome and lift-over. Nat Methods (2023). https://doi.org/10.1038/s41592-023-02069-6
+- Taher Mun, Nae-Chyun Chen, Ben Langmead. LevioSAM: Fast lift-over of variant-aware reference alignments, _Bioinformatics_, 2021;, btab396, https://doi.org/10.1093/bioinformatics/btab396
 
 _Logo credit: Ting-Wei Young_
-
-_Last update: 7/30/2023_
