@@ -108,8 +108,10 @@ class ChainMap {
 
     sam_hdr_t *bam_hdr_from_chainmap(samFile *sam_fp, sam_hdr_t *hdr_orig);
 
-    bool check_multi_intvl_legality(const std::string &s, bam1_t *aln,
-                                    const int &start_sidx, const int &end_sidx,
+    // Checks the gap size between the intervals overlapped with an alignment.
+    bool check_multi_intvl_legality(const std::string &source_contig,
+                                    const std::string &read_name,
+                                    const int &start_idx, const int &end_idx,
                                     const int &allowed_intvl_gaps);
 
     size_t serialize(std::ofstream &out);

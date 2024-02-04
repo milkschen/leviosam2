@@ -170,7 +170,10 @@ void ChainMap::debug_print_interval_map() {
     }
 }
 
-/* Print the intervals in a ChainMap */
+/** Prints the intervals in a ChainMap.
+ *
+ * @param contig Contig name.
+ */
 void ChainMap::debug_print_intervals(std::string contig) {
     for (auto &intvl : interval_map[contig]) {
         intvl.debug_print_interval();
@@ -705,15 +708,16 @@ std::vector<uint32_t> ChainMap::lift_cigar_core(
     return new_cigar;
 }
 
-/* Query start_map and end_map for a contig-pos pair and update the indexes
- * Return a bool value:
- *   false if any of the queried contig-pos pair is unavailable
- *   true otherwise
+/**
+ * Queries start_map and end_map for a contig-pos pair and update the indexes.
  *
  * sidx: the interval index in start_bv_map[contig]
  * eidx: the interval index in end_bv_map[contig]
  *
  * Note that "interval index = rank - 1"
+ *
+ * @return False if any of the queried contig-pos pair is unavailable. Otherwise
+ * true.
  */
 bool ChainMap::update_interval_indexes(const std::string contig,
                                        const int32_t pos, int32_t &sidx,
@@ -934,8 +938,9 @@ bool ChainMap::lift_segment(bam1_t *aln, sam_hdr_t *hdr_source,
     // not pass the check.
     if (start_sidx != end_sidx) {
         // Returns true if legal
-        if (!check_multi_intvl_legality(source_contig, aln, start_sidx,
-                                        end_sidx, allowed_intvl_gaps)) {
+        if (!check_multi_intvl_legality(source_contig, bam_get_qname(aln),
+                                        start_sidx, end_sidx,
+                                        allowed_intvl_gaps)) {
             return false;
         }
     }
@@ -1010,7 +1015,8 @@ bool ChainMap::lift_segment(bam1_t *aln, sam_hdr_t *hdr_source,
 // Pass `dest_contig` by reference because we need it when updating the MD
 // string.
 void ChainMap::lift_aln(bam1_t *aln, sam_hdr_t *hdr_source, sam_hdr_t *hdr_dest,
-                        std::string &dest_contig, const bool keep_mapq = false) {
+                        std::string &dest_contig,
+                        const bool keep_mapq = false) {
     bam1_core_t *c = &(aln->core);
     uint16_t flag = c->flag;
     hts_pos_t pos = c->pos;
@@ -1030,7 +1036,8 @@ void ChainMap::lift_aln(bam1_t *aln, sam_hdr_t *hdr_source, sam_hdr_t *hdr_dest,
         std::string null_mdest_contig;
         bool r2_liftable =
             lift_segment(aln, hdr_source, hdr_dest, false, null_mdest_contig);
-        if (!r2_liftable) LevioSamUtils::update_flag_unmap(aln, false, keep_mapq);
+        if (!r2_liftable)
+            LevioSamUtils::update_flag_unmap(aln, false, keep_mapq);
 
         // We currently don't use the "unliftable" category -
         // an unliftable read is considered as unmapped.
@@ -1506,55 +1513,78 @@ std::queue<std::tuple<int32_t, int32_t>> ChainMap::get_bp(
     return break_points;
 }
 
-/* If an alignment is overlapped with multiple intervals, check the gap size
+/**
+ * Checks the gap size between the intervals overlapped with an alignment.
+ *
+ * If an alignment is overlapped with multiple intervals, check the gap size
  * between the intervals. If either (1) the offset difference between any
  * adjacent interval pair (2) the total offset difference between the first and
  * the last interval is greater than `allowed_intvl_gaps`, mark the alignment as
  * unliftable (return false).
+ *
+ * @param source_contig Source contig name.
+ * @param read_name Read query name.
+ * @param start_idx Interval index of the read starting position.
+ * @param end_idx Interval index of the read ending position.
+ * @param allowed_intvl_gaps Allowed number of gaps between the given range of
+ * intervals.
+ * @return True if liftable; false if not.
  */
-bool ChainMap::check_multi_intvl_legality(const std::string &s, bam1_t *aln,
-                                          const int &start_sidx,
-                                          const int &end_sidx,
+bool ChainMap::check_multi_intvl_legality(const std::string &source_contig,
+                                          const std::string &read_name,
+                                          const int &start_idx,
+                                          const int &end_idx,
                                           const int &allowed_intvl_gaps) {
-    Interval start_sintvl = interval_map[s][start_sidx];
-    Interval next_sintvl = interval_map[s][end_sidx];
+    Interval start_sintvl = interval_map[source_contig][start_idx];
+    Interval next_sintvl = interval_map[source_contig][end_idx];
+    if (verbose >= VERBOSE_DEBUG) {
+        std::cerr << "[D::chain::check_multi_intvl_legality] start_sintvl: ";
+        start_sintvl.debug_print_interval();
+        std::cerr << "[D::chain::check_multi_intvl_legality] next_sintvl: ";
+        next_sintvl.debug_print_interval();
+    }
     // Check the gap between the first and the last intervals
-    if (std::abs(next_sintvl.offset - start_sintvl.offset) >
-        allowed_intvl_gaps) {
+    int chain_gap = std::abs(next_sintvl.offset - start_sintvl.offset);
+    if (chain_gap > allowed_intvl_gaps) {
         if (verbose >= VERBOSE_INFO) {
-            std::cerr << "[I::chain::check_multi_intvl_legality] Set "
-                      << bam_get_qname(aln)
-                      << " to unmapped -- 1st-and-last chain gap > "
-                      << allowed_intvl_gaps << "\n";
+            std::cerr
+                << "[I::chain::check_multi_intvl_legality] Set `" << read_name
+                << "` to unmapped. The gap between the 1st and the last "
+                   "chain segment is `"
+                << chain_gap
+                << "` and it is greater than the allowed_intvl_gaps value `"
+                << allowed_intvl_gaps << "`\n";
         }
         return false;
     }
     // Check all interval pairs
-    for (auto j = start_sidx; j < end_sidx; j++) {
-        if (interval_map[s][j].strand != interval_map[s][j + 1].strand) {
+    for (auto j = start_idx; j < end_idx; j++) {
+        if (interval_map[source_contig][j].strand !=
+            interval_map[source_contig][j + 1].strand) {
             if (verbose >= VERBOSE_INFO) {
                 std::cerr << "[I::chain::check_multi_intvl_legality] Set "
-                          << bam_get_qname(aln)
+                          << read_name
                           << " to unmapped -- intervals not having concordant "
                              "strandness\n";
             }
             return false;
         }
-        if (interval_map[s][j].target != interval_map[s][j + 1].target) {
+        if (interval_map[source_contig][j].target !=
+            interval_map[source_contig][j + 1].target) {
             if (verbose >= VERBOSE_INFO) {
-                std::cerr << "[I::chain::check_multi_intvl_legality] Set "
-                          << bam_get_qname(aln)
-                          << " to unmapped -- intervals not having concordant "
+                std::cerr << "[I::chain::check_multi_intvl_legality] Set `"
+                          << read_name
+                          << "` to unmapped -- intervals not having concordant "
                              "targets\n";
             }
             return false;
         }
-        if (std::abs(interval_map[s][j + 1].offset -
-                     interval_map[s][j].offset) > allowed_intvl_gaps) {
+        if (std::abs(interval_map[source_contig][j + 1].offset -
+                     interval_map[source_contig][j].offset) >
+            allowed_intvl_gaps) {
             if (verbose >= VERBOSE_INFO) {
-                std::cerr << "[I::chain::check_multi_intvl_legality] Set "
-                          << bam_get_qname(aln)
-                          << " to unmapped -- >=1 chain gaps > "
+                std::cerr << "[I::chain::check_multi_intvl_legality] Set `"
+                          << read_name << "` to unmapped -- >=1 chain gaps > "
                           << allowed_intvl_gaps << "\n";
             }
             return false;
