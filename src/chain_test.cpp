@@ -542,6 +542,22 @@ TEST(ChainTest, LiftExtendedCigarReverse3) {
     EXPECT_EQ(test_cigar[2], bam_cigar_gen(3, BAM_CMATCH));
 }
 
+TEST(ChainTest, test_check_multi_intvl_legality) {
+    std::vector<std::pair<std::string, int32_t>> lm;
+    lm.push_back(std::make_pair("chr1", 248387328));
+    chain::ChainMap cmap("small.chain", 0, 0, lm);
+    int sidx = 0;
+    int eidx = 1;
+    EXPECT_EQ(cmap.check_multi_intvl_legality("chr1", "read1", sidx, eidx, 0),
+              false);
+    EXPECT_EQ(cmap.check_multi_intvl_legality("chr1", "read1", sidx, eidx, 1),
+              false);
+    EXPECT_EQ(cmap.check_multi_intvl_legality("chr1", "read1", sidx, eidx, 2),
+              true);
+    EXPECT_EQ(cmap.check_multi_intvl_legality("chr1", "read1", sidx, eidx, 3),
+              true);
+}
+
 int main(int argc, char **argv) {
     testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
