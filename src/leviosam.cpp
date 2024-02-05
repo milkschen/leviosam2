@@ -220,7 +220,7 @@ void read_and_lift(T *lift_map, std::mutex *mutex_fread,
                 ref.substr(aln_vec[i]->core.pos,
                            bam_cigar2rlen(aln_vec[i]->core.n_cigar,
                                           bam_get_cigar(aln_vec[i])));
-            std::string q_seq = LevioSamUtils::get_read_as_is(aln_vec[i]);
+            std::string q_seq = LevioSamUtils::get_read(aln_vec[i]);
             std::vector<uint32_t> new_cigar;
             // We perform global alignment for local sequences and
             // thus an alignment with a high number of clipped bases
