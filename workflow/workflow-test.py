@@ -30,14 +30,16 @@ class WorkflowStatic(unittest.TestCase):
 
 
 class Workflow(unittest.TestCase):
-    @classmethod
-    def setUp(cls) -> None:
+    """Tests of the leviosam2 workflow script."""
+
+    def setUp(self) -> None:
         """Set up for every test."""
         args = argparse.Namespace
         args.aligner = "bowtie2"
         args.aligner_exe = "auto"
         args.sequence_type = "ilmn_pe"
         args.out_prefix = "out/prefix"
+        args.out_format = "bam"
         args.leviosam2_index = "test.clft"
         args.num_threads = 4
         args.source_label = "source"
@@ -62,10 +64,11 @@ class Workflow(unittest.TestCase):
         args.lift_bed_commit_source = None
         args.lift_bed_defer_target = None
         args.lift_realign_config = None
+        args.keep_tmp_files = True
 
-        cls.args = args
-        cls.workflow = leviosam2.Leviosam2Workflow(args)
-        cls.workflow._set_filenames()
+        self.args = args
+        self.workflow = leviosam2.Leviosam2Workflow(args)
+        self.workflow._set_filenames()
 
     # TODO
     # def test_set_filenames_single_end(self):
@@ -91,6 +94,21 @@ class Workflow(unittest.TestCase):
 
     def test_run_leviosam2_basic(self):
         result = self.workflow.run_leviosam2()
+        expected = (
+            f"{self.args.leviosam2_exe} lift -C {self.args.leviosam2_index} "
+            f"-O bam -a {self.args.input_bam} "
+            f"-p {self.args.out_prefix} -t 4 -m "
+            f"-f {self.args.target_fasta} "
+        )
+        self.assertEqual(result, expected)
+
+    def test_run_leviosam2_basic_cram(self):
+        self.workflow.out_format = "cram"
+        result = self.workflow.run_leviosam2()
+        # TODO
+        # When using `-O cram` in the workflow, we still write to the BAM format
+        # in leviosam2 at this moment. We need to look into the way to make a
+        # right cram file in leviosam2.
         expected = (
             f"{self.args.leviosam2_exe} lift -C {self.args.leviosam2_index} "
             f"-O bam -a {self.args.input_bam} "

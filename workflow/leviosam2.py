@@ -185,6 +185,15 @@ def parse_args() -> argparse.Namespace:
         "-o", "--out_prefix", type=str, required=True, help="Output prefix"
     )
     parser.add_argument(
+        "-O",
+        "--out_format",
+        type=str,
+        required=True,
+        default="bam",
+        choices=["bam", "sam", "cram"],
+        help="Output file format.",
+    )
+    parser.add_argument(
         "-C",
         "--leviosam2_index",
         type=str,
@@ -757,6 +766,27 @@ class Leviosam2Workflow:
             logger.info(cmd)
             return subprocess.run([cmd], shell=True)
 
+    def run_bam_to_cram(
+        self,
+    ) -> Union[str, "subprocess.CompletedProcess[bytes]"]:
+        """Converts the final BAM file to the CRAM format.
+
+        We have not supported writing to the CRAM format in the leviosam2
+        software. This function converts the final BAM file to the CRAM format.
+        """
+        fn_final_cram = self._fn_final.with_suffix(".cram")
+        cmd = (
+            f"{self.time_cmd}{self.samtools} view -T {self.target_fasta} "
+            f"-O cram -o {fn_final_cram} {self._fn_final} && "
+        )
+        cmd += f"{self.time_cmd}" f"{self.samtools} index {fn_final_cram}"
+
+        if self.dryrun:
+            return cmd
+        else:
+            logger.info(cmd)
+            return subprocess.run([cmd], shell=True)
+
     def run_clean(self) -> Union[str, "subprocess.CompletedProcess[bytes]"]:
         logger.info(f"Unlink {self._fn_committed}")
         logger.info(f"Unlink {self._fn_committed_sorted}")
@@ -787,16 +817,25 @@ class Leviosam2Workflow:
                 self._fn_deferred_realigned_pe.unlink()
                 self._fn_deferred_realigned_pe_sortn.unlink()
                 self._fn_deferred_reconciled.unlink()
+            if self.out_format == "cram":
+                # Removes the final BAM file if the output format is set to
+                # CRAM.
+                self._fn_final.unlink()
+                (self._fn_final.with_suffix(".bam.bai")).unlink()
 
     def _set_filenames(self):
         """Update filenames potentially used when running the workflow."""
+        # Accornyms to shorten the lines for readability
         o_dir = self.out_prefix.parent
         o_prefix = self.out_prefix.name
+        o_fmt = "bam"
 
-        self._fn_committed = o_dir / f"{o_prefix}-committed.bam"
-        self._fn_committed_sorted = o_dir / f"{o_prefix}-committed-sorted.bam"
-        self._fn_deferred = o_dir / f"{o_prefix}-deferred.bam"
-        self._fn_final = o_dir / f"{o_prefix}-final.bam"
+        self._fn_committed = o_dir / f"{o_prefix}-committed.{o_fmt}"
+        self._fn_committed_sorted = (
+            o_dir / f"{o_prefix}-committed-sorted.{o_fmt}"
+        )
+        self._fn_deferred = o_dir / f"{o_prefix}-deferred.{o_fmt}"
+        self._fn_final = o_dir / f"{o_prefix}-final.{o_fmt}"
 
         # paired-end
         self._prefix_deferred_pe = o_dir / f"{o_prefix}-paired"
@@ -806,24 +845,24 @@ class Leviosam2Workflow:
         self._fn_deferred_pe_fq2 = (
             o_dir / f"{o_prefix}-paired-deferred-R2.fq.gz"
         )
-        self._fn_committed_pe = o_dir / f"{o_prefix}-paired-committed.bam"
-        self._fn_deferred_pe = o_dir / f"{o_prefix}-paired-deferred.bam"
+        self._fn_committed_pe = o_dir / f"{o_prefix}-paired-committed.{o_fmt}"
+        self._fn_deferred_pe = o_dir / f"{o_prefix}-paired-deferred.{o_fmt}"
         self._fn_deferred_pe_sortn = (
-            o_dir / f"{o_prefix}-paired-deferred-sorted_n.bam"
+            o_dir / f"{o_prefix}-paired-deferred-sorted_n.{o_fmt}"
         )
         self._fn_deferred_realigned_pe = (
-            o_dir / f"{o_prefix}-paired-realigned.bam"
+            o_dir / f"{o_prefix}-paired-realigned.{o_fmt}"
         )
         self._fn_deferred_realigned_pe_sortn = (
-            o_dir / f"{o_prefix}-paired-realigned-sorted_n.bam"
+            o_dir / f"{o_prefix}-paired-realigned-sorted_n.{o_fmt}"
         )
         self._fn_deferred_reconciled = (
-            o_dir / f"{o_prefix}-paired-deferred-reconciled-sorted.bam"
+            o_dir / f"{o_prefix}-paired-deferred-reconciled-sorted.{o_fmt}"
         )
 
         # single-end
         self._fn_deferred_fq_se = o_dir / f"{o_prefix}-deferred.fq.gz"
-        self._fn_deferred_realigned_se = o_dir / f"{o_prefix}-realigned.bam"
+        self._fn_deferred_realigned_se = o_dir / f"{o_prefix}-realigned.{o_fmt}"
 
     def run_workflow(self):
         # TODO
@@ -844,7 +883,12 @@ class Leviosam2Workflow:
             self.run_refflow_merge_pe()
 
         self.run_merge_and_index()
-        self.run_clean()
+
+        if self.out_format == "cram":
+            self.run_bam_to_cram()
+
+        if not self.keep_tmp_files:
+            self.run_clean()
 
     def check_inputs(self) -> None:
         """Check if input files exist."""
@@ -866,6 +910,7 @@ class Leviosam2Workflow:
 
         self.dryrun = args.dryrun
         self.forcerun = args.forcerun
+        self.keep_tmp_files = args.keep_tmp_files
 
         # executables
         self.samtools = args.samtools_exe
@@ -886,6 +931,7 @@ class Leviosam2Workflow:
         self.input_bam = pathlib.Path(args.input_bam)
         self.out_prefix = pathlib.Path(args.out_prefix)
         self.leviosam2_index = pathlib.Path(args.leviosam2_index)
+        self.out_format = args.out_format
         if args.target_aligner_index:
             self.target_aligner_index = pathlib.Path(args.target_aligner_index)
         else:
