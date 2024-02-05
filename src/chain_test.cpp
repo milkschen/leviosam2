@@ -18,11 +18,6 @@
 #include "gtest/gtest.h"
 #include "leviosam_utils.hpp"
 
-size_t kstr_get_m(size_t var) {
-    size_t lvar = (size_t)exp2(ceil(log2(var)));
-    return lvar;
-}
-
 /* Chain tests */
 TEST(ChainTest, SimpleRankAndLift) {
     std::vector<std::pair<std::string, int32_t>> lm;

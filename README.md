@@ -1,10 +1,10 @@
+# LevioSAM2: Fast and accurate coordinate conversion between assemblies
+
 [![Docker](https://img.shields.io/docker/v/naechyun/leviosam2?label=Docker)](https://hub.docker.com/r/naechyun/leviosam2)
 [![Anaconda-Server Badge](https://anaconda.org/bioconda/leviosam2/badges/version.svg)](https://anaconda.org/bioconda/leviosam2)
 [![Anaconda-Server Badge](https://anaconda.org/bioconda/leviosam2/badges/downloads.svg)](https://anaconda.org/bioconda/leviosam2)
 ![Cmake build](https://github.com/milkschen/leviosam2/actions/workflows/cmake_htslib.yml/badge.svg)
 ![Integration](https://github.com/milkschen/leviosam2/actions/workflows/integration-test.yml/badge.svg)
-
-# LevioSAM2: Fast and accurate coordinate conversion between assemblies
 
 LevioSAM2 lifts over alignments accurately and efficiently using a chain file.
 
@@ -17,9 +17,9 @@ LevioSAM2 lifts over alignments accurately and efficiently using a chain file.
 
 - Converting aligned short and long reads records (in SAM/BAM/CRAM format) from one reference to another
 - Comprehensive alignment feature updating during lift-over:
-    - Reference name (`RNAME`), position (`POS`), alignmant flag (`FLAG`), and CIGAR alignment string (`CIGAR`)
-    - Mate read information (`RNEXT`, `PNEXT`, `TLEN`)
-    - (optional) Alignment tags (`MD:Z`, `NM:i`)
+  - Reference name (`RNAME`), position (`POS`), alignmant flag (`FLAG`), and CIGAR alignment string (`CIGAR`)
+  - Mate read information (`RNEXT`, `PNEXT`, `TLEN`)
+  - (optional) Alignment tags (`MD:Z`, `NM:i`)
 - Multithreading support
 - Toolkit for "selective" pipelines which consider major changes between the source and target references
 - (beta) Converting intervals (in BED format) from one reference to another
@@ -30,7 +30,7 @@ LevioSAM2 can be installed using:
 
 - [Conda](https://anaconda.org/bioconda/leviosam2)
 
-```
+```shell
 # The following commands install leviosam2 in a new conda environment called `leviosam2`
 conda create -n leviosam2
 conda activate leviosam2
@@ -38,12 +38,14 @@ conda install -c bioconda -c conda-forge leviosam2
 ```
 
 - [Docker](https://hub.docker.com/r/naechyun/leviosam2)
-```
+
+```shell
 docker pull naechyun/leviosam2:latest
 ```
 
 - [Singularity](https://hub.docker.com/r/naechyun/leviosam2)
-```
+
+```shell
 singularity pull docker://naechyun/leviosam2:latest
 ```
 
@@ -62,7 +64,7 @@ For other reference pairs, common ways to generate chain files include using the
 
 LevioSAM2 indexes a chain file for lift-over queries. The resulting index has a `.clft` extension.
 
-```
+```shell
 leviosam2 index -c source_to_target.chain -p source_to_target -F target.fai
 ```
 
@@ -73,17 +75,17 @@ The levioSAM2 ChainMap index will be saved to `source_to_target.clft`. The outpu
 
 __We highly recommend to sort the input BAM by position prior to running levioSAM2-lift.__
 
-```
+```shell
 leviosam2 lift -C source_to_target.clft -a aligned_to_source.bam -p lifted_from_source -O bam
 ```
-
 
 ### Full levioSAM2 workflow with selective re-mapping
 
 The levioSAM2 workflow includes lift-over using the `leviosam2-lift` kernel and a selective re-mapping strategy. This approach can improve accuracy.
 
 Example:
-```
+
+```shell
 # You may skip the indexing step if you've already run it
 leviosam2 index -c source_to_target.chain -p source_to_target -F target.fai
 sh leviosam2.sh \
@@ -98,10 +100,9 @@ sh leviosam2.sh \
 
 See [this README](https://github.com/milkschen/leviosam2/blob/main/workflow/README.md) to learn more about running the full levioSAM2 workflow.
 
-
 ## Publication
 
--  Nae-Chyun Chen, Luis Paulin, Fritz Sedlazeck, Sergey Koren, Adam Phillippy, Ben Langmead. Improved sequence mapping using a complete reference genome and lift-over. Nat Methods (2023). https://doi.org/10.1038/s41592-023-02069-6
+- Nae-Chyun Chen, Luis Paulin, Fritz Sedlazeck, Sergey Koren, Adam Phillippy, Ben Langmead. Improved sequence mapping using a complete reference genome and lift-over. Nat Methods (2023). https://doi.org/10.1038/s41592-023-02069-6
 - Taher Mun, Nae-Chyun Chen, Ben Langmead. LevioSAM: Fast lift-over of variant-aware reference alignments, _Bioinformatics_, 2021;, btab396, https://doi.org/10.1093/bioinformatics/btab396
 
 _Logo credit: Ting-Wei Young_

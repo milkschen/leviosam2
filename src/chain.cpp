@@ -822,8 +822,16 @@ int32_t ChainMap::get_num_clipped(const int32_t pos, const bool leftmost,
     return -1;
 }
 
-/* Lift an alignment segment (there are two segments in a paired-end alignment)
- * Return false if unliftable.
+/**
+ * Lifts an alignment segment (a paired-end read has two segments).
+ *
+ * @param aln Alignment object to be lifted.
+ * @param hdr_source Source BAM header.
+ * @param hdr_dest Target BAM header.
+ * @param first_seg True if the first segment in a paired-end alignment. False
+ * if the mate.
+ * @param dest_contig Target reference config.
+ * @return True if liftable.
  */
 bool ChainMap::lift_segment(bam1_t *aln, sam_hdr_t *hdr_source,
                             sam_hdr_t *hdr_dest, bool first_seg,
@@ -850,9 +858,7 @@ bool ChainMap::lift_segment(bam1_t *aln, sam_hdr_t *hdr_source,
     // the segment is unliftable
     if (!update_interval_indexes(source_contig, pos, start_sidx, start_eidx))
         return false;
-    // Set a segment as unliftable if the gap between it
-    // and the nearby interval is too large
-    //
+
     // sidx might be advanced here
     int32_t num_sclip_start =
         get_num_clipped(pos, true, source_contig, start_sidx, start_eidx);
@@ -888,13 +894,17 @@ bool ChainMap::lift_segment(bam1_t *aln, sam_hdr_t *hdr_source,
     // Only check mate if paired-end
     if (c->tid < 0 || (c->flag & 1 && c->mtid < 0)) return false;
 
-    // Estimate ending pos of the mate
-    // If it's the first segment, we can calculate the query length wrt the REF;
-    // If it's the second segment, we can only do a rough estimate b/c we don't
-    // know the RLEN of the mate.
-    auto pos_end = (first_seg)
-                       ? c->pos + bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln))
-                       : c->mpos + c->l_qseq;
+    // Gets the ending pos of the mate.
+    //
+    // For the first segment, uses the cigar string to calculate the read
+    // reference length.
+    //
+    // For the mate segment, infers the ending position. The position would be
+    // accurate if the "MC:Z" tag is available.
+    auto pos_end =
+        (first_seg) ? c->pos + bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln))
+                    : c->mpos + LevioSamUtils::get_mate_query_len_on_ref(aln);
+
     int end_sidx = 0;
     int end_eidx = 0;
     // Update end indexes; if either is unavailable, mark the segment as

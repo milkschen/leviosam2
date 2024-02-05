@@ -12,7 +12,13 @@
 #include "leviosam_utils.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <regex>
+
+size_t kstr_get_m(size_t var) {
+    size_t lvar = (size_t)std::exp2(std::ceil(std::log2(var)));
+    return lvar;
+}
 
 namespace LevioSamUtils {
 
@@ -238,7 +244,10 @@ void debug_print_cigar(uint32_t* cigar, size_t n_cigar) {
     std::cerr << "\n";
 }
 
-/* Remove MN:i and MD:z tags from an alignment (bam1_t) object */
+/** Removes the MN:i and MD:z tags from an alignment object.
+ *
+ * @param aln Alignment object.
+ */
 void remove_nm_md_tag(bam1_t* aln) {
     uint8_t* ptr = NULL;
     if ((ptr = bam_aux_get(aln, "MD")) != NULL) {
@@ -249,11 +258,36 @@ void remove_nm_md_tag(bam1_t* aln) {
     }
 }
 
-/* Return the read, reverse complemented if necessary
-   Adapted from: https://github.com/samtools/samtools/blob/develop/bam_fastq.c
-*/
-std::string get_read(const bam1_t* rec) {
-    int len = rec->core.l_qseq + 1;
+/** Gets the reference length of the mate segment.
+ *
+ * Leverages the "MC:Z" flag when available. If not, infers the query length.
+ *
+ * @param aln Alignment object.
+ * @return Reference length of the mate segment.
+ */
+hts_pos_t get_mate_query_len_on_ref(const bam1_t* aln) {
+    const bam1_core_t* c = &(aln->core);
+    uint8_t* ptr = NULL;
+    uint8_t* mc = bam_aux_get(aln, "MC");
+    if (mc) {
+        char* mate_cigar = bam_aux2Z(mc);
+        uint32_t* a_cigar = NULL;
+        size_t n_cigar = 0;
+        sam_parse_cigar(mate_cigar, NULL, &a_cigar, &n_cigar);
+        return bam_cigar2rlen(n_cigar, a_cigar);
+    } else {
+        return c->l_qseq;
+    }
+}
+
+/** Gets the forward read sequence.
+ *
+ * Adapted from: https://github.com/samtools/samtools/blob/develop/bam_fastq.c
+ *
+ * @param rec Alignment obejct.
+ * @return Read sequence string.
+ */
+std::string get_forward_read(const bam1_t* rec) {
     char* seq = (char*)bam_get_seq(rec);
     std::string read = "";
 
@@ -267,9 +301,14 @@ std::string get_read(const bam1_t* rec) {
     return read;
 }
 
-/* Return the read, regardless of reverse complement status */
-std::string get_read_as_is(const bam1_t* rec) {
-    int len = rec->core.l_qseq + 1;
+/** Gets the aligned read sequence.
+ *
+ * Use `get_forward_read()` if interested in the forward read sequence.
+ *
+ * @param rec Alignment obejct.
+ * @return Read sequence string.
+ */
+std::string get_read(const bam1_t* rec) {
     char* seq = (char*)bam_get_seq(rec);
     std::string read = "";
 
@@ -360,7 +399,7 @@ FastqRecord::~FastqRecord() {
 /* Write a FastqRecord object to a FASTQ file */
 int FastqRecord::write(ogzstream& out_fq, std::string name) {
     if (aln != NULL) {
-        seq_str = get_read(aln);
+        seq_str = get_forward_read(aln);
         std::string qual_seq("");
         uint8_t* qual = bam_get_qual(aln);
         if (qual[0] == 255)
