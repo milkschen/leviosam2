@@ -34,6 +34,8 @@
 const int8_t seq_comp_table[16] = {0, 8, 4, 12, 2, 10, 6, 14,
                                    1, 9, 5, 13, 3, 11, 7, 15};
 
+size_t kstr_get_m(size_t var);
+
 namespace LevioSamUtils {
 
 const std::vector<std::string> DEFER_OPT{"lifted", "mapq",      "clipped_frac",
@@ -88,8 +90,7 @@ class WriteDeferred {
               const BedUtils::Bed& b_defer_source,
               const BedUtils::Bed& b_defer_dest,
               const BedUtils::Bed& b_commit_source,
-              const BedUtils::Bed& b_commit_dest,
-              const float& b_isec_th);
+              const BedUtils::Bed& b_commit_dest, const float& b_isec_th);
 
     void print_info();
     void write_deferred_bam(bam1_t* aln, sam_hdr_t* hdr);
@@ -118,9 +119,15 @@ class WriteDeferred {
 
 void update_cigar(bam1_t* aln, std::vector<uint32_t>& new_cigar);
 void debug_print_cigar(uint32_t* cigar, size_t n_cigar);
+
+/** @brief Remove the MN:i and MD:z tags from an alignment object. */
 void remove_nm_md_tag(bam1_t* aln);
+
+/** @brief Gets the reference length of the mate segment. */
+hts_pos_t get_mate_query_len_on_ref(const bam1_t* aln);
+
+std::string get_forward_read(const bam1_t* rec);
 std::string get_read(const bam1_t* rec);
-std::string get_read_as_is(const bam1_t* rec);
 void update_flag_unmap(bam1_t* aln, const bool first_seg, const bool keep_mapq);
 
 std::vector<std::string> str_to_vector(const std::string str,
@@ -128,11 +135,11 @@ std::vector<std::string> str_to_vector(const std::string str,
 std::set<std::string> str_to_set(const std::string str,
                                  const std::string regex_str);
 
-/// @brief Returns true if a bam record is reversely lifted. 
+/** @brief Returns true if a bam record is reversely lifted. */
 bool is_reversedly_lifted(bam1_t* aln_orig, bam1_t* aln_lft);
 
-/// @brief Updates BAM tags specific to Ultima Genomics.
-void update_ultima_genomics_tags(bam1_t *aln, bool rev);
+/** @brief Updates BAM tags specific to Ultima Genomics. */
+void update_ultima_genomics_tags(bam1_t* aln, bool rev);
 
 int reverse_seq_and_qual(bam1_t* aln);
 sam_hdr_t* fai_to_hdr(std::string fai_fn, const sam_hdr_t* const hdr_orig);
