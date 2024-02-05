@@ -81,7 +81,7 @@ bash leviosam2.sh \
 For both short and long reads. Different parameters are recommended for each sequence type.
 
 - Supported aligners: [minimap2](https://github.com/lh3/minimap2), [winnowmap2](https://github.com/marbl/Winnowmap),
-[bwa mem](https://github.com/lh3/bwa) and [Bowtie 2](http://bowtie-bio.sourceforge.net/bowtie2/manual.shtml) 
+[bwa mem](https://github.com/lh3/bwa) and [Bowtie 2](http://bowtie-bio.sourceforge.net/bowtie2/manual.shtml)
 
 - `-g` sets the max allowed size of overlapping chain gaps of an alignment, `-H` is the max edit distance of an alignment (post-realignment) to be committed. Please adjust these parameters according to your long read platform and library preparation
 
