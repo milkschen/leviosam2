@@ -12,10 +12,11 @@
 #include "leviosam_utils.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <regex>
 
 size_t kstr_get_m(size_t var) {
-    size_t lvar = (size_t)exp2(ceil(log2(var)));
+    size_t lvar = (size_t)std::exp2(std::ceil(std::log2(var)));
     return lvar;
 }
 
