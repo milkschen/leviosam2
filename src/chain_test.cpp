@@ -537,7 +537,7 @@ TEST(ChainTest, LiftExtendedCigarReverse3) {
     EXPECT_EQ(test_cigar[2], bam_cigar_gen(3, BAM_CMATCH));
 }
 
-TEST(ChainTest, test_check_multi_intvl_legality) {
+TEST(ChainTest, CheckMultiIntvlLegality) {
     std::vector<std::pair<std::string, int32_t>> lm;
     lm.push_back(std::make_pair("chr1", 248387328));
     chain::ChainMap cmap("small.chain", 0, 0, lm);
@@ -551,6 +551,39 @@ TEST(ChainTest, test_check_multi_intvl_legality) {
               true);
     EXPECT_EQ(cmap.check_multi_intvl_legality("chr1", "read1", sidx, eidx, 3),
               true);
+}
+
+TEST(ChainTest, UpdateIntervalIndexes) {
+    std::vector<std::pair<std::string, int32_t>> lm;
+    lm.push_back(std::make_pair("chr1", 248387328));
+    chain::ChainMap cmap("small.chain", 0, 0, lm);
+    // cmap.debug_print_intervals("chr1", 5);
+    int sidx = 0, eidx = 0;
+
+    // Straightforward test case.
+    EXPECT_EQ(cmap.update_interval_indexes("chr1", 674144, sidx, eidx), true);
+    EXPECT_EQ(sidx, 0);
+    EXPECT_EQ(eidx, 0);
+
+    // Contig not in the map.
+    EXPECT_EQ(cmap.update_interval_indexes("chr100", 0, sidx, eidx), false);
+    EXPECT_EQ(sidx, -1);
+    EXPECT_EQ(eidx, -1);
+
+    // Locus not covered by the chains.
+    EXPECT_EQ(cmap.update_interval_indexes("chr1", 674040, sidx, eidx), false);
+    EXPECT_EQ(sidx, -1);
+    EXPECT_EQ(eidx, 0);
+
+    // Invalid locus: outside chrom
+    EXPECT_EQ(cmap.update_interval_indexes("chr1", 1000000000, sidx, eidx),
+              false);
+    EXPECT_EQ(sidx, -1);
+    EXPECT_EQ(eidx, -1);
+
+    EXPECT_EQ(cmap.update_interval_indexes("chr1", 2680090, sidx, eidx), true);
+    EXPECT_EQ(sidx, 784);  // TODO: why not 785
+    EXPECT_EQ(eidx, 784);  // TODO: why not 785
 }
 
 int main(int argc, char **argv) {

@@ -63,7 +63,7 @@ class ChainMap {
     void sort_interval_map();
     void sort_intervals(std::string contig);
     void debug_print_interval_map();
-    void debug_print_intervals(std::string contig);
+    void debug_print_intervals(std::string contig, const int n);
     bool interval_map_sanity_check();
     int get_start_rank(std::string contig, int pos);
     int get_end_rank(std::string contig, int pos);

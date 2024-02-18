@@ -166,7 +166,7 @@ void ChainMap::sort_intervals(std::string contig) {
 
 void ChainMap::debug_print_interval_map() {
     for (auto &intvl_map : interval_map) {
-        debug_print_intervals(intvl_map.first);
+        debug_print_intervals(intvl_map.first, -1);
     }
 }
 
@@ -174,9 +174,15 @@ void ChainMap::debug_print_interval_map() {
  *
  * @param contig Contig name.
  */
-void ChainMap::debug_print_intervals(std::string contig) {
+void ChainMap::debug_print_intervals(std::string contig, const int n) {
+    int cnt = 0;
     for (auto &intvl : interval_map[contig]) {
+        cnt += 1;
         intvl.debug_print_interval();
+        if (n > 0 && cnt >= n) {
+            std::cerr << "\n";
+            return;
+        }
     }
     std::cerr << "\n";
 }
@@ -716,6 +722,10 @@ std::vector<uint32_t> ChainMap::lift_cigar_core(
  *
  * Note that "interval index = rank - 1"
  *
+ * @param contig Source contig.
+ * @param pos Source position.
+ * @param sidx The start index to update.
+ * @param eidx The end index to update.
  * @return False if any of the queried contig-pos pair is unavailable. Otherwise
  * true.
  */
@@ -727,24 +737,31 @@ bool ChainMap::update_interval_indexes(const std::string contig,
         eidx = -1;
         return false;
     }
-    // If `contig` is not in the map, set the idx to -1
-    // If `pos` is out of scope, query the largest possible position
+
     SdVectorMap::const_iterator find_start = start_map.find(contig);
     if (find_start == start_map.end()) {
+        // If `contig` is not in the map, set the idx to -1.
         sidx = -1;
-        // TODO
+        // Returns false later since we also want to update `eidx`.
     } else if (pos >= start_rs1_map[contig].size()) {
-        auto tmp_pos = start_rs1_map[contig].size() - 1;
-        sidx = start_rs1_map[contig](tmp_pos) - 1;
+        // If `pos` is greater than the right-most interval in the map,
+        // sets the starting idx to -1.
+        sidx = -1;
     } else
         sidx = start_rs1_map[contig](pos) - 1;
 
     SdVectorMap::const_iterator find_end = end_map.find(contig);
     if (find_end == end_map.end()) {
+        // If `contig` is not in the map, set the idx to -1.
         eidx = -1;
     } else if (pos >= end_rs1_map[contig].size()) {
-        auto tmp_pos = end_rs1_map[contig].size() - 1;
-        eidx = end_rs1_map[contig](tmp_pos) - 1;
+        // If `pos` is greater than the right-most interval in the map,
+        // sets the starting idx to -1.
+        eidx = -1;
+        // use the largest chrom pos to get the end idx.
+        // This lets us lift reads slightly outside of the chain map.
+        // auto tmp_pos = end_rs1_map[contig].size() - 1;
+        // eidx = end_rs1_map[contig](tmp_pos) - 1;
     } else {
         // The first interval: `sidx == 1 && eidx == 0`
         if (end_rs1_map[contig](pos) == 0)
