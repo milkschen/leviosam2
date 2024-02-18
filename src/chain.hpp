@@ -56,10 +56,8 @@ class ChainMap {
     ChainMap(std::string fname, int verbose, int allowed_intvl_gaps,
              LengthMap &lm);
     ChainMap(std::ifstream &in, int verbose, int allowed_intvl_gaps);
-    void init_bitvectors(
-        std::string source, int source_length,
-        std::unordered_map<std::string, sdsl::bit_vector> &start_bv_map,
-        std::unordered_map<std::string, sdsl::bit_vector> &end_bv_map);
+    void init_bitvectors(std::string source, int source_length,
+                         BitVectorMap &start_bv_map, BitVectorMap &end_bv_map);
     void sort_interval_map();
     void sort_intervals(std::string contig);
     void debug_print_interval_map();
@@ -105,8 +103,6 @@ class ChainMap {
                           int32_t &source_offset, int32_t &target_offset,
                           bool &strand, BitVectorMap &start_bv_map,
                           BitVectorMap &end_bv_map);
-
-    sam_hdr_t *bam_hdr_from_chainmap(samFile *sam_fp, sam_hdr_t *hdr_orig);
 
     // Checks the gap size between the intervals overlapped with an alignment.
     bool check_multi_intvl_legality(const std::string &source_contig,
