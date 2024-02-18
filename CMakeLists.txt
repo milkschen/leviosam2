@@ -4,8 +4,17 @@ project(leviosam2 CXX C)
 
 set(PROJECT_URL "https://github.com/milkschen/leviosam2")
 set(PROJECT_DESCRIPTION "leviosam2")
-set(PROJECT_VER "0.4.2")
 set(CMAKE_CXX_STANDARD 14)
+
+# Get the latest abbreviated commit hash of the working branch
+execute_process(
+    COMMAND git log -1 --format=%h
+    WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+    OUTPUT_VARIABLE GIT_HASH
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+
+set(PROJECT_VER "0.4.2-${GIT_HASH}")
 
 find_library(HTS_LIB hts)
 if(NOT HTS_LIB)
