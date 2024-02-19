@@ -17,7 +17,7 @@
 #include <iostream>
 #include <vector>
 
-int _realloc_bam_data(bam1_t* b, size_t desired);
+void _realloc_bam_data(bam1_t* b, size_t desired);
 
 namespace Cigar {
 
@@ -30,7 +30,7 @@ void pop_cigar(CigarVector& cigar_vec, uint32_t size);
 void sclip_cigar_front(uint32_t* cigar, const uint32_t& n_cigar, int len_clip,
                        CigarVector& new_cigar_vec, int& idx, int& query_offset);
 void sclip_cigar_back(CigarVector& cigar_vec, int len_clip);
-int set_empty_cigar(bam1_t* aln);
+void set_empty_cigar(bam1_t* aln);
 void update_cigar(bam1_t* aln, CigarVector& new_cigar_vec);
 void debug_print_cigar(uint32_t* cigar, size_t n_cigar);
 

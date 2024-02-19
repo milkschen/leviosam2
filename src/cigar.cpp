@@ -18,16 +18,16 @@
  *
  * @param b A BAM object.
  * @param desired Number of bytes to trim.
- * @return 0 if successful; -1 if failed.
  */
-int _realloc_bam_data(bam1_t* b, size_t desired) {
+void _realloc_bam_data(bam1_t* b, size_t desired) {
     uint32_t new_m_data;
     uint8_t* new_data;
     new_m_data = desired;
     kroundup32(new_m_data);
     if (new_m_data < desired) {
         errno = ENOMEM;  // Not strictly true but we can't store the size
-        return -1;
+        throw std::runtime_error(
+            "Failed to realloc BAM data - cannot allocate memory");
     }
     if ((bam_get_mempolicy(b) & BAM_USER_OWNS_DATA) == 0) {
         new_data = static_cast<uint8_t*>(realloc(b->data, new_m_data));
@@ -39,10 +39,9 @@ int _realloc_bam_data(bam1_t* b, size_t desired) {
             bam_set_mempolicy(b, bam_get_mempolicy(b) & (~BAM_USER_OWNS_DATA));
         }
     }
-    if (!new_data) return -1;
+    if (!new_data) throw std::runtime_error("Failed to realloc BAM data");
     b->data = new_data;
     b->m_data = new_m_data;
-    return 0;
 }
 
 namespace Cigar {
@@ -202,9 +201,8 @@ void sclip_cigar_back(CigarVector& cigar_vec, int len_clip) {
  * Sets the cigar string of a BAM record to be empty ("*").
  *
  * @param aln A BAM object.
- * @return
  */
-int set_empty_cigar(bam1_t* aln) {
+void set_empty_cigar(bam1_t* aln) {
     uint32_t prev_n_cigar = aln->core.n_cigar;
     size_t new_m_data = (size_t)aln->l_data - prev_n_cigar * 4;
 
@@ -217,10 +215,9 @@ int set_empty_cigar(bam1_t* aln) {
     memmove(aln->data + aln->core.l_qname,
             aln->data + aln->core.l_qname + prev_n_cigar * 4,
             new_m_data - aln->core.l_qname);
-    int ret = _realloc_bam_data(aln, new_m_data);
+    _realloc_bam_data(aln, new_m_data);
     aln->core.n_cigar = 0;
     aln->l_data -= prev_n_cigar * 4;
-    return ret;
 }
 
 void update_cigar(bam1_t* aln, CigarVector& new_cigar_vec) {
