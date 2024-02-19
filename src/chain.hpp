@@ -56,14 +56,12 @@ class ChainMap {
     ChainMap(std::string fname, int verbose, int allowed_intvl_gaps,
              LengthMap &lm);
     ChainMap(std::ifstream &in, int verbose, int allowed_intvl_gaps);
-    void init_bitvectors(
-        std::string source, int source_length,
-        std::unordered_map<std::string, sdsl::bit_vector> &start_bv_map,
-        std::unordered_map<std::string, sdsl::bit_vector> &end_bv_map);
+    void init_bitvectors(std::string source, int source_length,
+                         BitVectorMap &start_bv_map, BitVectorMap &end_bv_map);
     void sort_interval_map();
     void sort_intervals(std::string contig);
     void debug_print_interval_map();
-    void debug_print_intervals(std::string contig);
+    void debug_print_intervals(std::string contig, const int n);
     bool interval_map_sanity_check();
     int get_start_rank(std::string contig, int pos);
     int get_end_rank(std::string contig, int pos);
@@ -106,8 +104,6 @@ class ChainMap {
                           bool &strand, BitVectorMap &start_bv_map,
                           BitVectorMap &end_bv_map);
 
-    sam_hdr_t *bam_hdr_from_chainmap(samFile *sam_fp, sam_hdr_t *hdr_orig);
-
     // Checks the gap size between the intervals overlapped with an alignment.
     bool check_multi_intvl_legality(const std::string &source_contig,
                                     const std::string &read_name,
@@ -140,14 +136,6 @@ class ChainMap {
                                       const int32_t pos, const int32_t sidx,
                                       const int32_t eidx);
 };
-
-void push_cigar(std::vector<uint32_t> &cigar, uint32_t len, uint16_t op,
-                const bool no_reduct);
-void pop_cigar(std::vector<uint32_t> &cigar, uint32_t size);
-void sclip_cigar_front(uint32_t *cigar, const uint32_t &n_cigar, int len_clip,
-                       std::vector<uint32_t> &new_cigar, int &idx,
-                       int &query_offset);
-void sclip_cigar_back(std::vector<uint32_t> &new_cigar, int len_clip);
 
 };  // namespace chain
 

@@ -228,7 +228,7 @@ void read_and_lift(T *lift_map, std::mutex *mutex_fread,
             int new_score = 0;
             if (Aln::align_ksw2(ref_seq.data(), q_seq.data(), args.aln_opts,
                                 new_cigar, new_score) > 0) {
-                LevioSamUtils::update_cigar(aln_vec[i], new_cigar);
+                Cigar::update_cigar(aln_vec[i], new_cigar);
                 // Redo fillmd after re-align
                 bam_fillmd1(aln_vec[i], ref.data(), args.md_flag, 1);
                 bam_aux_append(aln_vec[i], "LR", 'i', 4, (uint8_t *)&new_score);

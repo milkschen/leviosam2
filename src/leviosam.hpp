@@ -24,6 +24,7 @@
 
 #include "aln.hpp"
 #include "bed.hpp"
+#include "cigar.hpp"
 #include "chain.hpp"
 #include "leviosam_utils.hpp"
 #include "version.hpp"
@@ -374,7 +375,7 @@ class Lift {
             new_cigar.push_back(bam_cigar_gen(cigar_op_len[i], cigar_op[i]));
         }
 
-        LevioSamUtils::update_cigar(b, new_cigar);
+        Cigar::update_cigar(b, new_cigar);
     }
 
     // returns size of s1 sequence

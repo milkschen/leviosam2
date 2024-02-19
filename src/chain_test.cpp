@@ -158,63 +158,12 @@ TEST(ChainTest, LiftCigarCoreOneRun) {
     EXPECT_EQ(bam_cigar_op(new_cigar[2]), BAM_CMATCH);
 }
 
-TEST(ChainTest, PushCigar) {
-    std::vector<uint32_t> cigar1;
-    chain::push_cigar(cigar1, 2, BAM_CMATCH, false);
-    chain::push_cigar(cigar1, 1, BAM_CMATCH, false);
-    EXPECT_EQ(cigar1.size(), 1);
-    EXPECT_EQ(bam_cigar_oplen(cigar1.back()), 3);
-    EXPECT_EQ(bam_cigar_op(cigar1.back()), BAM_CMATCH);
-
-    std::vector<uint32_t> cigar2;
-    chain::push_cigar(cigar2, 1, BAM_CINS, false);
-    chain::push_cigar(cigar2, 1, BAM_CDEL, false);
-    EXPECT_EQ(cigar2.size(), 1);
-    EXPECT_EQ(bam_cigar_oplen(cigar2.back()), 1);
-    EXPECT_EQ(bam_cigar_op(cigar2.back()), BAM_CMATCH);
-}
-
-TEST(ChainTest, SClipCigarFront1) {
-    // 5M -> 3S2M
-    std::vector<uint32_t> cigar;
-    chain::push_cigar(cigar, 5, BAM_CMATCH, false);
-    std::vector<uint32_t> new_cigar;
-    int idx = 0, q = 0;
-    chain::sclip_cigar_front(&cigar[0], cigar.size(), 3, new_cigar, idx, q);
-    EXPECT_EQ(new_cigar.size(), 1);
-    EXPECT_EQ(bam_cigar_oplen(new_cigar[0]), 3);
-    EXPECT_EQ(bam_cigar_op(new_cigar[0]), BAM_CSOFT_CLIP);
-    EXPECT_EQ(idx, 0);
-    EXPECT_EQ(q, 3);
-}
-
-TEST(ChainTest, SClipCigarFront2) {
-    // 4S2M -> 5S1M
-    std::vector<uint32_t> cigar;
-    chain::push_cigar(cigar, 4, BAM_CSOFT_CLIP, false);
-    chain::push_cigar(cigar, 2, BAM_CMATCH, false);
-    std::vector<uint32_t> new_cigar;
-    int idx = 0, q = 0;
-    chain::sclip_cigar_front(&cigar[0], cigar.size(), 5, new_cigar, idx, q);
-    EXPECT_EQ(new_cigar.size(), 1);
-    EXPECT_EQ(bam_cigar_oplen(new_cigar[0]), 5);
-    EXPECT_EQ(bam_cigar_op(new_cigar[0]), BAM_CSOFT_CLIP);
-    EXPECT_EQ(idx, 1);
-    EXPECT_EQ(q, 5);
-}
-
-TEST(ChainTest, SClipCigarBack) {
-    std::vector<uint32_t> cigar1;
-    chain::push_cigar(cigar1, 5, BAM_CMATCH, false);
-    std::vector<uint32_t> new_cigar1;
-}
-
 TEST(ChainTest, LiftCigar1) {
     std::vector<std::pair<std::string, int32_t>> lm;
     lm.push_back(std::make_pair("chr1", 248387328));
     chain::ChainMap cmap("small.chain", 0, 0, lm);
     std::string hdr_str =
-        "@HD	VN:1.0	SO:unsorted\n@SQ	SN:chr1	LN:248956422";
+        "@HD\tVN:1.0\tSO:unsorted\n@SQ\tSN:chr1\tLN:248956422";
     sam_hdr_t *sam_hdr = sam_hdr_parse(hdr_str.length(), &hdr_str[0]);
     bam1_t *aln = bam_init1();
     int err;
@@ -224,8 +173,8 @@ TEST(ChainTest, LiftCigar1) {
     // CIGAR should not change
     kstring_t str;
     std::string record =
-        "unchanged	0	chr1	674850	42	7M13D13M	"
-        "*	0	0	CAGTTTGTAGTATCTGCAAG	~~~~~~~~~~~~~~~~~~~~";
+        "unchanged\t0\tchr1\t674850\t42\t7M13D13M\t"
+        "*\t0\t0\tCAGTTTGTAGTATCTGCAAG\t~~~~~~~~~~~~~~~~~~~~";
     str.s = (char *)record.c_str();
     str.l = record.length();
     str.m = kstr_get_m(str.l);
@@ -247,7 +196,7 @@ TEST(ChainTest, LiftCigar2) {
     lm.push_back(std::make_pair("chr1", 248387328));
     chain::ChainMap cmap("small.chain", 0, 0, lm);
     std::string hdr_str =
-        "@HD	VN:1.0	SO:unsorted\n@SQ	SN:chr1	LN:248956422";
+        "@HD\tVN:1.0\tSO:unsorted\n@SQ\tSN:chr1\tLN:248956422";
     sam_hdr_t *sam_hdr = sam_hdr_parse(hdr_str.length(), &hdr_str[0]);
     bam1_t *aln = bam_init1();
     int err;
@@ -257,8 +206,8 @@ TEST(ChainTest, LiftCigar2) {
     // Add 3 BAM_CSOFT_CLIPs in the beginning
     kstring_t str;
     std::string record =
-        "16M_3S13M	0	chr1	687455	42	16M	*	"
-        "0	0	ATTACATTCCATTCCA	~~~~~~~~~~~~~~~~";
+        "16M_3S13M\t0\tchr1\t687455\t42\t16M\t*\t"
+        "0\t0\tATTACATTCCATTCCA\t~~~~~~~~~~~~~~~~";
     str.s = (char *)record.c_str();
     str.l = record.length();
     str.m = kstr_get_m(str.l);
@@ -277,7 +226,7 @@ TEST(ChainTest, LiftCigar3) {
     lm.push_back(std::make_pair("chr1", 248387328));
     chain::ChainMap cmap("small.chain", 0, 0, lm);
     std::string hdr_str =
-        "@HD	VN:1.0	SO:unsorted\n@SQ	SN:chr1	LN:248956422";
+        "@HD\tVN:1.0\tSO:unsorted\n@SQ\tSN:chr1\tLN:248956422";
     sam_hdr_t *sam_hdr = sam_hdr_parse(hdr_str.length(), &hdr_str[0]);
     bam1_t *aln = bam_init1();
     int err;
@@ -287,8 +236,8 @@ TEST(ChainTest, LiftCigar3) {
     // Add 2 BAM_CINSs in the middle
     kstring_t str;
     std::string record =
-        "16M_10M2I4M	0	chr1	674141	42	16M	*	"
-        "0	0	ATTACATTCCATTCCA	~~~~~~~~~~~~~~~~";
+        "16M_10M2I4M\t0\tchr1\t674141\t42\t16M\t*\t"
+        "0\t0\tATTACATTCCATTCCA\t~~~~~~~~~~~~~~~~";
     str.s = (char *)record.c_str();
     str.l = record.length();
     str.m = kstr_get_m(str.l);
@@ -310,7 +259,7 @@ TEST(ChainTest, LiftCigar4) {
     lm.push_back(std::make_pair("chr1", 248387328));
     chain::ChainMap cmap("small.chain", 0, 0, lm);
     std::string hdr_str =
-        "@HD	VN:1.0	SO:unsorted\n@SQ	SN:chr1	LN:248956422";
+        "@HD\tVN:1.0\tSO:unsorted\n@SQ\tSN:chr1\tLN:248956422";
     sam_hdr_t *sam_hdr = sam_hdr_parse(hdr_str.length(), &hdr_str[0]);
     bam1_t *aln = bam_init1();
     int err;
@@ -320,8 +269,8 @@ TEST(ChainTest, LiftCigar4) {
     // Add 3 BAM_CDELs in the middle
     kstring_t str;
     std::string record =
-        "16M_10M3D6M	0	chr1	674820	42	16M	*	"
-        "0	0	ATTACATTCCATTCCA	~~~~~~~~~~~~~~~~";
+        "16M_10M3D6M\t0\tchr1\t674820\t42\t16M\t*\t"
+        "0\t0\tATTACATTCCATTCCA\t~~~~~~~~~~~~~~~~";
     str.s = (char *)record.c_str();
     str.l = record.length();
     str.m = kstr_get_m(str.l);
@@ -343,7 +292,7 @@ TEST(ChainTest, LiftCigar5) {
     lm.push_back(std::make_pair("chr1", 248387328));
     chain::ChainMap cmap("small.chain", 0, 0, lm);
     std::string hdr_str =
-        "@HD	VN:1.0	SO:unsorted\n@SQ	SN:chr1	LN:248956422";
+        "@HD\tVN:1.0\tSO:unsorted\n@SQ\tSN:chr1\tLN:248956422";
     sam_hdr_t *sam_hdr = sam_hdr_parse(hdr_str.length(), &hdr_str[0]);
     bam1_t *aln = bam_init1();
     int err;
@@ -353,8 +302,8 @@ TEST(ChainTest, LiftCigar5) {
     // Add 3 BAM_CSOFT_CLIPs in the beginning (secondary alignment)
     kstring_t str;
     std::string record =
-        "16M_3S13M	256	chr1	687455	42	"
-        "16M	*	0	0	*	*";
+        "16M_3S13M\t256\tchr1\t687455\t42\t"
+        "16M\t*\t0\t0\t*\t*";
     str.s = (char *)record.c_str();
     str.l = record.length();
     str.m = kstr_get_m(str.l);
@@ -375,7 +324,7 @@ TEST(ChainTest, LiftExtendedCigar1) {
     lm.push_back(std::make_pair("chr1", 248387328));
     chain::ChainMap cmap("small.chain", 0, 0, lm);
     std::string hdr_str =
-        "@HD	VN:1.0	SO:unsorted\n@SQ	SN:chr1	LN:248956422";
+        "@HD\tVN:1.0\tSO:unsorted\n@SQ\tSN:chr1\tLN:248956422";
     sam_hdr_t *sam_hdr = sam_hdr_parse(hdr_str.length(), &hdr_str[0]);
     bam1_t *aln = bam_init1();
     int err;
@@ -386,9 +335,9 @@ TEST(ChainTest, LiftExtendedCigar1) {
     // CIGAR should not change
     kstring_t str;
     std::string record =
-        "7=13D6=1X6=_7M13D13M	0	chr1	674850	"
-        "42	7=13D6=1X6=	*	0	0	"
-        "CAGTTTGTAGTATCTGCAAG	~~~~~~~~~~~~~~~~~~~~";
+        "7=13D6=1X6=_7M13D13M\t0\tchr1\t674850\t"
+        "42\t7=13D6=1X6=\t*\t0\t0\t"
+        "CAGTTTGTAGTATCTGCAAG\t~~~~~~~~~~~~~~~~~~~~";
     str.s = (char *)record.c_str();
     str.l = record.length();
     str.m = kstr_get_m(str.l);
@@ -410,7 +359,7 @@ TEST(ChainTest, LiftExtendedCigar2) {
     lm.push_back(std::make_pair("chr1", 248387328));
     chain::ChainMap cmap("small.chain", 0, 0, lm);
     std::string hdr_str =
-        "@HD	VN:1.0	SO:unsorted\n@SQ	SN:chr1	LN:248956422";
+        "@HD\tVN:1.0\tSO:unsorted\n@SQ\tSN:chr1\tLN:248956422";
     sam_hdr_t *sam_hdr = sam_hdr_parse(hdr_str.length(), &hdr_str[0]);
     bam1_t *aln = bam_init1();
     int err;
@@ -420,8 +369,8 @@ TEST(ChainTest, LiftExtendedCigar2) {
     // Add 3 BAM_CSOFT_CLIPs in the beginning
     kstring_t str;
     std::string record =
-        "10=1X5=_3S13M	0	chr1	687455	42	10=1X5=	*	"
-        "0	0	ATTACATTCCATTCCA	~~~~~~~~~~~~~~~~";
+        "10=1X5=_3S13M\t0\tchr1\t687455\t42\t10=1X5=\t*\t"
+        "0\t0\tATTACATTCCATTCCA\t~~~~~~~~~~~~~~~~";
     str.s = (char *)record.c_str();
     str.l = record.length();
     str.m = kstr_get_m(str.l);
@@ -440,7 +389,7 @@ TEST(ChainTest, LiftExtendedCigarReverse1) {
     lm.push_back(std::make_pair("chr1", 248387497));
     chain::ChainMap cmap("chr1_reversed_region.chain", 0, 0, lm);
     std::string hdr_str =
-        "@HD	VN:1.0	SO:unsorted\n@SQ	SN:chr1	LN:248956422";
+        "@HD\tVN:1.0\tSO:unsorted\n@SQ\tSN:chr1\tLN:248956422";
     sam_hdr_t *sam_hdr = sam_hdr_parse(hdr_str.length(), &hdr_str[0]);
     bam1_t *aln = bam_init1();
     int err;
@@ -451,8 +400,8 @@ TEST(ChainTest, LiftExtendedCigarReverse1) {
     // CIGAR should not change
     kstring_t str;
     std::string record =
-        "10=1X5=_16M	0	chr1	145302531	42	10=1X5=	"
-        "*	0	0	ATTACATTCCATTCCA	~~~~~~~~~~~~~~~~";
+        "10=1X5=_16M\t0\tchr1\t145302531\t42\t10=1X5=\t"
+        "*\t0\t0\tATTACATTCCATTCCA\t~~~~~~~~~~~~~~~~";
     str.s = (char *)record.c_str();
     str.l = record.length();
     str.m = kstr_get_m(str.l);
@@ -473,7 +422,7 @@ TEST(ChainTest, LiftExtendedCigarReverse2) {
     chain::ChainMap cmap("chr1_reversed_region.chain", 0, 0, lm);
     // chain::ChainMap cmap ("chr1_reversed_region.chain", 5, 0, lm);
     std::string hdr_str =
-        "@HD	VN:1.0	SO:unsorted\n@SQ	SN:chr1	LN:248956422";
+        "@HD\tVN:1.0\tSO:unsorted\n@SQ\tSN:chr1\tLN:248956422";
     sam_hdr_t *sam_hdr = sam_hdr_parse(hdr_str.length(), &hdr_str[0]);
     bam1_t *aln = bam_init1();
     int err;
@@ -484,9 +433,9 @@ TEST(ChainTest, LiftExtendedCigarReverse2) {
     // Reverse & 1-bp DEL
     kstring_t str;
     std::string record =
-        "10=1X5=_10M1D6M	0	chr1	145331505	42	"
-        "10=1X5=	"
-        "*	0	0	ATTACATTCCATTCCA	~~~~~~~~~~~~~~~~";
+        "10=1X5=_10M1D6M\t0\tchr1\t145331505\t42\t"
+        "10=1X5=\t"
+        "*\t0\t0\tATTACATTCCATTCCA\t~~~~~~~~~~~~~~~~";
     str.s = (char *)record.c_str();
     str.l = record.length();
     str.m = kstr_get_m(str.l);
@@ -508,7 +457,7 @@ TEST(ChainTest, LiftExtendedCigarReverse3) {
     lm.push_back(std::make_pair("chr1", 248387497));
     chain::ChainMap cmap("chr1_reversed_region.chain", 0, 0, lm);
     std::string hdr_str =
-        "@HD	VN:1.0	SO:unsorted\n@SQ	SN:chr1	LN:248956422";
+        "@HD\tVN:1.0\tSO:unsorted\n@SQ\tSN:chr1\tLN:248956422";
     sam_hdr_t *sam_hdr = sam_hdr_parse(hdr_str.length(), &hdr_str[0]);
     bam1_t *aln = bam_init1();
     int err;
@@ -519,8 +468,8 @@ TEST(ChainTest, LiftExtendedCigarReverse3) {
     // Replacing 6-bp MATCH with INS
     kstring_t str;
     std::string record =
-        "10=1X5=_7M6I3M	0	chr1	145334831	42	10=1X5=	"
-        "*	0	0	ATTACATTCCATTCCA	~~~~~~~~~~~~~~~~";
+        "10=1X5=_7M6I3M\t0\tchr1\t145334831\t42\t10=1X5=\t"
+        "*\t0\t0\tATTACATTCCATTCCA\t~~~~~~~~~~~~~~~~";
     str.s = (char *)record.c_str();
     str.l = record.length();
     str.m = kstr_get_m(str.l);
@@ -537,7 +486,7 @@ TEST(ChainTest, LiftExtendedCigarReverse3) {
     EXPECT_EQ(test_cigar[2], bam_cigar_gen(3, BAM_CMATCH));
 }
 
-TEST(ChainTest, test_check_multi_intvl_legality) {
+TEST(ChainTest, CheckMultiIntvlLegality) {
     std::vector<std::pair<std::string, int32_t>> lm;
     lm.push_back(std::make_pair("chr1", 248387328));
     chain::ChainMap cmap("small.chain", 0, 0, lm);
@@ -551,6 +500,39 @@ TEST(ChainTest, test_check_multi_intvl_legality) {
               true);
     EXPECT_EQ(cmap.check_multi_intvl_legality("chr1", "read1", sidx, eidx, 3),
               true);
+}
+
+TEST(ChainTest, UpdateIntervalIndexes) {
+    std::vector<std::pair<std::string, int32_t>> lm;
+    lm.push_back(std::make_pair("chr1", 248387328));
+    chain::ChainMap cmap("small.chain", 0, 0, lm);
+    // cmap.debug_print_intervals("chr1", 5);
+    int sidx = 0, eidx = 0;
+
+    // Straightforward test case.
+    EXPECT_EQ(cmap.update_interval_indexes("chr1", 674144, sidx, eidx), true);
+    EXPECT_EQ(sidx, 0);
+    EXPECT_EQ(eidx, 0);
+
+    // Contig not in the map.
+    EXPECT_EQ(cmap.update_interval_indexes("chr100", 0, sidx, eidx), false);
+    EXPECT_EQ(sidx, -1);
+    EXPECT_EQ(eidx, -1);
+
+    // Locus not covered by the chains.
+    EXPECT_EQ(cmap.update_interval_indexes("chr1", 674040, sidx, eidx), false);
+    EXPECT_EQ(sidx, -1);
+    EXPECT_EQ(eidx, 0);
+
+    // Invalid locus: outside chrom
+    EXPECT_EQ(cmap.update_interval_indexes("chr1", 1000000000, sidx, eidx),
+              false);
+    EXPECT_EQ(sidx, -1);
+    EXPECT_EQ(eidx, -1);
+
+    EXPECT_EQ(cmap.update_interval_indexes("chr1", 2680090, sidx, eidx), true);
+    EXPECT_EQ(sidx, 784);  // TODO: why not 785
+    EXPECT_EQ(eidx, 784);  // TODO: why not 785
 }
 
 int main(int argc, char **argv) {

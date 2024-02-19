@@ -373,17 +373,17 @@ TEST(UltimaGenomicsTest, UpdateFlags) {
     sam_close(sam_fp);
 }
 
-TEST(ChainTest, test_get_mate_query_len_on_ref) {
+TEST(ChainTest, GetMateQueryLenOnRef) {
     std::string hdr_str =
-        "@HD	VN:1.0	SO:unsorted\n@SQ	SN:chr1	LN:248956422";
+        "@HD\tVN:1.0\tSO:unsorted\n@SQ\tSN:chr1\tLN:248956422";
     sam_hdr_t* sam_hdr = sam_hdr_parse(hdr_str.length(), &hdr_str[0]);
     bam1_t* aln = bam_init1();
     int err;
 
     kstring_t str1;
     std::string record1 =
-        "read1	81	chr1	145334831	33	6S10M	"
-        "=	1245932	0	ATTACATTCCATTCCA	~~~~~~~~~~~~~~~~	MC:Z:10M";
+        "read1\t81\tchr1\t145334831\t33\t6S10M\t"
+        "=\t1245932\t0\tATTACATTCCATTCCA\t~~~~~~~~~~~~~~~~\tMC:Z:10M";
     str1.s = (char*)record1.c_str();
     str1.l = record1.length();
     str1.m = kstr_get_m(str1.l);
@@ -395,8 +395,8 @@ TEST(ChainTest, test_get_mate_query_len_on_ref) {
     aln = bam_init1();
     kstring_t str2;
     std::string record2 =
-        "read1	81	chr1	145334831	33	6S10M	"
-        "=	1245932	0	ATTACATTCCATTCCA	~~~~~~~~~~~~~~~~	MC:Z:6S5M1I4M";
+        "read1\t81\tchr1\t145334831\t33\t6S10M\t"
+        "=\t1245932\t0\tATTACATTCCATTCCA\t~~~~~~~~~~~~~~~~\tMC:Z:6S5M1I4M";
     str2.s = (char*)record2.c_str();
     str2.l = record2.length();
     str2.m = kstr_get_m(str2.l);

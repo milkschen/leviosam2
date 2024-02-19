@@ -12,15 +12,19 @@
 #define ALN_HPP
 
 #include <htslib/sam.h>
+
 #include <vector>
+
 #include "chain.hpp"
+#include "cigar.hpp"
 #include "ksw2.h"
+#include "leviosam_utils.hpp"
 #include "yaml.hpp"
 
 namespace Aln {
 
 class AlnOpts {
-public:
+   public:
     std::string engine = "ksw_extz";
     int flag = 0;
     int nm_threshold = 15;
@@ -31,11 +35,9 @@ public:
     void print_parameters();
 };
 
-int align_ksw2(
-    const char *tseq, const char *qseq, const AlnOpts& opt,
-    std::vector<uint32_t>& new_cigar, int& new_score
-);
+int align_ksw2(const char* tseq, const char* qseq, const AlnOpts& opt,
+               std::vector<uint32_t>& new_cigar, int& new_score);
 
-};
+};  // namespace Aln
 
 #endif
