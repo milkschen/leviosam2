@@ -17,7 +17,7 @@
 #include <iostream>
 #include <vector>
 
-void _realloc_bam_data(bam1_t* b, size_t desired);
+#include "leviosam_utils.hpp"
 
 namespace Cigar {
 
