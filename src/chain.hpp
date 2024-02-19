@@ -137,14 +137,6 @@ class ChainMap {
                                       const int32_t eidx);
 };
 
-void push_cigar(std::vector<uint32_t> &cigar, uint32_t len, uint16_t op,
-                const bool no_reduct);
-void pop_cigar(std::vector<uint32_t> &cigar, uint32_t size);
-void sclip_cigar_front(uint32_t *cigar, const uint32_t &n_cigar, int len_clip,
-                       std::vector<uint32_t> &new_cigar, int &idx,
-                       int &query_offset);
-void sclip_cigar_back(std::vector<uint32_t> &new_cigar, int len_clip);
-
 };  // namespace chain
 
 #endif

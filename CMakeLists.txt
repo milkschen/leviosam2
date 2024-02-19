@@ -172,14 +172,15 @@ else()
 endif()
 
 
-file(GLOB LIB_SOURCES   src/reconcile.cpp src/lift_bed.cpp src/collate.cpp src/chain.cpp
-                        src/leviosam_utils.cpp src/bed.cpp src/lift_bed.cpp src/aln.cpp
-                        src/yaml.cpp
+file(GLOB LIB_SOURCES   src/reconcile.cpp src/lift_bed.cpp src/collate.cpp
+                        src/chain.cpp src/leviosam_utils.cpp src/bed.cpp
+                        src/lift_bed.cpp src/aln.cpp src/cigar.cpp src/yaml.cpp
                         src/ksw2_extd2_sse.c src/ksw2_extz2_sse.c src/ksw2_extz.c
                         src/bam_md.c src/bam_aux.c src/gzstream.C)
 file(GLOB LIB_HEADERS   src/leviosam.hpp
-                        src/reconcile.hpp src/lift_bed.hpp src/collate.hpp src/chain.hpp
-                        src/leviosam_utils.hpp src/bed.hpp src/lift_bed.hpp src/aln.hpp
+                        src/reconcile.hpp src/lift_bed.hpp src/collate.hpp
+                        src/chain.hpp src/leviosam_utils.hpp src/bed.hpp
+                        src/lift_bed.hpp src/aln.hpp src/cigar.hpp
                         src/yaml.hpp src/rapidyaml.hpp
                         src/ksw.h
                         src/bam.h src/IITree.h src/gzstream.h)
@@ -247,6 +248,17 @@ target_link_libraries(chain_test ${SDSL_LIB})
 target_link_libraries(chain_test gtest gtest_main)
 
 add_test(NAME chain_test COMMAND chain_test
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/testdata
+)
+
+# cigar_test
+add_executable(cigar_test src/cigar_test.cpp)
+target_link_libraries(cigar_test lvsam)
+target_link_libraries(cigar_test ${HTS_LIB})
+target_link_libraries(cigar_test ${SDSL_LIB})
+target_link_libraries(cigar_test gtest gtest_main)
+
+add_test(NAME cigar_test COMMAND cigar_test
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/testdata
 )
 

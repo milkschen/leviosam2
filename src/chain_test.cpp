@@ -158,57 +158,6 @@ TEST(ChainTest, LiftCigarCoreOneRun) {
     EXPECT_EQ(bam_cigar_op(new_cigar[2]), BAM_CMATCH);
 }
 
-TEST(ChainTest, PushCigar) {
-    std::vector<uint32_t> cigar1;
-    chain::push_cigar(cigar1, 2, BAM_CMATCH, false);
-    chain::push_cigar(cigar1, 1, BAM_CMATCH, false);
-    EXPECT_EQ(cigar1.size(), 1);
-    EXPECT_EQ(bam_cigar_oplen(cigar1.back()), 3);
-    EXPECT_EQ(bam_cigar_op(cigar1.back()), BAM_CMATCH);
-
-    std::vector<uint32_t> cigar2;
-    chain::push_cigar(cigar2, 1, BAM_CINS, false);
-    chain::push_cigar(cigar2, 1, BAM_CDEL, false);
-    EXPECT_EQ(cigar2.size(), 1);
-    EXPECT_EQ(bam_cigar_oplen(cigar2.back()), 1);
-    EXPECT_EQ(bam_cigar_op(cigar2.back()), BAM_CMATCH);
-}
-
-TEST(ChainTest, SClipCigarFront1) {
-    // 5M -> 3S2M
-    std::vector<uint32_t> cigar;
-    chain::push_cigar(cigar, 5, BAM_CMATCH, false);
-    std::vector<uint32_t> new_cigar;
-    int idx = 0, q = 0;
-    chain::sclip_cigar_front(&cigar[0], cigar.size(), 3, new_cigar, idx, q);
-    EXPECT_EQ(new_cigar.size(), 1);
-    EXPECT_EQ(bam_cigar_oplen(new_cigar[0]), 3);
-    EXPECT_EQ(bam_cigar_op(new_cigar[0]), BAM_CSOFT_CLIP);
-    EXPECT_EQ(idx, 0);
-    EXPECT_EQ(q, 3);
-}
-
-TEST(ChainTest, SClipCigarFront2) {
-    // 4S2M -> 5S1M
-    std::vector<uint32_t> cigar;
-    chain::push_cigar(cigar, 4, BAM_CSOFT_CLIP, false);
-    chain::push_cigar(cigar, 2, BAM_CMATCH, false);
-    std::vector<uint32_t> new_cigar;
-    int idx = 0, q = 0;
-    chain::sclip_cigar_front(&cigar[0], cigar.size(), 5, new_cigar, idx, q);
-    EXPECT_EQ(new_cigar.size(), 1);
-    EXPECT_EQ(bam_cigar_oplen(new_cigar[0]), 5);
-    EXPECT_EQ(bam_cigar_op(new_cigar[0]), BAM_CSOFT_CLIP);
-    EXPECT_EQ(idx, 1);
-    EXPECT_EQ(q, 5);
-}
-
-TEST(ChainTest, SClipCigarBack) {
-    std::vector<uint32_t> cigar1;
-    chain::push_cigar(cigar1, 5, BAM_CMATCH, false);
-    std::vector<uint32_t> new_cigar1;
-}
-
 TEST(ChainTest, LiftCigar1) {
     std::vector<std::pair<std::string, int32_t>> lm;
     lm.push_back(std::make_pair("chr1", 248387328));

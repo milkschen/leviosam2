@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "bed.hpp"
+#include "cigar.hpp"
 #include "gzstream.h"
 
 #define SPLIT_MIN_MAPQ 30
@@ -116,9 +117,6 @@ class WriteDeferred {
         bed_commit_dest;
     float bed_isec_threshold = BED_ISEC_TH;
 };
-
-void update_cigar(bam1_t* aln, std::vector<uint32_t>& new_cigar);
-void debug_print_cigar(uint32_t* cigar, size_t n_cigar);
 
 /** @brief Remove the MN:i and MD:z tags from an alignment object. */
 void remove_nm_md_tag(bam1_t* aln);
