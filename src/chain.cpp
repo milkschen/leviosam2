@@ -881,7 +881,6 @@ bool ChainMap::lift_segment(bam1_t *aln, sam_hdr_t *hdr_source,
     int32_t num_sclip_start =
         get_num_clipped(pos, true, source_contig, start_sidx, start_eidx);
     if (verbose >= VERBOSE_DEBUG) {
-        // std::cerr << "\n" << bam_get_qname(aln) << "\n";
         debug_print_interval_queries(first_seg, true, source_contig, pos,
                                      start_sidx, start_eidx);
     }
@@ -909,8 +908,9 @@ bool ChainMap::lift_segment(bam1_t *aln, sam_hdr_t *hdr_source,
         c->mtid = sam_hdr_name2tid(hdr_dest, dest_contig.c_str());
 
     // Check if CONTIG is reasonable
+    if (first_seg && c->tid < 0) return false;
     // Only check mate if paired-end
-    if (c->tid < 0 || (c->flag & 1 && c->mtid < 0)) return false;
+    if (!first_seg && c->flag & 1 && c->mtid < 0) return false;
 
     // Gets the ending pos of the mate.
     //
@@ -1012,7 +1012,7 @@ bool ChainMap::lift_segment(bam1_t *aln, sam_hdr_t *hdr_source,
 
     // There can be cases where a position is lifted to a negative value,
     // in which we set the read to unmapped.
-    if (c->pos < 0) {
+    if (first_seg && c->pos < 0) {
         std::cerr << "[W::chain::lift_segment] Read " << bam_get_qname(aln)
                   << " is lifted to a negative position (" << c->pos
                   << "). Set it to unmapped\n";
@@ -1024,7 +1024,7 @@ bool ChainMap::lift_segment(bam1_t *aln, sam_hdr_t *hdr_source,
         }
         c->pos = 0;
         return false;
-    } else if ((c->flag & BAM_FPAIRED) && c->mpos < 0) {
+    } else if (!first_seg & (c->flag & BAM_FPAIRED) && c->mpos < 0) {
         // Invalid mate positions can be benign since there's no CIGAR
         // information to add SOFT_CLIP based in the beginning. We report these
         // as INFO but not WARNING
@@ -1065,8 +1065,10 @@ void ChainMap::lift_aln(bam1_t *aln, sam_hdr_t *hdr_source, sam_hdr_t *hdr_dest,
         std::string null_mdest_contig;
         bool r2_liftable =
             lift_segment(aln, hdr_source, hdr_dest, false, null_mdest_contig);
-        if (!r2_liftable)
+        if (!r2_liftable) {
             LevioSamUtils::update_flag_unmap(aln, false, keep_mapq);
+            LevioSamUtils::remove_aux_tag(aln, "MC");
+        }
 
         // We currently don't use the "unliftable" category -
         // an unliftable read is considered as unmapped.
