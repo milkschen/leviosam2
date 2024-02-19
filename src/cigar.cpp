@@ -11,6 +11,40 @@
  */
 #include "cigar.hpp"
 
+/**
+ * Reduces the size of a BAM object, usually after another data change.
+ * Adapted from
+ * https://github.com/samtools/htslib/blob/4ff46a6f609fbf886457bbab0f3253446b46a541/sam.c#L429
+ *
+ * @param b A BAM object.
+ * @param desired Number of bytes to trim.
+ * @return 0 if successful; -1 if failed.
+ */
+int _realloc_bam_data(bam1_t* b, size_t desired) {
+    uint32_t new_m_data;
+    uint8_t* new_data;
+    new_m_data = desired;
+    kroundup32(new_m_data);
+    if (new_m_data < desired) {
+        errno = ENOMEM;  // Not strictly true but we can't store the size
+        return -1;
+    }
+    if ((bam_get_mempolicy(b) & BAM_USER_OWNS_DATA) == 0) {
+        new_data = static_cast<uint8_t*>(realloc(b->data, new_m_data));
+    } else {
+        if ((new_data = static_cast<uint8_t*>(malloc(new_m_data))) != NULL) {
+            if (b->l_data > 0)
+                memcpy(new_data, b->data,
+                       b->l_data < b->m_data ? b->l_data : b->m_data);
+            bam_set_mempolicy(b, bam_get_mempolicy(b) & (~BAM_USER_OWNS_DATA));
+        }
+    }
+    if (!new_data) return -1;
+    b->data = new_data;
+    b->m_data = new_m_data;
+    return 0;
+}
+
 namespace Cigar {
 /**
  * Updates a cigar vector.
@@ -21,25 +55,25 @@ namespace Cigar {
  * @param cigar The CIGAR object to be updated.
  * @param len The length of the new CIGAR element.
  * @param op The operator of the new CIGAR element.
- * @param no_reduct Set to true to disable CIGAR operator reduction.
+ * @param no_reduce Set to true to disable CIGAR operator reduction.
  */
-void push_cigar(std::vector<uint32_t>& cigar, uint32_t len, uint16_t op,
-                const bool no_reduct = false) {
+void push_cigar(CigarVector& cigar_vec, uint32_t len, uint16_t op,
+                const bool no_reduce = false) {
     if (len == 0) return;
-    if (cigar.size() == 0 || no_reduct) {
-        cigar.push_back(bam_cigar_gen(len, op));
+    if (cigar_vec.size() == 0 || no_reduce) {
+        cigar_vec.push_back(bam_cigar_gen(len, op));
         return;
     }
-    auto back_op = bam_cigar_op(cigar.back());
+    auto back_op = bam_cigar_op(cigar_vec.back());
     auto back_type = bam_cigar_type(back_op);
-    auto back_len = bam_cigar_oplen(cigar.back());
+    auto back_len = bam_cigar_oplen(cigar_vec.back());
     auto op_type = bam_cigar_type(op);
     // If operators are the same, merge
     // We also merge S-I/I-S cases
     // We don't merge N-D, H-P because they might mean differently
     if (back_op == op || (back_type == 1 && op_type == 1)) {
         len += back_len;
-        cigar.back() = bam_cigar_gen(len, back_op);
+        cigar_vec.back() = bam_cigar_gen(len, back_op);
         // Cancel out complementary operators
     } else if ((back_type == 2 && op_type == 1) ||
                (back_type == 1 && op_type == 2)) {
@@ -50,27 +84,31 @@ void push_cigar(std::vector<uint32_t>& cigar, uint32_t len, uint16_t op,
             return;
         }
         if (len == back_len) {
-            cigar.pop_back();
-            push_cigar(cigar, len, BAM_CMATCH, false);
+            cigar_vec.pop_back();
+            push_cigar(cigar_vec, len, BAM_CMATCH, false);
         } else if (len > back_len) {
             len -= back_len;
-            cigar.back() = bam_cigar_gen(back_len, BAM_CMATCH);
-            cigar.push_back(bam_cigar_gen(len, op));
+            cigar_vec.back() = bam_cigar_gen(back_len, BAM_CMATCH);
+            cigar_vec.push_back(bam_cigar_gen(len, op));
         } else {
             back_len -= len;
-            cigar.back() = bam_cigar_gen(back_len, back_op);
-            cigar.push_back(bam_cigar_gen(len, BAM_CMATCH));
+            cigar_vec.back() = bam_cigar_gen(back_len, back_op);
+            cigar_vec.push_back(bam_cigar_gen(len, BAM_CMATCH));
         }
     } else
-        cigar.push_back(bam_cigar_gen(len, op));
+        cigar_vec.push_back(bam_cigar_gen(len, op));
 }
 
-/* Pop `size` bases from a CIGAR (represented as a vector)
+/**
+ * Pops `size` bases (from the back) of a cigar vector.
+ *
+ * @param cigar_vec
+ * @param size
  */
-void pop_cigar(std::vector<uint32_t>& cigar, uint32_t size) {
+void pop_cigar(CigarVector& cigar_vec, uint32_t size) {
     while (size > 0) {
-        auto cg = cigar.back();
-        cigar.pop_back();
+        auto cg = cigar_vec.back();
+        cigar_vec.pop_back();
         auto cigar_op_len = bam_cigar_oplen(cg);
         auto cigar_op = bam_cigar_op(cg);
         // Check if the last operator consumes REF; if it doesn't, just pop it
@@ -78,7 +116,7 @@ void pop_cigar(std::vector<uint32_t>& cigar, uint32_t size) {
             if (cigar_op_len > size) {
                 cigar_op_len -= size;
                 size = 0;
-                push_cigar(cigar, cigar_op_len, cigar_op, false);
+                push_cigar(cigar_vec, cigar_op_len, cigar_op, false);
             } else if (cigar_op_len == size) {
                 size = 0;
             } else {
@@ -86,10 +124,12 @@ void pop_cigar(std::vector<uint32_t>& cigar, uint32_t size) {
             }
         }
     }
+    // TODO: handles the scenario where `size` is greater than
+    // the length of the cigar vector.
 }
 
 void sclip_cigar_front(uint32_t* cigar, const uint32_t& n_cigar, int len_clip,
-                       std::vector<uint32_t>& new_cigar, int& idx,
+                       CigarVector& new_cigar_vec, int& idx,
                        int& query_offset) {
     if (len_clip == 0) return;
 
@@ -104,7 +144,7 @@ void sclip_cigar_front(uint32_t* cigar, const uint32_t& n_cigar, int len_clip,
             // usage.
             if (cigar_op_len >= len_clip) {
                 cigar_op_len -= len_clip;
-                push_cigar(new_cigar, len_clip, BAM_CSOFT_CLIP, false);
+                push_cigar(new_cigar_vec, len_clip, BAM_CSOFT_CLIP, false);
                 query_offset += len_clip;
                 // Update `idx` so that we don't need to revisit
                 // previous CIGAR OPs.
@@ -116,7 +156,7 @@ void sclip_cigar_front(uint32_t* cigar, const uint32_t& n_cigar, int len_clip,
                 }
                 return;
             } else {
-                push_cigar(new_cigar, cigar_op_len, BAM_CSOFT_CLIP, false);
+                push_cigar(new_cigar_vec, cigar_op_len, BAM_CSOFT_CLIP, false);
                 query_offset += cigar_op_len;
                 len_clip -= cigar_op_len;
             }
@@ -124,14 +164,14 @@ void sclip_cigar_front(uint32_t* cigar, const uint32_t& n_cigar, int len_clip,
     }
 }
 
-void sclip_cigar_back(std::vector<uint32_t>& cigar, int len_clip) {
+void sclip_cigar_back(CigarVector& cigar_vec, int len_clip) {
     if (len_clip == 0) return;
 
     int remaining_lc = len_clip;
-    for (int i = cigar.size() - 1; i >= 0; i--) {
-        auto cigar_op_len = bam_cigar_oplen(cigar[i]);
-        auto cigar_op = bam_cigar_op(cigar[i]);
-        cigar.pop_back();
+    for (int i = cigar_vec.size() - 1; i >= 0; i--) {
+        auto cigar_op_len = bam_cigar_oplen(cigar_vec[i]);
+        auto cigar_op = bam_cigar_op(cigar_vec[i]);
+        cigar_vec.pop_back();
         // Only replace bases that consume the QUERY with the SOFT_CLIP ("S")
         // operator
         if (bam_cigar_type(cigar_op) & 1) {
@@ -139,8 +179,8 @@ void sclip_cigar_back(std::vector<uint32_t>& cigar, int len_clip) {
                 // If a CIGAR OP is longer than #clipped, append clipped bases
                 // to the updated CIGAR and truncate the original CIGAR.
                 cigar_op_len -= remaining_lc;
-                push_cigar(cigar, cigar_op_len, cigar_op, false);
-                push_cigar(cigar, len_clip, BAM_CSOFT_CLIP, false);
+                push_cigar(cigar_vec, cigar_op_len, cigar_op, false);
+                push_cigar(cigar_vec, len_clip, BAM_CSOFT_CLIP, false);
                 return;
             } else if (cigar_op == BAM_CMATCH) {
                 // If a CIGAR OP is not long enough, shorten `remaining_lc`
@@ -158,14 +198,39 @@ void sclip_cigar_back(std::vector<uint32_t>& cigar, int len_clip) {
     }
 }
 
-void update_cigar(bam1_t* aln, std::vector<uint32_t>& new_cigar) {
+/**
+ * Sets the cigar string of a BAM record to be empty ("*").
+ *
+ * @param aln A BAM object.
+ * @return
+ */
+int set_empty_cigar(bam1_t* aln) {
+    uint32_t prev_n_cigar = aln->core.n_cigar;
+    size_t new_m_data = (size_t)aln->l_data - prev_n_cigar * 4;
+
+    // Move data to the correct place.
+    // Info in the `data` field:
+    //   `c = aln->core; d = aln->data;`
+    //   qname: `d` to `d + c.l_qname`
+    //   cigar: `d + c.l_qname` to `d + c.l_qname + c.n_cigar<<2`
+    // Here everything after the old CIGAR is moved to right after QNAME.
+    memmove(aln->data + aln->core.l_qname,
+            aln->data + aln->core.l_qname + prev_n_cigar * 4,
+            new_m_data - aln->core.l_qname);
+    int ret = _realloc_bam_data(aln, new_m_data);
+    aln->core.n_cigar = 0;
+    aln->l_data -= prev_n_cigar * 4;
+    return ret;
+}
+
+void update_cigar(bam1_t* aln, CigarVector& new_cigar_vec) {
     uint32_t* cigar = bam_get_cigar(aln);
     // Adapted from samtools/sam.c
     // https://github.com/samtools/htslib/blob/2264113e5df1946210828e45d29c605915bd3733/sam.c#L515
-    if (aln->core.n_cigar != new_cigar.size()) {
+    if (aln->core.n_cigar != new_cigar_vec.size()) {
         auto cigar_st = (uint8_t*)bam_get_cigar(aln) - aln->data;
         auto fake_bytes = aln->core.n_cigar * 4;
-        aln->core.n_cigar = (uint32_t)new_cigar.size();
+        aln->core.n_cigar = (uint32_t)new_cigar_vec.size();
         auto n_cigar4 = aln->core.n_cigar * 4;
         auto orig_len = aln->l_data;
         if (n_cigar4 > fake_bytes) {
@@ -201,10 +266,10 @@ void update_cigar(bam1_t* aln, std::vector<uint32_t>& new_cigar) {
             memcpy(aln->data + cigar_st,
                    aln->data + (n_cigar4 - fake_bytes) + 8, n_cigar4);
         }
-        aln->core.n_cigar = new_cigar.size();
+        aln->core.n_cigar = new_cigar_vec.size();
     }
     for (int i = 0; i < aln->core.n_cigar; i++) {
-        *(cigar + i) = new_cigar[i];
+        *(cigar + i) = new_cigar_vec[i];
     }
 }
 

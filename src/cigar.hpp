@@ -17,17 +17,21 @@
 #include <iostream>
 #include <vector>
 
+int _realloc_bam_data(bam1_t* b, size_t desired);
+
 namespace Cigar {
 
-void push_cigar(std::vector<uint32_t>& cigar, uint32_t len, uint16_t op,
-                const bool no_reduct);
-void pop_cigar(std::vector<uint32_t>& cigar, uint32_t size);
-void sclip_cigar_front(uint32_t* cigar, const uint32_t& n_cigar, int len_clip,
-                       std::vector<uint32_t>& new_cigar, int& idx,
-                       int& query_offset);
-void sclip_cigar_back(std::vector<uint32_t>& new_cigar, int len_clip);
+using CigarVector = std::vector<uint32_t>;
 
-void update_cigar(bam1_t* aln, std::vector<uint32_t>& new_cigar);
+/// Adds a cigar element to a cigar vector.
+void push_cigar(CigarVector& cigar_vec, uint32_t len, uint16_t op,
+                const bool no_reduce);
+void pop_cigar(CigarVector& cigar_vec, uint32_t size);
+void sclip_cigar_front(uint32_t* cigar, const uint32_t& n_cigar, int len_clip,
+                       CigarVector& new_cigar_vec, int& idx, int& query_offset);
+void sclip_cigar_back(CigarVector& cigar_vec, int len_clip);
+int set_empty_cigar(bam1_t* aln);
+void update_cigar(bam1_t* aln, CigarVector& new_cigar_vec);
 void debug_print_cigar(uint32_t* cigar, size_t n_cigar);
 
 }  // namespace Cigar
