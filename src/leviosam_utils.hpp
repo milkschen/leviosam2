@@ -22,7 +22,6 @@
 #include <vector>
 
 #include "bed.hpp"
-#include "cigar.hpp"
 #include "gzstream.h"
 
 #define SPLIT_MIN_MAPQ 30
@@ -118,10 +117,13 @@ class WriteDeferred {
     float bed_isec_threshold = BED_ISEC_TH;
 };
 
-/** @brief Remove the MN:i and MD:z tags from an alignment object. */
+/// Removes the MN:i and MD:z tags from a BAM object.
 void remove_nm_md_tag(bam1_t* aln);
 
-/** @brief Gets the reference length of the mate segment. */
+/// Removes the MC:z tag from a BAM object.
+void remove_aux_tag(bam1_t* aln, const std::string tag);
+
+/// Gets the reference length of the mate segment.
 hts_pos_t get_mate_query_len_on_ref(const bam1_t* aln);
 
 std::string get_forward_read(const bam1_t* rec);
@@ -133,15 +135,17 @@ std::vector<std::string> str_to_vector(const std::string str,
 std::set<std::string> str_to_set(const std::string str,
                                  const std::string regex_str);
 
-/** @brief Returns true if a bam record is reversely lifted. */
+/// Returns true if a bam record is reversely lifted.
 bool is_reversedly_lifted(bam1_t* aln_orig, bam1_t* aln_lft);
 
-/** @brief Updates BAM tags specific to Ultima Genomics. */
+/// Updates BAM tags specific to Ultima Genomics.
 void update_ultima_genomics_tags(bam1_t* aln, bool rev);
 
 int reverse_seq_and_qual(bam1_t* aln);
 sam_hdr_t* fai_to_hdr(std::string fai_fn, const sam_hdr_t* const hdr_orig);
 std::vector<std::pair<std::string, int32_t>> fai_to_map(std::string fai_fn);
+void _realloc_bam_data(bam1_t* b, size_t desired);
+
 sam_hdr_t* lengthmap_to_hdr(std::vector<std::pair<std::string, int32_t>> lm,
                             const sam_hdr_t* const hdr_orig);
 

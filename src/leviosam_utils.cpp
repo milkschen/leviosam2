@@ -199,6 +199,13 @@ void remove_nm_md_tag(bam1_t* aln) {
     }
 }
 
+void remove_aux_tag(bam1_t* aln, const std::string tag) {
+    uint8_t* ptr = NULL;
+    if ((ptr = bam_aux_get(aln, tag.c_str())) != NULL) {
+        bam_aux_del(aln, ptr);
+    }
+}
+
 /** Gets the reference length of the mate segment.
  *
  * Leverages the "MC:Z" flag when available. If not, infers the query length.
@@ -512,6 +519,39 @@ sam_hdr_t* fai_to_hdr(std::string fai_fn, const sam_hdr_t* const hdr_orig) {
     }
     fai_fp.close();
     return hdr;
+}
+
+/**
+ * Reduces the size of a BAM object, usually after another data change.
+ * Adapted from
+ * https://github.com/samtools/htslib/blob/4ff46a6f609fbf886457bbab0f3253446b46a541/sam.c#L429
+ *
+ * @param b A BAM object.
+ * @param desired Number of bytes to trim.
+ */
+void _realloc_bam_data(bam1_t* b, size_t desired) {
+    uint32_t new_m_data;
+    uint8_t* new_data;
+    new_m_data = desired;
+    kroundup32(new_m_data);
+    if (new_m_data < desired) {
+        errno = ENOMEM;  // Not strictly true but we can't store the size
+        throw std::runtime_error(
+            "Failed to realloc BAM data - cannot allocate memory");
+    }
+    if ((bam_get_mempolicy(b) & BAM_USER_OWNS_DATA) == 0) {
+        new_data = static_cast<uint8_t*>(realloc(b->data, new_m_data));
+    } else {
+        if ((new_data = static_cast<uint8_t*>(malloc(new_m_data))) != NULL) {
+            if (b->l_data > 0)
+                memcpy(new_data, b->data,
+                       b->l_data < b->m_data ? b->l_data : b->m_data);
+            bam_set_mempolicy(b, bam_get_mempolicy(b) & (~BAM_USER_OWNS_DATA));
+        }
+    }
+    if (!new_data) throw std::runtime_error("Failed to realloc BAM data");
+    b->data = new_data;
+    b->m_data = new_m_data;
 }
 
 // Serialize a `vector<pair<string, int32_t>>` object
