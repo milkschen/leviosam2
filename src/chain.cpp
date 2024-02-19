@@ -1054,6 +1054,7 @@ void ChainMap::lift_aln(bam1_t *aln, sam_hdr_t *hdr_source, sam_hdr_t *hdr_dest,
         lift_segment(aln, hdr_source, hdr_dest, true, dest_contig);
     if (!r1_liftable) {
         LevioSamUtils::update_flag_unmap(aln, true, keep_mapq);
+        Cigar::set_empty_cigar(aln);
     }
 
     size_t lift_status;
