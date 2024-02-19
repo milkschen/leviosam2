@@ -67,33 +67,34 @@ TEST(CigarTest, SClipCigarBack) {
     Cigar::CigarVector new_cigar1;
 }
 
-// TEST(CigarTest, SetEmptyCigar) {
-//     std::string hdr_str = "@HD\tVN:1.0\tSO:unsorted\n@SQ\tSN:chr1\tLN:10000";
-//     sam_hdr_t* sam_hdr = sam_hdr_parse(hdr_str.length(), &hdr_str[0]);
-//     bam1_t* aln = bam_init1();
+TEST(CigarTest, SetEmptyCigar) {
+    std::string hdr_str = "@HD\tVN:1.0\tSO:unsorted\n@SQ\tSN:chr1\tLN:10000";
+    sam_hdr_t* sam_hdr = sam_hdr_parse(hdr_str.length(), &hdr_str[0]);
+    bam1_t* aln = bam_init1();
 
-//     std::string record1 =
-//         "read1\t81\tchr1\t100\t33\t6S10M\t"
-//         "=\t300\t0\tATTACATTCCATTCCA\t~~~~~~~~~~~~~~~~\tMC:Z:10M\tNM:i:0";
-//     kstring_t str1;
-//     str1.s = (char*)record1.c_str();
-//     str1.l = record1.length();
-//     str1.m = kstr_get_m(str1.l);
-//     EXPECT_GE(sam_parse1(&str1, sam_hdr, aln), 0);
+    std::string record1 =
+        "read1\t81\tchr1\t100\t33\t6S10M\t"
+        "=\t300\t0\tATTACATTCCATTCCA\t~~~~~~~~~~~~~~~~\tMC:Z:10M\tNM:i:0";
+    kstring_t str1;
+    str1.s = (char*)record1.c_str();
+    str1.l = record1.length();
+    str1.m = kstr_get_m(str1.l);
+    EXPECT_GE(sam_parse1(&str1, sam_hdr, aln), 0);
 
-//     EXPECT_GE(Cigar::set_empty_cigar(aln), 0);
-//     bam_destroy1(aln);
+    EXPECT_GE(Cigar::set_empty_cigar(aln), 0);
+    bam_destroy1(aln);
 
-//     record1 =
-//         "read2\t81\tchr1\t100\t33\t2S3M2I2M2D7M1H\t"
-//         "=\t300\t0\tATTACATTCCATTCCA\t~~~~~~~~~~~~~~~~\tMC:Z:10M\tNM:i:0";
-//     str1.s = (char*)record1.c_str();
-//     str1.l = record1.length();
-//     str1.m = kstr_get_m(str1.l);
-//     EXPECT_EQ(sam_parse1(&str1, sam_hdr, aln), 0);
-//     EXPECT_GE(Cigar::set_empty_cigar(aln), 0);
-//     bam_destroy1(aln);
-// }
+    aln = bam_init1();
+    record1 =
+        "read2\t81\tchr1\t100\t33\t2S3M2I2M2D7M1H\t"
+        "=\t300\t0\tATTACATTCCATTCCA\t~~~~~~~~~~~~~~~~\tMC:Z:10M\tNM:i:0";
+    str1.s = (char*)record1.c_str();
+    str1.l = record1.length();
+    str1.m = kstr_get_m(str1.l);
+    EXPECT_EQ(sam_parse1(&str1, sam_hdr, aln), 0);
+    EXPECT_GE(Cigar::set_empty_cigar(aln), 0);
+    bam_destroy1(aln);
+}
 
 TEST(CigarTest, UpdateCigar) {
     std::string hdr_str =
