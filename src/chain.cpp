@@ -106,7 +106,7 @@ ChainMap::ChainMap(std::string fname, int verbose, int allowed_intvl_gaps,
         while (getline(chain_f, line)) {
             parse_chain_line(line, source, target, source_len, source_offset,
                              target_offset, current_ss, start_bv_map,
-                             end_bv_map);
+                             end_bv_map, lm);
         }
         chain_f.close();
     }
@@ -261,20 +261,48 @@ void ChainMap::init_rs() {
     }
 }
 
+/**
+ * Validates if the chain and taget fasta index (.fai) files are concordant.
+ *
+ * @param target target chromosome name
+ * @param target_len target chromosome length from the chain record
+ * @param length_map length map (built from the fasta.fai index)
+ */
+void ChainMap::validate_chain_target_chromosome(const std ::string &target,
+                                                const int32_t &target_len,
+                                                const LengthMap &length_map) {
+    for (auto &x : length_map) {
+        if (x.first == target && x.second != target_len) {
+            std::cerr << "[E::chain::parse_chain_line] Mismatched "
+                         "target chromosome length between the fasta "
+                         "index (-F) and the chain file (-c). One "
+                         "potential fix is to invert the target and "
+                         "query chains in the input chain file (-c). "
+                         "Note that levioSAM2 uses the \"target\" "
+                         "chain as the source genome and the \"query\" "
+                         "chain as the destination genome. \n";
+            std::cerr << "target chromosome: " << target << "\n";
+            std::cerr << "target length (chain file): " << target_len << "\n";
+            std::cerr << "target length (fasta.fai file): " << x.second << "\n";
+            exit(1);
+        }
+    }
+}
+
 /* Parse a chain line and update the ChainMap
  */
 void ChainMap::parse_chain_line(std::string line, std::string &source,
                                 std::string &target, int32_t &source_len,
                                 int32_t &source_offset, int32_t &target_offset,
                                 bool &strand, BitVectorMap &start_bv_map,
-                                BitVectorMap &end_bv_map) {
+                                BitVectorMap &end_bv_map,
+                                const LengthMap &length_map) {
     // Split `line` using space as deliminater.
     std::regex s_re("\\s+");  // space
     std::vector<std::string> vec(
         std::sregex_token_iterator(line.begin(), line.end(), s_re, -1),
         std::sregex_token_iterator());
 
-    int32_t target_len;
     try {
         if (vec[0] == "chain") {
             if (vec.size() != 13) {
@@ -287,13 +315,12 @@ void ChainMap::parse_chain_line(std::string line, std::string &source,
             source = vec[2];
             target = vec[7];
             source_len = stoi(vec[3]);
-            target_len = stoi(vec[8]);
+            int32_t target_len = stoi(vec[8]);
             strand = (vec[4] == vec[9]);
             source_offset = stoi(vec[5]);
             target_offset =
                 (strand) ? stoi(vec[10]) : target_len - stoi(vec[10]);
-            // length_map.insert(
-            //     std::pair<std::string, int32_t>(target, target_len));
+            validate_chain_target_chromosome(target, target_len, length_map);
             init_bitvectors(source, source_len, start_bv_map, end_bv_map);
         } else if (vec[0] != "") {
             int32_t s_int_start = source_offset;
