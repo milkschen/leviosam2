@@ -7,8 +7,6 @@ if [[ -z ${VER} ]]; then
     exit
 fi
 
-exit
-
 # build the environment image
 cd env
 docker build --tag leviosam2_env .
