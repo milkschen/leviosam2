@@ -49,12 +49,16 @@ TEST(ChainTest, ParseChainLineCornerZero) {
     int source_offset = 0, target_offset = 0, source_len = 0;
     bool current_ss = true;
     chain::ChainMap cmap;
+    chain::LengthMap lmap{std::make_pair("corner_zero_dest", 300)};
     cmap.parse_chain_line(hdr, source, target, source_len, source_offset,
-                          target_offset, current_ss, start_bv_map, end_bv_map);
+                          target_offset, current_ss, start_bv_map, end_bv_map,
+                          lmap);
     cmap.parse_chain_line(line1, source, target, source_len, source_offset,
-                          target_offset, current_ss, start_bv_map, end_bv_map);
+                          target_offset, current_ss, start_bv_map, end_bv_map,
+                          lmap);
     cmap.parse_chain_line(line2, source, target, source_len, source_offset,
-                          target_offset, current_ss, start_bv_map, end_bv_map);
+                          target_offset, current_ss, start_bv_map, end_bv_map,
+                          lmap);
 
     for (auto &i : start_bv_map) {
         EXPECT_EQ(i.first, "corner_zero");

@@ -102,7 +102,8 @@ class ChainMap {
                           std::string &target, int32_t &source_len,
                           int32_t &source_offset, int32_t &target_offset,
                           bool &strand, BitVectorMap &start_bv_map,
-                          BitVectorMap &end_bv_map);
+                          BitVectorMap &end_bv_map,
+                          const LengthMap &length_map);
 
     // Checks the gap size between the intervals overlapped with an alignment.
     bool check_multi_intvl_legality(const std::string &source_contig,
@@ -129,6 +130,10 @@ class ChainMap {
                                                     const bam1_core_t *const c,
                                                     const int &start_sidx,
                                                     const int &end_sidx);
+
+    void validate_chain_target_chromosome(const std ::string &target,
+                                          const int32_t &target_len,
+                                          const LengthMap &length_map);
 
     // Debug functions
     void debug_print_interval_queries(const bool first_seg, const bool leftmost,
