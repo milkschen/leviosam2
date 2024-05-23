@@ -24,8 +24,8 @@
 
 #include "aln.hpp"
 #include "bed.hpp"
-#include "cigar.hpp"
 #include "chain.hpp"
+#include "cigar.hpp"
 #include "leviosam_utils.hpp"
 #include "version.hpp"
 #include "yaml.hpp"
@@ -38,6 +38,7 @@
 #define OPT_HELP 1000
 #define OPT_VERSION 1001
 #define OPT_KEEP_MAPQ 1002
+#define OPT_HTS_THREADS 1101
 #define OPT_ULTIMA_GENOMICS 2001
 
 using NameMap = std::vector<std::pair<std::string, std::string>>;
@@ -69,6 +70,7 @@ struct lift_opts {
     std::vector<std::pair<std::string, float>> split_rules;
     int allowed_cigar_changes = 0;
     int threads = 1;
+    int hts_threads = 0;
     int chunk_size = 256;
     int verbose = 0;
     int md_flag = 0;

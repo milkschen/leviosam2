@@ -360,6 +360,10 @@ void lift_run(lift_opts args) {
     samFile *sam_fp = (args.sam_fname == "")
                           ? sam_open("-", "r")
                           : sam_open(args.sam_fname.data(), "r");
+
+    // Gets extra threads to decompress HTS files when requested
+    if (args.hts_threads > 0) hts_set_threads(sam_fp, args.hts_threads);
+
     if (!sam_fp) {
         std::cerr << "[E::lift_run] Invalid alignment input\n";
         exit(1);
@@ -377,6 +381,8 @@ void lift_run(lift_opts args) {
         std::cerr << "[E::lift_run] Invalid alignment output\n";
         exit(1);
     }
+    // Gets extra threads to compress HTS files when requested
+    if (args.hts_threads > 0) hts_set_threads(out_sam_fp, args.hts_threads);
 
     sam_hdr_t *hdr_orig = sam_hdr_read(sam_fp);
     if (!hdr_orig) {
@@ -591,6 +597,7 @@ int main(int argc, char **argv) {
         {"vcf", required_argument, 0, 'v'},
         {"verbose", required_argument, 0, 'V'},
         {"realign_yaml", required_argument, 0, 'x'},
+        {"hts_threads", required_argument, 0, OPT_HTS_THREADS},
         {"ultima_genomics", no_argument, 0, OPT_ULTIMA_GENOMICS},
         {"help", no_argument, 0, OPT_HELP},
         {"version", no_argument, 0, OPT_VERSION},
