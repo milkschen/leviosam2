@@ -100,7 +100,7 @@ uint8_t update_thread_allocation(lift_opts &args) {
                      ">= 1.\n";
         return 1;
     }
-    if (args.threads != DEFAULT_NUM_THREADS) {
+    if (args.threads > DEFAULT_NUM_THREADS) {
         if (args.lift_threads != DEFAULT_NUM_LIFT_THREADS ||
             args.hts_threads != DEFAULT_NUM_HTS_THREADS) {
             std::cerr << "[E::update_thread_allocation] There are two ways to "
@@ -531,31 +531,35 @@ void print_lift_help_msg() {
                  "                   If -t is not set, the value would "
                  "be the sum of\n"
                  "                   --hts_threads and --lift_threads. [1] \n";
-    std::cerr << "         --lift_threads INT Number of threads used for "
-                 "lifting reads. \n"
-                 "                            If -t is set, the value should "
-                 "be left unset.\n"
-                 "                            The value would be inferred as "
-                 "`t - max(1, "
-                 "t/4)`. [1]\n";
-    std::cerr << "         --hts_threads INT Number of threads used to \n"
-                 "                           compress/decompress HTS "
-                 "files. This can improve thread scaling.\n"
-                 "                           If -t is set, the value should "
-                 "be left unset.\n"
-                 "                           The value would be inferred as "
-                 "`max(1, t/4)`. [0]\n";
-    std::cerr << "         -m        add MD and NM to output alignment records "
-                 "(requires -f option)\n";
-    std::cerr << "         -f path   Path to the FASTA file of the target "
-                 "reference. \n";
+    std::cerr << "         --lift_threads INT "
+                 "Number of threads used for lifting reads. \n"
+                 "                            "  // align
+                 "If -t is set, the value should be left unset.\n"
+                 "                            "  // align
+                 "The value would be inferred as `t - max(1, t/4)`. [1]\n";
+    std::cerr << "         --hts_threads INT "
+                 "Number of threads used to compress/decompress HTS files.\n"
+                 "                           "  // align
+                 "This can improve thread scaling.\n"
+                 "                           "  // align
+                 "If -t is set, the value should be left unset.\n"
+                 "                           "  // align
+                 "The value would be inferred as `max(1, t/4)`. [0]\n";
+    std::cerr << "         -m        "
+                 "Add MD and NM to output alignment records (requires -f)\n";
+    std::cerr << "         -f path   "
+                 "Path to the FASTA file of the target reference. \n";
     std::cerr << "         -x path   Re-alignment preset. [] \n";
-    std::cerr << "         -G INT    Number of allowed CIGAR changes (in base "
-                 "pairs) for one alignment. [0]\n";
-    std::cerr << "         -T INT    Chunk size for each thread. [256] \n";
-    std::cerr << "                   Each thread queries <-T> reads, lifts, "
-                 "and writes.\n";
-    std::cerr << "                   Setting a higher <-T> uses slightly more "
+    std::cerr << "         -G INT    "
+                 "Number of allowed CIGAR changes (in base pairs) for one "
+                 "alignment. [0]\n";
+    std::cerr << "         -T INT    "
+                 "Chunk size for each thread. [256] \n"
+                 "                   "  // align
+                 "Each thread queries <-T> reads, lifts, "
+                 "and writes.\n"
+                 "                   "  // align
+                 "Setting a larger -T uses slightly more "
                  "memory but might benefit thread scaling.\n";
     std::cerr << "\n";
     std::cerr << "         Commit/defer rule options:\n";
