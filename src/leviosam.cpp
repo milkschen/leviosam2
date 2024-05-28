@@ -88,7 +88,7 @@ bool add_split_rule(std::vector<std::pair<std::string, float>> &split_rules,
  * --hts_threads and --lift_threads is set, exits with an error message.
  *
  * If only --threads is set, dynamically assigns --hts_threads to
- * max(0, --threads/4) and --lift_threads to be --threads - --hts_threads.
+ * max(1, --threads/4) and --lift_threads to be --threads - --hts_threads.
  * Or updates --threads to be the sum of --hts_threads and --lift_threads.
  *
  * @param args leviosam2 arguments
@@ -105,13 +105,13 @@ uint8_t update_thread_allocation(lift_opts &args) {
             args.hts_threads != DEFAULT_NUM_HTS_THREADS) {
             std::cerr << "[E::update_thread_allocation] There are two ways to "
                          "set the number of threads: (1) set --threads (-t). "
-                         "With this approach, leviosam2 assigns `max(0, t/4)` "
+                         "With this approach, leviosam2 assigns `max(1, t/4)` "
                          "threads to (de)compress I/O files and the rest to "
                          "the lift core. (2) set --hts_threads and/or "
                          "--lift_threads separately.\n";
             return 1;
         }
-        args.hts_threads = std::max(0, args.threads / 4);
+        args.hts_threads = std::max(1, args.threads / 4);
         args.lift_threads = args.threads - args.hts_threads;
     } else if (args.lift_threads != DEFAULT_NUM_LIFT_THREADS ||
                args.hts_threads != DEFAULT_NUM_HTS_THREADS) {
@@ -536,14 +536,15 @@ void print_lift_help_msg() {
                  "                            If -t is set, the value should "
                  "be left unset.\n"
                  "                            The value would be inferred as "
-                 "`t - max(0, t/4)`. [1]\n";
+                 "`t - max(1, "
+                 "t/4)`. [1]\n";
     std::cerr << "         --hts_threads INT Number of threads used to \n"
                  "                           compress/decompress HTS "
                  "files. This can improve thread scaling.\n"
                  "                           If -t is set, the value should "
                  "be left unset.\n"
                  "                           The value would be inferred as "
-                 "`max(0, t/4)`. [0]\n";
+                 "`max(1, t/4)`. [0]\n";
     std::cerr << "         -m        add MD and NM to output alignment records "
                  "(requires -f option)\n";
     std::cerr << "         -f path   Path to the FASTA file of the target "
