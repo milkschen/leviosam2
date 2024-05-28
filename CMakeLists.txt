@@ -229,14 +229,14 @@ add_subdirectory(${CMAKE_CURRENT_BINARY_DIR}/googletest-src
                  ${CMAKE_CURRENT_BINARY_DIR}/googletest-build
                  EXCLUDE_FROM_ALL)
 
-# leviosam_test
-add_executable(leviosam_test src/leviosam_test.cpp)
-target_link_libraries(leviosam_test lvsam)
-target_link_libraries(leviosam_test ${HTS_LIB})
-target_link_libraries(leviosam_test ${SDSL_LIB})
-target_link_libraries(leviosam_test gtest gtest_main)
+# leviosam_utils_test
+add_executable(leviosam_utils_test src/leviosam_utils_test.cpp)
+target_link_libraries(leviosam_utils_test lvsam)
+target_link_libraries(leviosam_utils_test ${HTS_LIB})
+target_link_libraries(leviosam_utils_test ${SDSL_LIB})
+target_link_libraries(leviosam_utils_test gtest gtest_main)
 
-add_test(NAME leviosam_test COMMAND leviosam_test
+add_test(NAME leviosam_utils_test COMMAND leviosam_utils_test
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/testdata
 )
 

@@ -24,8 +24,8 @@
 
 #include "aln.hpp"
 #include "bed.hpp"
-#include "cigar.hpp"
 #include "chain.hpp"
+#include "cigar.hpp"
 #include "leviosam_utils.hpp"
 #include "version.hpp"
 #include "yaml.hpp"
@@ -38,7 +38,15 @@
 #define OPT_HELP 1000
 #define OPT_VERSION 1001
 #define OPT_KEEP_MAPQ 1002
+#define OPT_LIFT_THREADS 1100
+#define OPT_HTS_THREADS 1101
 #define OPT_ULTIMA_GENOMICS 2001
+
+#define ERROR_THREADS_ALLOCATION 21
+
+const int DEFAULT_NUM_THREADS = 1;
+const int DEFAULT_NUM_LIFT_THREADS = 1;
+const int DEFAULT_NUM_HTS_THREADS = 0;
 
 using NameMap = std::vector<std::pair<std::string, std::string>>;
 using LengthMap = std::vector<std::pair<std::string, int32_t>>;
@@ -68,7 +76,9 @@ struct lift_opts {
     std::string split_mode = "";
     std::vector<std::pair<std::string, float>> split_rules;
     int allowed_cigar_changes = 0;
-    int threads = 1;
+    uint16_t threads = DEFAULT_NUM_THREADS;
+    uint16_t lift_threads = DEFAULT_NUM_LIFT_THREADS;
+    uint16_t hts_threads = DEFAULT_NUM_HTS_THREADS;
     int chunk_size = 256;
     int verbose = 0;
     int md_flag = 0;
@@ -108,6 +118,7 @@ void print_serialize_help_msg();
 bool check_split_rule(std::string rule);
 bool add_split_rule(std::vector<std::pair<std::string, float>> &split_rules,
                     std::string s);
+uint8_t update_thread_allocation(lift_opts &args);
 
 namespace lift {
 // Serialization
