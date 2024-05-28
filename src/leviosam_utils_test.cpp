@@ -1,7 +1,7 @@
 /*
- * leviosam_test.cpp
+ * leviosam_utils_test.cpp
  *
- * Test levioSAM functions
+ * Test levioSAM utility functions
  *
  * Authors: Taher Mun, Nae-Chyun Chen, Ben Langmead
  * Dept. of Computer Science, Johns Hopkins University
@@ -9,7 +9,7 @@
  * Distributed under the MIT license
  * https://github.com/milkschen/leviosam2
  */
-#include "leviosam.hpp"
+#include "leviosam_utils.hpp"
 
 #include <unistd.h>
 
@@ -19,7 +19,7 @@
 #include "bed.hpp"
 #include "gtest/gtest.h"
 #include "htslib/sam.h"
-#include "leviosam_utils.hpp"
+#include "leviosam.hpp"
 
 //
 // bit_vector tests
