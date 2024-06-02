@@ -32,40 +32,6 @@
 KSEQ_INIT(gzFile, gzread);
 ;
 
-bool add_split_rule(std::vector<std::pair<std::string, float>> &split_rules,
-                    std::string s) {
-    if (s == "lifted") {
-        split_rules.push_back(std::make_pair(s, 1));
-        return true;
-    }
-    std::string delim(":");
-    auto start = 0U;
-    auto end = s.find(delim);
-    int cnt = 0;
-    std::string key;
-    float value;
-    while (end != std::string::npos) {
-        if (cnt == 0) {
-            key = s.substr(start, end - start);
-            if (LevioSamUtils::check_split_rule(key) == false) {
-                return false;
-            }
-            std::cerr << "[I::add_split_rule] Adding rule `" << key;
-            value = std::stof(s.substr(end - start + 1, end));
-            std::cerr << ":" << value << "`\n";
-            split_rules.push_back(std::make_pair(key, value));
-        } else {
-            std::cerr << "[E::add_split_rule] Invalid split rule: " << s
-                      << "\n";
-            return false;
-        }
-        start = end + delim.length();
-        end = s.find(delim, start);
-        cnt += 1;
-    }
-    return true;
-}
-
 /** Updates allocated threads given input args.
  *
  * LevioSAM2 expects either (1) --threads (-t) or (2) --hts_threads and/or
@@ -722,7 +688,8 @@ int main(int argc, char **argv) {
                 args.sample = optarg;
                 break;
             case 'S':
-                if (add_split_rule(args.split_rules, optarg) == false) {
+                if (LevioSamUtils::add_split_rule(args.split_rules, optarg) ==
+                    false) {
                     exit(1);
                 }
                 break;

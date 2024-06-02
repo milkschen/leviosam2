@@ -199,6 +199,7 @@ bool WriteDeferred::commit_aln_dest(const bam1_t* const aln) {
 
 /** Checks if a split rule is valid.
  *
+ * Split rules are important for the WriteDeferred class.
  * Allowed rules are specified in the DEFER_OPT vector (leviosam_utils.hpp).
  *
  * @param rule A split rule.
@@ -214,6 +215,47 @@ bool check_split_rule(std::string rule) {
             std::cerr << " - " << opt << "\n";
         }
         return false;
+    }
+    return true;
+}
+
+/** Add a split rule. The split rules are for the WriteDeferred class.
+ *
+ * @param SplitRules A vector to update
+ * @param string The actual specified rule. Usually a string and a number
+ * (float), delimited by a colon. E.g. "mapq:20". There are special cases where
+ * only the string is required.
+ * @return True if the rule is added successfully.
+ */
+bool add_split_rule(SplitRules& split_rules, std::string s) {
+    if (s == "lifted") {
+        split_rules.push_back(std::make_pair(s, 1.));
+        return true;
+    }
+    std::string delim(":");
+    size_t start = 0;
+    size_t end = s.find(delim);
+    int cnt = 0;
+    std::string key;
+    float value;
+    while (end != std::string::npos) {
+        if (cnt == 0) {
+            key = s.substr(start, end - start);
+            if (check_split_rule(key) == false) {
+                return false;
+            }
+            value = std::stof(s.substr(end - start + 1, end));
+            std::cerr << "[I::add_split_rule] Adding rule `" << key << ":"
+                      << value << "`\n";
+            split_rules.push_back(std::make_pair(key, value));
+        } else {
+            std::cerr << "[E::add_split_rule] Invalid split rule: " << s
+                      << "\n";
+            return false;
+        }
+        start = end + delim.length();
+        end = s.find(delim, start);
+        cnt += 1;
     }
     return true;
 }

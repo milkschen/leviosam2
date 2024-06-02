@@ -120,6 +120,8 @@ class WriteDeferred {
 
 bool check_split_rule(std::string rule);
 
+bool add_split_rule(SplitRules& split_rules, std::string s);
+
 /// Removes the MN:i and MD:z tags from a BAM object.
 void remove_nm_md_tag(bam1_t* aln);
 

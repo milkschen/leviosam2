@@ -345,8 +345,27 @@ TEST(UtilsTest, UpdateFlagUnmap) {
 }
 
 TEST(UtilsTest, CheckSplitRule) {
-    std::string rule = "lifted";
-    EXPECT_EQ(LevioSamUtils::check_split_rule(rule), true);
+    EXPECT_EQ(LevioSamUtils::check_split_rule("lifted"), true);
+    EXPECT_EQ(LevioSamUtils::check_split_rule("mapq"), true);
+    EXPECT_EQ(LevioSamUtils::check_split_rule("wrong_rule"), false);
+}
+
+TEST(UtilsTest, AddSplitRule) {
+    LevioSamUtils::SplitRules split_rules;
+    EXPECT_EQ(LevioSamUtils::add_split_rule(split_rules, "mapq:20"), true);
+    EXPECT_EQ(split_rules[0].first, "mapq");
+    EXPECT_FLOAT_EQ(split_rules[0].second, 20.);
+
+    EXPECT_EQ(LevioSamUtils::add_split_rule(split_rules, "lifted"), true);
+    EXPECT_EQ(split_rules[1].first, "lifted");
+    EXPECT_FLOAT_EQ(split_rules[1].second, 1.);
+
+    EXPECT_EQ(LevioSamUtils::add_split_rule(split_rules, "clipped_frac:0.66"),
+              true);
+    EXPECT_EQ(split_rules[2].first, "clipped_frac");
+    EXPECT_FLOAT_EQ(split_rules[2].second, 0.66);
+
+    EXPECT_EQ(LevioSamUtils::add_split_rule(split_rules, "none"), false);
 }
 
 TEST(UltimaGenomicsTest, UpdateFlags) {
