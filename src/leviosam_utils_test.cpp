@@ -366,6 +366,7 @@ TEST(UtilsTest, AddSplitRule) {
     EXPECT_FLOAT_EQ(split_rules[2].second, 0.66);
 
     EXPECT_EQ(LevioSamUtils::add_split_rule(split_rules, "none"), false);
+    EXPECT_EQ(LevioSamUtils::add_split_rule(split_rules, "mapq:20:20"), false);
 }
 
 TEST(UltimaGenomicsTest, UpdateFlags) {

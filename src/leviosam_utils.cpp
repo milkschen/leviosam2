@@ -228,36 +228,32 @@ bool check_split_rule(std::string rule) {
  * @return True if the rule is added successfully.
  */
 bool add_split_rule(SplitRules& split_rules, std::string s) {
+    std::cerr << "[I::add_split_rule] Adding rule `" << s << "`\n";
+
     if (s == "lifted") {
         split_rules.push_back(std::make_pair(s, 1.));
         return true;
     }
-    std::string delim(":");
+    const char delim(':');
     size_t start = 0;
     size_t end = s.find(delim);
-    int cnt = 0;
-    std::string key;
-    float value;
-    while (end != std::string::npos) {
-        if (cnt == 0) {
-            key = s.substr(start, end - start);
+
+    if (end != std::string::npos) {
+        // Not valid if there are more than two delims.
+        if (std::count(s.begin(), s.end(), delim) == 1) {
+            std::string key = s.substr(start, end - start);
             if (check_split_rule(key) == false) {
+                std::cerr << "[E::add_split_rule] Invalid split rule: `" << s
+                          << "`\n";
                 return false;
             }
-            value = std::stof(s.substr(end - start + 1, end));
-            std::cerr << "[I::add_split_rule] Adding rule `" << key << ":"
-                      << value << "`\n";
+            float value = std::stof(s.substr(end - start + 1, end));
             split_rules.push_back(std::make_pair(key, value));
-        } else {
-            std::cerr << "[E::add_split_rule] Invalid split rule: " << s
-                      << "\n";
-            return false;
+            return true;
         }
-        start = end + delim.length();
-        end = s.find(delim, start);
-        cnt += 1;
     }
-    return true;
+    std::cerr << "[E::add_split_rule] Invalid split rule: `" << s << "`\n";
+    return false;
 }
 
 /** Removes the MN:i and MD:z tags from an alignment object.
@@ -672,5 +668,4 @@ std::string make_cmd(int argc, char** argv) {
     }
     return cmd;
 }
-
 };  // namespace LevioSamUtils
