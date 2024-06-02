@@ -344,6 +344,11 @@ TEST(UtilsTest, UpdateFlagUnmap) {
     sam_close(sam_fp);
 }
 
+TEST(UtilsTest, CheckSplitRule) {
+    std::string rule = "lifted";
+    EXPECT_EQ(LevioSamUtils::check_split_rule(rule), true);
+}
+
 TEST(UltimaGenomicsTest, UpdateFlags) {
     samFile* sam_fp = sam_open("ultima_small.sam", "r");
     sam_hdr_t* sam_hdr = sam_hdr_read(sam_fp);

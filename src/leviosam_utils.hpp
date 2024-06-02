@@ -91,12 +91,13 @@ class WriteDeferred {
               const BedUtils::Bed& b_commit_dest, const float& b_isec_th);
     void open_sams(const std::string out_prefix, const std::string out_format);
     void close_sams();
-    bool get_write_deferred();
     void print_info();
     void write_deferred_bam(bam1_t* aln, sam_hdr_t* hdr);
     void write_deferred_bam_orig(bam1_t* aln);
     bool commit_aln_dest(const bam1_t* const aln);
     bool commit_aln_source(const bam1_t* const aln);
+
+    bool get_write_deferred();
 
     std::mutex mutex_fwrite;
 
@@ -116,6 +117,8 @@ class WriteDeferred {
         bed_commit_dest;
     float bed_isec_threshold = BED_ISEC_TH;
 };
+
+bool check_split_rule(std::string rule);
 
 /// Removes the MN:i and MD:z tags from a BAM object.
 void remove_nm_md_tag(bam1_t* aln);

@@ -197,6 +197,27 @@ bool WriteDeferred::commit_aln_dest(const bam1_t* const aln) {
     return true;
 }
 
+/** Checks if a split rule is valid.
+ *
+ * Allowed rules are specified in the DEFER_OPT vector (leviosam_utils.hpp).
+ *
+ * @param rule A split rule.
+ * @return True if the rule is supported. False otherwise.
+ */
+bool check_split_rule(std::string rule) {
+    auto cnt = std::count(DEFER_OPT.begin(), DEFER_OPT.end(), rule);
+    if (cnt != 1) {
+        std::cerr << "[E::check_split_rule] " << rule
+                  << " is not a valid filtering option\n";
+        std::cerr << "Valid options:\n";
+        for (auto& opt : DEFER_OPT) {
+            std::cerr << " - " << opt << "\n";
+        }
+        return false;
+    }
+    return true;
+}
+
 /** Removes the MN:i and MD:z tags from an alignment object.
  *
  * @param aln Alignment object.

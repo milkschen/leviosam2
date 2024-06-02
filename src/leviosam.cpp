@@ -32,21 +32,6 @@
 KSEQ_INIT(gzFile, gzread);
 ;
 
-bool check_split_rule(std::string rule) {
-    auto cnt = std::count(LevioSamUtils::DEFER_OPT.begin(),
-                          LevioSamUtils::DEFER_OPT.end(), rule);
-    if (cnt != 1) {
-        std::cerr << "[E::check_split_rule] " << rule
-                  << " is not a valid filtering option\n";
-        std::cerr << "Valid options:\n";
-        for (auto &opt : LevioSamUtils::DEFER_OPT) {
-            std::cerr << " - " << opt << "\n";
-        }
-        return false;
-    }
-    return true;
-}
-
 bool add_split_rule(std::vector<std::pair<std::string, float>> &split_rules,
                     std::string s) {
     if (s == "lifted") {
@@ -62,7 +47,7 @@ bool add_split_rule(std::vector<std::pair<std::string, float>> &split_rules,
     while (end != std::string::npos) {
         if (cnt == 0) {
             key = s.substr(start, end - start);
-            if (check_split_rule(key) == false) {
+            if (LevioSamUtils::check_split_rule(key) == false) {
                 return false;
             }
             std::cerr << "[I::add_split_rule] Adding rule `" << key;
