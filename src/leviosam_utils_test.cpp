@@ -21,9 +21,7 @@
 #include "htslib/sam.h"
 #include "leviosam.hpp"
 
-//
-// bit_vector tests
-//
+/* Bit_vector tests */
 
 typedef sdsl::bit_vector::size_type size_type;
 
@@ -346,6 +344,31 @@ TEST(UtilsTest, UpdateFlagUnmap) {
     sam_close(sam_fp);
 }
 
+TEST(UtilsTest, CheckSplitRule) {
+    EXPECT_EQ(LevioSamUtils::check_split_rule("lifted"), true);
+    EXPECT_EQ(LevioSamUtils::check_split_rule("mapq"), true);
+    EXPECT_EQ(LevioSamUtils::check_split_rule("wrong_rule"), false);
+}
+
+TEST(UtilsTest, AddSplitRule) {
+    LevioSamUtils::SplitRules split_rules;
+    EXPECT_EQ(LevioSamUtils::add_split_rule(split_rules, "mapq:20"), true);
+    EXPECT_EQ(split_rules[0].first, "mapq");
+    EXPECT_FLOAT_EQ(split_rules[0].second, 20.);
+
+    EXPECT_EQ(LevioSamUtils::add_split_rule(split_rules, "lifted"), true);
+    EXPECT_EQ(split_rules[1].first, "lifted");
+    EXPECT_FLOAT_EQ(split_rules[1].second, 1.);
+
+    EXPECT_EQ(LevioSamUtils::add_split_rule(split_rules, "clipped_frac:0.66"),
+              true);
+    EXPECT_EQ(split_rules[2].first, "clipped_frac");
+    EXPECT_FLOAT_EQ(split_rules[2].second, 0.66);
+
+    EXPECT_EQ(LevioSamUtils::add_split_rule(split_rules, "none"), false);
+    EXPECT_EQ(LevioSamUtils::add_split_rule(split_rules, "mapq:20:20"), false);
+}
+
 TEST(UltimaGenomicsTest, UpdateFlags) {
     samFile* sam_fp = sam_open("ultima_small.sam", "r");
     sam_hdr_t* sam_hdr = sam_hdr_read(sam_fp);
@@ -404,6 +427,23 @@ TEST(ChainTest, GetMateQueryLenOnRef) {
     EXPECT_EQ(err, 0);
     EXPECT_EQ(LevioSamUtils::get_mate_query_len_on_ref(aln), 9);
     bam_destroy1(aln);
+}
+
+TEST(WriteDeferredTest, WriteDeferredInit) {
+    LevioSamUtils::WriteDeferred wd;
+    LevioSamUtils::SplitRules split_rules;
+    sam_hdr_t* hdr_orig;
+    sam_hdr_t* hdr;
+    BedUtils::Bed bed_defer_source;
+    BedUtils::Bed bed_defer_dest;
+    BedUtils::Bed bed_commit_source;
+    BedUtils::Bed bed_commit_dest;
+    float bed_isec_threshold = 0;
+
+    wd.init(split_rules, hdr_orig, hdr, bed_defer_source, bed_defer_dest,
+            bed_commit_source, bed_commit_dest, bed_isec_threshold);
+
+    EXPECT_EQ(wd.get_write_deferred(), true);
 }
 
 int main(int argc, char** argv) {

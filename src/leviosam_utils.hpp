@@ -38,6 +38,7 @@ size_t kstr_get_m(size_t var);
 
 namespace LevioSamUtils {
 
+using SplitRules = std::vector<std::pair<std::string, float>>;
 const std::vector<std::string> DEFER_OPT{"lifted", "mapq",      "clipped_frac",
                                          "isize",  "aln_score", "hdist"};
 
@@ -82,21 +83,21 @@ class FastqRecord {
 class WriteDeferred {
    public:
     WriteDeferred() : write_deferred(false){};
-    ~WriteDeferred();
 
-    void init(const std::string outpre,
-              const std::vector<std::pair<std::string, float>>& split_rules,
-              const std::string of, sam_hdr_t* ihdr, sam_hdr_t* ohdr,
+    void init(const SplitRules& split_rules, sam_hdr_t* ihdr, sam_hdr_t* ohdr,
               const BedUtils::Bed& b_defer_source,
               const BedUtils::Bed& b_defer_dest,
               const BedUtils::Bed& b_commit_source,
               const BedUtils::Bed& b_commit_dest, const float& b_isec_th);
-
+    void open_sams(const std::string out_prefix, const std::string out_format);
+    void close_sams();
     void print_info();
     void write_deferred_bam(bam1_t* aln, sam_hdr_t* hdr);
     void write_deferred_bam_orig(bam1_t* aln);
     bool commit_aln_dest(const bam1_t* const aln);
     bool commit_aln_source(const bam1_t* const aln);
+
+    bool get_write_deferred();
 
     std::mutex mutex_fwrite;
 
@@ -116,6 +117,10 @@ class WriteDeferred {
         bed_commit_dest;
     float bed_isec_threshold = BED_ISEC_TH;
 };
+
+bool check_split_rule(std::string rule);
+
+bool add_split_rule(SplitRules& split_rules, std::string s);
 
 /// Removes the MN:i and MD:z tags from a BAM object.
 void remove_nm_md_tag(bam1_t* aln);

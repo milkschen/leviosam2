@@ -22,15 +22,13 @@ size_t kstr_get_m(size_t var) {
 
 namespace LevioSamUtils {
 
-void WriteDeferred::init(
-    const std::string outpre,
-    const std::vector<std::pair<std::string, float>>& split_rules,
-    const std::string of, sam_hdr_t* ihdr, sam_hdr_t* ohdr,
-    const BedUtils::Bed& b_defer_source, const BedUtils::Bed& b_defer_dest,
-    const BedUtils::Bed& b_commit_source, const BedUtils::Bed& b_commit_dest,
-    const float& b_isec_th) {
+void WriteDeferred::init(const SplitRules& split_rules, sam_hdr_t* ihdr,
+                         sam_hdr_t* ohdr, const BedUtils::Bed& b_defer_source,
+                         const BedUtils::Bed& b_defer_dest,
+                         const BedUtils::Bed& b_commit_source,
+                         const BedUtils::Bed& b_commit_dest,
+                         const float& b_isec_th) {
     write_deferred = true;
-    std::string rules_str("");
     for (auto& r : split_rules) {
         split_modes.emplace(r.first);
         if (r.first == "mapq") {
@@ -52,30 +50,16 @@ void WriteDeferred::init(
     bed_commit_source = b_commit_source;
     bed_commit_dest = b_commit_dest;
     bed_isec_threshold = b_isec_th;
-
-    std::string out_mode = (of == "sam") ? "w" : "wb";
-    std::string out_fn = outpre + "-deferred." + of;
-    out_fp = sam_open(out_fn.data(), out_mode.data());
-    if (sam_hdr_write(out_fp, ohdr) < 0) {
-        std::cerr << "[E::WriteDeferred::init] Failed to write sam_hdr for "
-                  << out_fn << "\n";
-        exit(1);
-    }
-
-    std::string out_fn_orig = outpre + "-unliftable." + of;
-    out_fp_orig = sam_open(out_fn_orig.data(), out_mode.data());
-    if (sam_hdr_write(out_fp_orig, hdr_orig) < 0) {
-        std::cerr << "[E::WriteDeferred::init] Failed to write sam_hdr for "
-                  << out_fn_orig << "\n";
-        exit(1);
-    }
-    print_info();
 }
 
-WriteDeferred::~WriteDeferred() {
+/** Closes the deferred and unliftable HTS files. */
+void WriteDeferred::close_sams() {
     if (write_deferred) {
         sam_close(out_fp);
         sam_close(out_fp_orig);
+    } else {
+        std::cerr << "[W::WriteDeferred::close_sams] No HTS files to close "
+                     "when `write_deferred` is False.\n";
     }
 };
 
@@ -115,6 +99,34 @@ void WriteDeferred::print_info() {
     if (bed_commit_dest.get_fn().size() > 0) {
         std::cerr << " - Not in BED commit (dest) " << bed_commit_dest.get_fn()
                   << "\n";
+    }
+}
+
+/** Gets the write_deferred status. */
+bool WriteDeferred::get_write_deferred() { return write_deferred; }
+
+/** Creates deferred and unliftable HTS files.
+ *
+ * @param out_prefix Output prefix
+ * @param out_format Output format. Options: "sam", "bam"
+ */
+void WriteDeferred::open_sams(const std::string out_prefix,
+                              const std::string out_format) {
+    std::string out_mode = (out_format == "sam") ? "w" : "wb";
+    std::string out_fn = out_prefix + "-deferred." + out_format;
+    out_fp = sam_open(out_fn.data(), out_mode.data());
+    if (sam_hdr_write(out_fp, hdr) < 0) {
+        std::cerr << "[E::WriteDeferred::init] Failed to write sam_hdr for "
+                  << out_fn << "\n";
+        exit(1);
+    }
+
+    std::string out_fn_orig = out_prefix + "-unliftable." + out_format;
+    out_fp_orig = sam_open(out_fn_orig.data(), out_mode.data());
+    if (sam_hdr_write(out_fp_orig, hdr_orig) < 0) {
+        std::cerr << "[E::WriteDeferred::init] Failed to write sam_hdr for "
+                  << out_fn_orig << "\n";
+        exit(1);
     }
 }
 
@@ -183,6 +195,65 @@ bool WriteDeferred::commit_aln_dest(const bam1_t* const aln) {
         if (bam_aux2i(bam_aux_get(aln, "NM")) > max_hdist) return false;
     }
     return true;
+}
+
+/** Checks if a split rule is valid.
+ *
+ * Split rules are important for the WriteDeferred class.
+ * Allowed rules are specified in the DEFER_OPT vector (leviosam_utils.hpp).
+ *
+ * @param rule A split rule.
+ * @return True if the rule is supported. False otherwise.
+ */
+bool check_split_rule(std::string rule) {
+    auto cnt = std::count(DEFER_OPT.begin(), DEFER_OPT.end(), rule);
+    if (cnt != 1) {
+        std::cerr << "[E::check_split_rule] " << rule
+                  << " is not a valid filtering option\n";
+        std::cerr << "Valid options:\n";
+        for (auto& opt : DEFER_OPT) {
+            std::cerr << " - " << opt << "\n";
+        }
+        return false;
+    }
+    return true;
+}
+
+/** Add a split rule. The split rules are for the WriteDeferred class.
+ *
+ * @param SplitRules A vector to update
+ * @param string The actual specified rule. Usually a string and a number
+ * (float), delimited by a colon. E.g. "mapq:20". There are special cases where
+ * only the string is required.
+ * @return True if the rule is added successfully.
+ */
+bool add_split_rule(SplitRules& split_rules, std::string s) {
+    std::cerr << "[I::add_split_rule] Adding rule `" << s << "`\n";
+
+    if (s == "lifted") {
+        split_rules.push_back(std::make_pair(s, 1.));
+        return true;
+    }
+    const char delim(':');
+    size_t start = 0;
+    size_t end = s.find(delim);
+
+    if (end != std::string::npos) {
+        // Not valid if there are more than two delims.
+        if (std::count(s.begin(), s.end(), delim) == 1) {
+            std::string key = s.substr(start, end - start);
+            if (check_split_rule(key) == false) {
+                std::cerr << "[E::add_split_rule] Invalid split rule: `" << s
+                          << "`\n";
+                return false;
+            }
+            float value = std::stof(s.substr(end - start + 1, end));
+            split_rules.push_back(std::make_pair(key, value));
+            return true;
+        }
+    }
+    std::cerr << "[E::add_split_rule] Invalid split rule: `" << s << "`\n";
+    return false;
 }
 
 /** Removes the MN:i and MD:z tags from an alignment object.
@@ -597,5 +668,4 @@ std::string make_cmd(int argc, char** argv) {
     }
     return cmd;
 }
-
 };  // namespace LevioSamUtils

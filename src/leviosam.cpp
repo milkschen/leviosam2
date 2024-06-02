@@ -32,55 +32,6 @@
 KSEQ_INIT(gzFile, gzread);
 ;
 
-bool check_split_rule(std::string rule) {
-    auto cnt = std::count(LevioSamUtils::DEFER_OPT.begin(),
-                          LevioSamUtils::DEFER_OPT.end(), rule);
-    if (cnt != 1) {
-        std::cerr << "[E::check_split_rule] " << rule
-                  << " is not a valid filtering option\n";
-        std::cerr << "Valid options:\n";
-        for (auto &opt : LevioSamUtils::DEFER_OPT) {
-            std::cerr << " - " << opt << "\n";
-        }
-        return false;
-    }
-    return true;
-}
-
-bool add_split_rule(std::vector<std::pair<std::string, float>> &split_rules,
-                    std::string s) {
-    if (s == "lifted") {
-        split_rules.push_back(std::make_pair(s, 1));
-        return true;
-    }
-    std::string delim(":");
-    auto start = 0U;
-    auto end = s.find(delim);
-    int cnt = 0;
-    std::string key;
-    float value;
-    while (end != std::string::npos) {
-        if (cnt == 0) {
-            key = s.substr(start, end - start);
-            if (check_split_rule(key) == false) {
-                return false;
-            }
-            std::cerr << "[I::add_split_rule] Adding rule `" << key;
-            value = std::stof(s.substr(end - start + 1, end));
-            std::cerr << ":" << value << "`\n";
-            split_rules.push_back(std::make_pair(key, value));
-        } else {
-            std::cerr << "[E::add_split_rule] Invalid split rule: " << s
-                      << "\n";
-            return false;
-        }
-        start = end + delim.length();
-        end = s.find(delim, start);
-        cnt += 1;
-    }
-    return true;
-}
-
 /** Updates allocated threads given input args.
  *
  * LevioSAM2 expects either (1) --threads (-t) or (2) --hts_threads and/or
@@ -458,10 +409,11 @@ void lift_run(lift_opts args) {
 
     LevioSamUtils::WriteDeferred wd;
     if (args.split_rules.size() != 0) {
-        wd.init(args.outpre, args.split_rules, args.out_format, hdr_orig, hdr,
-                args.bed_defer_source, args.bed_defer_dest,
-                args.bed_commit_source, args.bed_commit_dest,
-                args.bed_isec_threshold);
+        wd.init(args.split_rules, hdr_orig, hdr, args.bed_defer_source,
+                args.bed_defer_dest, args.bed_commit_source,
+                args.bed_commit_dest, args.bed_isec_threshold);
+        wd.open_sams(args.outpre, args.out_format);
+        wd.print_info();
     }
 
     std::vector<std::thread> threads;
@@ -487,6 +439,7 @@ void lift_run(lift_opts args) {
     sam_hdr_destroy(hdr_orig);
     sam_close(sam_fp);
     sam_close(out_sam_fp);
+    wd.close_sams();
 }
 
 /* This is a wrapper for the constructor of LiftMap.*/
@@ -735,7 +688,8 @@ int main(int argc, char **argv) {
                 args.sample = optarg;
                 break;
             case 'S':
-                if (add_split_rule(args.split_rules, optarg) == false) {
+                if (LevioSamUtils::add_split_rule(args.split_rules, optarg) ==
+                    false) {
                     exit(1);
                 }
                 break;
