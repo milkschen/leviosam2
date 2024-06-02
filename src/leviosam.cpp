@@ -488,6 +488,7 @@ void lift_run(lift_opts args) {
     sam_hdr_destroy(hdr_orig);
     sam_close(sam_fp);
     sam_close(out_sam_fp);
+    wd.close_sams();
 }
 
 /* This is a wrapper for the constructor of LiftMap.*/
