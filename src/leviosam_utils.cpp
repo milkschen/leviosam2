@@ -22,15 +22,13 @@ size_t kstr_get_m(size_t var) {
 
 namespace LevioSamUtils {
 
-void WriteDeferred::init(
-    const std::string outpre,
-    const std::vector<std::pair<std::string, float>>& split_rules,
-    const std::string of, sam_hdr_t* ihdr, sam_hdr_t* ohdr,
-    const BedUtils::Bed& b_defer_source, const BedUtils::Bed& b_defer_dest,
-    const BedUtils::Bed& b_commit_source, const BedUtils::Bed& b_commit_dest,
-    const float& b_isec_th) {
+void WriteDeferred::init(const SplitRules& split_rules, sam_hdr_t* ihdr,
+                         sam_hdr_t* ohdr, const BedUtils::Bed& b_defer_source,
+                         const BedUtils::Bed& b_defer_dest,
+                         const BedUtils::Bed& b_commit_source,
+                         const BedUtils::Bed& b_commit_dest,
+                         const float& b_isec_th) {
     write_deferred = true;
-    std::string rules_str("");
     for (auto& r : split_rules) {
         split_modes.emplace(r.first);
         if (r.first == "mapq") {
@@ -52,30 +50,16 @@ void WriteDeferred::init(
     bed_commit_source = b_commit_source;
     bed_commit_dest = b_commit_dest;
     bed_isec_threshold = b_isec_th;
-
-    std::string out_mode = (of == "sam") ? "w" : "wb";
-    std::string out_fn = outpre + "-deferred." + of;
-    out_fp = sam_open(out_fn.data(), out_mode.data());
-    if (sam_hdr_write(out_fp, ohdr) < 0) {
-        std::cerr << "[E::WriteDeferred::init] Failed to write sam_hdr for "
-                  << out_fn << "\n";
-        exit(1);
-    }
-
-    std::string out_fn_orig = outpre + "-unliftable." + of;
-    out_fp_orig = sam_open(out_fn_orig.data(), out_mode.data());
-    if (sam_hdr_write(out_fp_orig, hdr_orig) < 0) {
-        std::cerr << "[E::WriteDeferred::init] Failed to write sam_hdr for "
-                  << out_fn_orig << "\n";
-        exit(1);
-    }
-    print_info();
 }
 
-WriteDeferred::~WriteDeferred() {
+/** Closes the deferred and unliftable HTS files. */
+void WriteDeferred::close_sams() {
     if (write_deferred) {
         sam_close(out_fp);
         sam_close(out_fp_orig);
+    } else {
+        std::cerr << "[W::WriteDeferred::close_sams] No HTS files to close "
+                     "when `write_deferred` is False.\n";
     }
 };
 
@@ -115,6 +99,34 @@ void WriteDeferred::print_info() {
     if (bed_commit_dest.get_fn().size() > 0) {
         std::cerr << " - Not in BED commit (dest) " << bed_commit_dest.get_fn()
                   << "\n";
+    }
+}
+
+/** Gets the write_deferred status. */
+bool WriteDeferred::get_write_deferred() { return write_deferred; }
+
+/** Creates deferred and unliftable HTS files.
+ *
+ * @param out_prefix Output prefix
+ * @param out_format Output format. Options: "sam", "bam"
+ */
+void WriteDeferred::open_sams(const std::string out_prefix,
+                              const std::string out_format) {
+    std::string out_mode = (out_format == "sam") ? "w" : "wb";
+    std::string out_fn = out_prefix + "-deferred." + out_format;
+    out_fp = sam_open(out_fn.data(), out_mode.data());
+    if (sam_hdr_write(out_fp, hdr) < 0) {
+        std::cerr << "[E::WriteDeferred::init] Failed to write sam_hdr for "
+                  << out_fn << "\n";
+        exit(1);
+    }
+
+    std::string out_fn_orig = out_prefix + "-unliftable." + out_format;
+    out_fp_orig = sam_open(out_fn_orig.data(), out_mode.data());
+    if (sam_hdr_write(out_fp_orig, hdr_orig) < 0) {
+        std::cerr << "[E::WriteDeferred::init] Failed to write sam_hdr for "
+                  << out_fn_orig << "\n";
+        exit(1);
     }
 }
 

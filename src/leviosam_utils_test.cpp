@@ -21,9 +21,7 @@
 #include "htslib/sam.h"
 #include "leviosam.hpp"
 
-//
-// bit_vector tests
-//
+/* Bit_vector tests */
 
 typedef sdsl::bit_vector::size_type size_type;
 
@@ -404,6 +402,23 @@ TEST(ChainTest, GetMateQueryLenOnRef) {
     EXPECT_EQ(err, 0);
     EXPECT_EQ(LevioSamUtils::get_mate_query_len_on_ref(aln), 9);
     bam_destroy1(aln);
+}
+
+TEST(WriteDeferredTest, WriteDeferredInit) {
+    LevioSamUtils::WriteDeferred wd;
+    LevioSamUtils::SplitRules split_rules;
+    sam_hdr_t* hdr_orig;
+    sam_hdr_t* hdr;
+    BedUtils::Bed bed_defer_source;
+    BedUtils::Bed bed_defer_dest;
+    BedUtils::Bed bed_commit_source;
+    BedUtils::Bed bed_commit_dest;
+    float bed_isec_threshold = 0;
+
+    wd.init(split_rules, hdr_orig, hdr, bed_defer_source, bed_defer_dest,
+            bed_commit_source, bed_commit_dest, bed_isec_threshold);
+
+    EXPECT_EQ(wd.get_write_deferred(), true);
 }
 
 int main(int argc, char** argv) {

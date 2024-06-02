@@ -458,10 +458,11 @@ void lift_run(lift_opts args) {
 
     LevioSamUtils::WriteDeferred wd;
     if (args.split_rules.size() != 0) {
-        wd.init(args.outpre, args.split_rules, args.out_format, hdr_orig, hdr,
-                args.bed_defer_source, args.bed_defer_dest,
-                args.bed_commit_source, args.bed_commit_dest,
-                args.bed_isec_threshold);
+        wd.init(args.split_rules, hdr_orig, hdr, args.bed_defer_source,
+                args.bed_defer_dest, args.bed_commit_source,
+                args.bed_commit_dest, args.bed_isec_threshold);
+        wd.open_sams(args.outpre, args.out_format);
+        wd.print_info();
     }
 
     std::vector<std::thread> threads;
