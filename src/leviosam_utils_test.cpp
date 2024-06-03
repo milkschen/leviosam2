@@ -402,6 +402,36 @@ TEST(UtilsTest, AddSplitRule) {
     EXPECT_EQ(LevioSamUtils::add_split_rule(split_rules, "mapq:20:20"), false);
 }
 
+TEST(UtilsTest, GetBamFracClipped) {
+    std::string record1 =
+        "read1\t81\tchr1\t145334831\t33\t6S4M\t"
+        "=\t1245932\t0\tATTACATTCC\t~~~~~~~~~~";
+    int err;
+    sam_hdr_t* sam_hdr = get_chr1_fake_hdr();
+    bam1_t* aln = get_chr1_fake_aln(record1, sam_hdr, err);
+    EXPECT_EQ(err, 0);
+    EXPECT_FLOAT_EQ(LevioSamUtils::get_bam_frac_clipped(aln), 0.6);
+    bam_destroy1(aln);
+
+    std::string record2 =
+        "read1\t81\tchr1\t145334831\t33\t16M\t"
+        "=\t1245932\t0\tATTACATTCCATTCCA\t~~~~~~~~~~~~~~~~";
+    aln = get_chr1_fake_aln(record2, sam_hdr, err);
+    EXPECT_EQ(err, 0);
+    EXPECT_FLOAT_EQ(LevioSamUtils::get_bam_frac_clipped(aln), 0.);
+    bam_destroy1(aln);
+
+    std::string record3 =
+        "read1\t81\tchr1\t145334831\t33\t16S\t"
+        "=\t1245932\t0\tATTACATTCCATTCCA\t~~~~~~~~~~~~~~~~";
+    aln = get_chr1_fake_aln(record3, sam_hdr, err);
+    EXPECT_EQ(err, 0);
+    EXPECT_FLOAT_EQ(LevioSamUtils::get_bam_frac_clipped(aln), 1.0);
+    bam_destroy1(aln);
+
+    bam_hdr_destroy(sam_hdr);
+}
+
 TEST(UltimaGenomicsTest, UpdateFlags) {
     samFile* sam_fp = sam_open("ultima_small.sam", "r");
     sam_hdr_t* sam_hdr = sam_hdr_read(sam_fp);
@@ -482,7 +512,7 @@ TEST(WriteDeferredTest, CommitAlnDestMappingQuality) {
     // Commits when MAPQ >= threshold
     std::string record_high_mapq =
         "read1\t81\tchr1\t145334831\t30\t16M\t"
-        "=\t1245932\t0\tATTACATTCCATTCCA\t~~~~~~~~~~~~~~~~\tMC:Z:6S5M1I4M";
+        "=\t1245932\t0\tATTACATTCCATTCCA\t~~~~~~~~~~~~~~~~";
     bam1_t* aln = get_chr1_fake_aln(record_high_mapq, hdr, err);
 
     EXPECT_EQ(err, 0);
@@ -492,7 +522,43 @@ TEST(WriteDeferredTest, CommitAlnDestMappingQuality) {
     // defers when MAPQ < threshold
     std::string record_low_mapq =
         "read1\t81\tchr1\t145334831\t29\t16M\t"
-        "=\t1245932\t0\tATTACATTCCATTCCA\t~~~~~~~~~~~~~~~~\tMC:Z:6S5M1I4M";
+        "=\t1245932\t0\tATTACATTCCATTCCA\t~~~~~~~~~~~~~~~~";
+    aln = get_chr1_fake_aln(record_low_mapq, hdr, err);
+    EXPECT_EQ(err, 0);
+    EXPECT_EQ(wd.commit_aln_dest(aln), false);
+    bam_destroy1(aln);
+
+    bam_hdr_destroy(hdr);
+}
+
+TEST(WriteDeferredTest, CommitAlnDestClippedFraction) {
+    LevioSamUtils::WriteDeferred wd;
+    LevioSamUtils::SplitRules split_rules;
+    LevioSamUtils::add_split_rule(split_rules, "clipped_frac:0.3");
+
+    sam_hdr_t* hdr_orig = NULL;  // not used in this test, so set to NULL.
+    sam_hdr_t* hdr = get_chr1_fake_hdr();
+    BedUtils::Bed bed_defer_source, bed_defer_dest, bed_commit_source,
+        bed_commit_dest;
+    wd.init(split_rules, hdr_orig, hdr, bed_defer_source, bed_defer_dest,
+            bed_commit_source, bed_commit_dest, 0);
+
+    int err;
+
+    // Commits when clipped_frac <= threshold
+    std::string record_high_mapq =
+        "read1\t81\tchr1\t145334831\t30\t4S12M\t"
+        "=\t1245932\t0\tATTACATTCCATTCCA\t~~~~~~~~~~~~~~~~";
+    bam1_t* aln = get_chr1_fake_aln(record_high_mapq, hdr, err);
+
+    EXPECT_EQ(err, 0);
+    EXPECT_EQ(wd.commit_aln_dest(aln), true);
+    bam_destroy1(aln);
+
+    // defers when clipped_frac > threshold
+    std::string record_low_mapq =
+        "read1\t81\tchr1\t145334831\t29\t5S11M\t"
+        "=\t1245932\t0\tATTACATTCCATTCCA\t~~~~~~~~~~~~~~~~";
     aln = get_chr1_fake_aln(record_low_mapq, hdr, err);
     EXPECT_EQ(err, 0);
     EXPECT_EQ(wd.commit_aln_dest(aln), false);

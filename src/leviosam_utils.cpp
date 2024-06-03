@@ -209,12 +209,26 @@ bool WriteDeferred::commit_aln_dest(const bam1_t* const aln) {
         return true;
     }
     if (split_modes.find("clipped_frac") != split_modes.end()) {
-        if (1.0 - (rlen / c->l_qseq) > max_clipped_frac) return false;
+        if (get_bam_frac_clipped(aln) > max_clipped_frac) return false;
     }
     if (split_modes.find("hdist") != split_modes.end()) {
         if (bam_aux2i(bam_aux_get(aln, "NM")) > max_hdist) return false;
     }
     return true;
+}
+
+/** Calculates the fraction of clipped bases.
+ *
+ * Starts by calculating the fraction of unclipped bases: rlen / qlen. Then
+ * subtracts this from 1 to get the fraction of clipped bases.
+ *
+ * @param aln Alignment object.
+ * @return Fraction of clipped bases.
+ */
+float get_bam_frac_clipped(const bam1_t* aln) {
+    const bam1_core_t* c = &(aln->core);
+    auto rlen = bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln));
+    return 1.0 - (float(rlen) / c->l_qseq);
 }
 
 /** Checks if a split rule is valid.
