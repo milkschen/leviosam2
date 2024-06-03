@@ -30,7 +30,6 @@
 #include "yaml.hpp"
 
 KSEQ_INIT(gzFile, gzread);
-;
 
 /** Updates allocated threads given input args.
  *
@@ -528,7 +527,7 @@ void print_lift_help_msg() {
     std::cerr << "                       * isize         INT   Max TLEN/isize "
                  "to commit (post-liftover). [1000]\n";
     std::cerr << "                       * hdist         INT   Max NM:i "
-                 "(Hamming dist.) to commit (post-liftover). "
+                 "(Edit distance) to commit (post-liftover). "
                  "`-m` and `-f` must be set. [5]\n";
     std::cerr << "                       * clipped_frac  FLOAT Min fraction of "
                  "clipped to commit (post-liftover). [0.95]\n";
