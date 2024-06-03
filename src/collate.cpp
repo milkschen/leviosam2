@@ -243,13 +243,12 @@ int collate_run(int argc, char** argv) {
     int c;
     collate_opts args;
     args.cmd = LevioSamUtils::make_cmd(argc, argv);
-    static struct option long_options[] {
+    static struct option long_options[]{
         {"sam", required_argument, 0, 'a'},
-            {"deferred_sam", required_argument, 0, 'b'},
-            {"output", required_argument, 0, 'p'},
-            {"fastq", required_argument, 0, 'q'},
-            {"verbose", required_argument, 0, 'V'},
-    };
+        {"deferred_sam", required_argument, 0, 'b'},
+        {"output", required_argument, 0, 'p'},
+        {"fastq", required_argument, 0, 'q'},
+        {"verbose", required_argument, 0, 'V'}};
     int long_index = 0;
     while ((c = getopt_long(argc, argv, "ha:b:p:q:V:", long_options,
                             &long_index)) != -1) {
