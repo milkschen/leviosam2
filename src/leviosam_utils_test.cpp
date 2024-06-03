@@ -25,6 +25,39 @@
 
 typedef sdsl::bit_vector::size_type size_type;
 
+/**
+ * Gets a fake sam header for chr1.
+ *
+ * @return The sam header
+ */
+bam_hdr_t* get_chr1_fake_hdr() {
+    std::string hdr_str =
+        "@HD\tVN:1.0\tSO:unsorted\n@SQ\tSN:chr1\tLN:248956422";
+    return sam_hdr_parse(hdr_str.length(), &hdr_str[0]);
+}
+
+/**
+ * Gets a fake bam record in chr1.
+ * Uses chr1 to be compatible with get_chr1_fake_hdr(). Can generalize to other
+ * chromosomes if needed.
+ *
+ * @param read The read string
+ * @param sam_hdr The sam header
+ * @param err The error code
+ * @return The bam record
+ */
+bam1_t* get_chr1_fake_aln(const std::string read, sam_hdr_t* sam_hdr,
+                          int& err) {
+    bam1_t* aln = bam_init1();
+    kstring_t kstr;
+    kstr.s = (char*)read.c_str();
+    kstr.l = read.length();
+    kstr.m = kstr_get_m(kstr.l);
+
+    err = sam_parse1(&kstr, sam_hdr, aln);
+    return aln;
+}
+
 TEST(BitVector, SimpleCreateAndAccess) {
     size_type n = 10000;
     sdsl::bit_vector bv(n, 0);
@@ -397,36 +430,25 @@ TEST(UltimaGenomicsTest, UpdateFlags) {
 }
 
 TEST(ChainTest, GetMateQueryLenOnRef) {
-    std::string hdr_str =
-        "@HD\tVN:1.0\tSO:unsorted\n@SQ\tSN:chr1\tLN:248956422";
-    sam_hdr_t* sam_hdr = sam_hdr_parse(hdr_str.length(), &hdr_str[0]);
-    bam1_t* aln = bam_init1();
-    int err;
-
-    kstring_t str1;
     std::string record1 =
         "read1\t81\tchr1\t145334831\t33\t6S10M\t"
         "=\t1245932\t0\tATTACATTCCATTCCA\t~~~~~~~~~~~~~~~~\tMC:Z:10M";
-    str1.s = (char*)record1.c_str();
-    str1.l = record1.length();
-    str1.m = kstr_get_m(str1.l);
-    err = sam_parse1(&str1, sam_hdr, aln);
+    int err;
+    sam_hdr_t* sam_hdr = get_chr1_fake_hdr();
+    bam1_t* aln = get_chr1_fake_aln(record1, sam_hdr, err);
     EXPECT_EQ(err, 0);
     EXPECT_EQ(LevioSamUtils::get_mate_query_len_on_ref(aln), 10);
     bam_destroy1(aln);
 
-    aln = bam_init1();
-    kstring_t str2;
     std::string record2 =
         "read1\t81\tchr1\t145334831\t33\t6S10M\t"
         "=\t1245932\t0\tATTACATTCCATTCCA\t~~~~~~~~~~~~~~~~\tMC:Z:6S5M1I4M";
-    str2.s = (char*)record2.c_str();
-    str2.l = record2.length();
-    str2.m = kstr_get_m(str2.l);
-    err = sam_parse1(&str2, sam_hdr, aln);
+    aln = get_chr1_fake_aln(record2, sam_hdr, err);
     EXPECT_EQ(err, 0);
     EXPECT_EQ(LevioSamUtils::get_mate_query_len_on_ref(aln), 9);
     bam_destroy1(aln);
+
+    bam_hdr_destroy(sam_hdr);
 }
 
 TEST(WriteDeferredTest, WriteDeferredInit) {
@@ -434,16 +456,55 @@ TEST(WriteDeferredTest, WriteDeferredInit) {
     LevioSamUtils::SplitRules split_rules;
     sam_hdr_t* hdr_orig;
     sam_hdr_t* hdr;
-    BedUtils::Bed bed_defer_source;
-    BedUtils::Bed bed_defer_dest;
-    BedUtils::Bed bed_commit_source;
-    BedUtils::Bed bed_commit_dest;
-    float bed_isec_threshold = 0;
+    BedUtils::Bed bed_defer_source, bed_defer_dest, bed_commit_source,
+        bed_commit_dest;
 
     wd.init(split_rules, hdr_orig, hdr, bed_defer_source, bed_defer_dest,
-            bed_commit_source, bed_commit_dest, bed_isec_threshold);
+            bed_commit_source, bed_commit_dest, 0);
 
     EXPECT_EQ(wd.get_write_deferred(), true);
+}
+
+TEST(WriteDeferredTest, CommitAlnDestMappingQuality) {
+    LevioSamUtils::WriteDeferred wd;
+    LevioSamUtils::SplitRules split_rules;
+    LevioSamUtils::add_split_rule(split_rules, "mapq:30");
+
+    sam_hdr_t* hdr_orig = NULL;  // not used in this test, so set to NULL.
+    sam_hdr_t* hdr = get_chr1_fake_hdr();
+    BedUtils::Bed bed_defer_source, bed_defer_dest, bed_commit_source,
+        bed_commit_dest;
+    wd.init(split_rules, hdr_orig, hdr, bed_defer_source, bed_defer_dest,
+            bed_commit_source, bed_commit_dest, 0);
+
+    int err;
+
+    // Commits when MAPQ >= threshold
+    std::string record_high_mapq =
+        "read1\t81\tchr1\t145334831\t30\t16M\t"
+        "=\t1245932\t0\tATTACATTCCATTCCA\t~~~~~~~~~~~~~~~~\tMC:Z:6S5M1I4M";
+    bam1_t* aln = get_chr1_fake_aln(record_high_mapq, hdr, err);
+
+    EXPECT_EQ(err, 0);
+    EXPECT_EQ(wd.commit_aln_dest(aln), true);
+    bam_destroy1(aln);
+
+    // defers when MAPQ < threshold
+    std::string record_low_mapq =
+        "read1\t81\tchr1\t145334831\t29\t16M\t"
+        "=\t1245932\t0\tATTACATTCCATTCCA\t~~~~~~~~~~~~~~~~\tMC:Z:6S5M1I4M";
+    aln = get_chr1_fake_aln(record_low_mapq, hdr, err);
+    EXPECT_EQ(err, 0);
+    EXPECT_EQ(wd.commit_aln_dest(aln), false);
+    bam_destroy1(aln);
+
+    bam_hdr_destroy(hdr);
+}
+
+TEST(FastqRecordTest, Init) {
+    LevioSamUtils::FastqRecord fr("ATCG", "CCC!");
+    EXPECT_EQ(fr.seq_str, "ATCG");
+    EXPECT_EQ(fr.qual_str, "CCC!");
 }
 
 int main(int argc, char** argv) {
