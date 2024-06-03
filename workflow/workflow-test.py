@@ -135,7 +135,7 @@ class Workflow(unittest.TestCase):
         new_workflow = copy.deepcopy(self.workflow)
         new_workflow.lift_commit_min_mapq = 30
         new_workflow.lift_commit_min_score = 100
-        new_workflow.lift_commit_max_frac_clipped = 0.95
+        new_workflow.lift_commit_max_frac_clipped = 0.05
         new_workflow.lift_commit_max_isize = 1000
         new_workflow.lift_commit_max_hdist = 5
         new_workflow.lift_max_gap = 20
@@ -148,7 +148,7 @@ class Workflow(unittest.TestCase):
             f"{self.args.leviosam2_exe} lift -C {self.args.leviosam2_index} "
             f"-O bam -a {self.args.input_bam} "
             f"-p {self.args.out_prefix} -t 4 -m -f {self.args.target_fasta} "
-            f"-S mapq:30 -S aln_score:100 -S clipped_frac:0.95 "
+            f"-S mapq:30 -S aln_score:100 -S clipped_frac:0.05 "
             f"-S isize:1000 -S hdist:5 -G 20 "
             f"-r commit/source.bed -D defer/target.bed "
             f"-x configs/ilmn.yaml "

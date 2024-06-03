@@ -26,7 +26,7 @@
 
 #define SPLIT_MIN_MAPQ 30
 #define SPLIT_MAX_ISIZE 1000
-#define SPLIT_MAX_CLIPPED_FRAC 0.95
+#define SPLIT_MAX_CLIPPED_FRAC 0.05
 #define SPLIT_MIN_AS 100
 #define SPLIT_MAX_NM 5
 #define BED_ISEC_TH 0
@@ -121,6 +121,8 @@ class WriteDeferred {
 bool check_split_rule(std::string rule);
 
 bool add_split_rule(SplitRules& split_rules, std::string s);
+
+float get_bam_frac_clipped(const bam1_t* aln);
 
 /// Removes the MN:i and MD:z tags from a BAM object.
 void remove_nm_md_tag(bam1_t* aln);

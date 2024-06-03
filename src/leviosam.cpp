@@ -529,8 +529,8 @@ void print_lift_help_msg() {
     std::cerr << "                       * hdist         INT   Max NM:i "
                  "(Edit distance) to commit (post-liftover). "
                  "`-m` and `-f` must be set. [5]\n";
-    std::cerr << "                       * clipped_frac  FLOAT Min fraction of "
-                 "clipped to commit (post-liftover). [0.95]\n";
+    std::cerr << "                       * clipped_frac  FLOAT Max fraction of "
+                 "clipped to commit (post-liftover). [0.05]\n";
     std::cerr << "           Example: `-S mapq:20 -S aln_score:20` commits "
                  "MQ>=20 and AS>=20 alignments.\n";
     std::cerr << "           -r string Path to a BED file (source "
