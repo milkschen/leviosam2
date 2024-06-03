@@ -133,7 +133,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--lift_commit_max_frac_clipped",
         type=float,
-        help="[lift] Min fraction of clipped bases to commit",
+        help=(
+            "[lift] Max fraction of clipped bases "
+            "(1- bam_cigar2rlen / seq_length) to commit; "
+            "when higher, a read is deferred."
+        ),
         default=None,
     )
     parser.add_argument(

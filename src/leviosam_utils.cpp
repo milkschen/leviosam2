@@ -155,7 +155,20 @@ bool WriteDeferred::commit_aln_source(const bam1_t* const aln) {
     return false;
 }
 
-/* Returns true if an alignment is committed
+/**
+ * Returns true if an alignment is committed.
+ *
+ * Defer a read if any of the following are true:
+ *   - Unmapped
+ *   - MAPQ below the threshold (if specified)
+ *   - Alignment score (AS:i) below the threshold (if specified)
+ *   - TLEN/isize is 0 or its absolute value exceeds the threshold (if
+ *     specified)
+ *   - Fraction of clipped bases is greater than the threshold (if specified)
+ *   - Edit distance (NM:i) is greater than the threshold (if specified)
+ *
+ * @param aln The alignment to check.
+ * @return True if the alignment is committed. False otherwise.
  */
 bool WriteDeferred::commit_aln_dest(const bam1_t* const aln) {
     // If defer mode is not activated, all reads are committed
@@ -171,17 +184,24 @@ bool WriteDeferred::commit_aln_dest(const bam1_t* const aln) {
         if (c->qual < min_mapq) return false;
     }
     if (split_modes.find("aln_score") != split_modes.end()) {
-        if (bam_aux2i(bam_aux_get(aln, "AS")) < min_aln_score) return false;
+        uint8_t* as_ptr = bam_aux_get(aln, "AS");
+        if (as_ptr == NULL) {
+            std::cerr << "[W:WriteDeferred:commit_aln_dest] While `-S "
+                         "aln_score` is set, the AS:i tag does not exist "
+                         "for read \""
+                      << bam_get_qname(aln) << "\". This read is deferred.";
+            return false;
+        } else if (bam_aux2i(bam_aux_get(aln, "AS")) < min_aln_score)
+            return false;
     }
     // End MAPQ and AS
     if (split_modes.find("isize") != split_modes.end()) {
-        if (c->isize == 0 || c->isize > max_isize || c->isize < -max_isize)
-            return false;
+        if (c->isize == 0 || std::abs(c->isize) > max_isize) return false;
     }
 
-    std::string rname = hdr->target_name[c->tid];
-    auto rlen = bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln));
-    size_t pos_end = c->pos + rlen;
+    std::string rname = sam_hdr_tid2name(hdr, c->tid);
+    hts_pos_t rlen = bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln));
+    hts_pos_t pos_end = c->pos + rlen;
     if (bed_defer_dest.intersect(rname, c->pos, pos_end, bed_isec_threshold)) {
         return false;
     }
@@ -189,12 +209,26 @@ bool WriteDeferred::commit_aln_dest(const bam1_t* const aln) {
         return true;
     }
     if (split_modes.find("clipped_frac") != split_modes.end()) {
-        if (1.0 - (rlen / c->l_qseq) > max_clipped_frac) return false;
+        if (get_bam_frac_clipped(aln) > max_clipped_frac) return false;
     }
     if (split_modes.find("hdist") != split_modes.end()) {
         if (bam_aux2i(bam_aux_get(aln, "NM")) > max_hdist) return false;
     }
     return true;
+}
+
+/** Calculates the fraction of clipped bases.
+ *
+ * Starts by calculating the fraction of unclipped bases: rlen / qlen. Then
+ * subtracts this from 1 to get the fraction of clipped bases.
+ *
+ * @param aln Alignment object.
+ * @return Fraction of clipped bases.
+ */
+float get_bam_frac_clipped(const bam1_t* aln) {
+    const bam1_core_t* c = &(aln->core);
+    auto rlen = bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln));
+    return 1.0 - (float(rlen) / c->l_qseq);
 }
 
 /** Checks if a split rule is valid.
@@ -372,6 +406,12 @@ void update_flag_unmap(bam1_t* aln, const bool first_seg,
     // c->flag &= ~BAM_FSUPPLEMENTARY;
 }
 
+/**
+ * Writes a BAM record to the output file.
+ *
+ * @param aln The BAM record to write.
+ * @param hdr The BAM header.
+ */
 void WriteDeferred::write_deferred_bam(bam1_t* aln, sam_hdr_t* hdr) {
     if ((aln->core.flag &
          BAM_FSECONDARY) ||                // Secondary alignment - no SEQ field
@@ -389,6 +429,11 @@ void WriteDeferred::write_deferred_bam(bam1_t* aln, sam_hdr_t* hdr) {
     }
 }
 
+/**
+ * Writes a BAM record to the original output file.
+ *
+ * @param aln The BAM record to write.
+ */
 void WriteDeferred::write_deferred_bam_orig(bam1_t* aln) {
     auto w_ret = sam_write1(out_fp_orig, hdr_orig, aln);
     if (w_ret < 0) {
@@ -399,7 +444,12 @@ void WriteDeferred::write_deferred_bam_orig(bam1_t* aln) {
     }
 }
 
-/* Construct a FastqRecord object from seq and qual */
+/**
+ * Initializes a FastqRecord object using sequence and quality strings.
+ *
+ * @param seq The sequence string.
+ * @param qual The quality string.
+ */
 FastqRecord::FastqRecord(const std::string& seq, const std::string& qual) {
     seq_str = seq;
     qual_str = qual;

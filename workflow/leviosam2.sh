@@ -40,12 +40,12 @@ REALN_CONFIG=""
 
 # Default parameters for Bowtie 2
 ALN=bowtie2
-# `-q 10 -A -10 -H 5 -m 1000 -p 0.95`
-# FRAC_CLIPPED="-S clipped_frac:0.95"
+# `-q 10 -A -10 -H 5 -m 1000 -p 0.05`
+# FRAC_CLIPPED="-S clipped_frac:0.05"
 # ISIZE="-S isize:1000"
 
 # Default parameters for BWA-MEM
-# ALN=bwamem # `-q 30 -A 100 -H 5 -m 1000 -p 0.95`
+# ALN=bwamem # `-q 30 -A 100 -H 5 -m 1000 -p 0.05`
 
 function print_usage_and_exit {
     echo "Run full levioSAM2 pipeline for a SAM/BAM file"
