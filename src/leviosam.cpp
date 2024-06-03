@@ -477,12 +477,13 @@ void print_lift_help_msg() {
     std::cerr << "Inputs:  -C path   Path to an indexed ChainMap.\n";
     std::cerr << "Options: -a path   Path to the SAM/BAM/CRAM file "
                  "to be lifted. \n";
-    std::cerr << "                   Leave empty or set to \"-\" to read "
-                 "from stdin.\n";
+    std::cerr << "                   "
+                 "Leave empty or set to \"-\" to read from stdin.\n";
     std::cerr << "         -t INT    Number of threads used.\n"
-                 "                   If -t is not set, the value would "
-                 "be the sum of\n"
-                 "                   --hts_threads and --lift_threads. [1] \n";
+                 "                   "
+                 "If -t is not set, the value would be the sum of\n"
+                 "                   "
+                 "--hts_threads and --lift_threads. [1] \n";
     std::cerr << "         --lift_threads INT "
                  "Number of threads used for lifting reads. \n"
                  "                            "  // align
@@ -508,8 +509,7 @@ void print_lift_help_msg() {
     std::cerr << "         -T INT    "
                  "Chunk size for each thread. [256] \n"
                  "                   "  // align
-                 "Each thread queries <-T> reads, lifts, "
-                 "and writes.\n"
+                 "Each thread queries <-T> reads, lifts, and writes.\n"
                  "                   "  // align
                  "Setting a larger -T uses slightly more "
                  "memory but might benefit thread scaling.\n";
@@ -517,20 +517,27 @@ void print_lift_help_msg() {
     std::cerr << "         Commit/defer rule options:\n";
     std::cerr << "           -S string<:int/float> Key-value pair of "
                  "a split rule. We allow appending multiple `-S` options.\n";
-    std::cerr << "                     Options: mapq:<int>, "
-                 "aln_score:<int>, isize:<int>, hdist:<int>, "
-                 "clipped_frac:<float>, lifted. [none]\n";
-    std::cerr << "                       * mapq          INT   Min MAPQ to "
-                 "commit (pre-liftover). [30]\n";
-    std::cerr << "                       * aln_score     INT   Min AS:i "
-                 "(alignment score) to commit (pre-liftover). [100]\n";
-    std::cerr << "                       * isize         INT   Max TLEN/isize "
-                 "to commit (post-liftover). [1000]\n";
-    std::cerr << "                       * hdist         INT   Max NM:i "
-                 "(Edit distance) to commit (post-liftover). "
-                 "`-m` and `-f` must be set. [5]\n";
-    std::cerr << "                       * clipped_frac  FLOAT Max fraction of "
-                 "clipped to commit (post-liftover). [0.05]\n";
+    std::cerr << "                     Options: "
+                 "mapq:<int>, aln_score:<int>, isize:<int>, hdist:<int>, "
+                 "clipped_frac:<float>. lifted. [none]\n";
+    std::cerr << "                       * mapq          INT   "
+                 "Min MAPQ (pre-liftover) accepted for a committed read.\n";
+    std::cerr << "                       * aln_score     INT   "
+                 "Min AS:i (alignment score) (pre-liftover) accepted for a "
+                 "committed read.\n";
+    std::cerr << "                       * isize         INT   "
+                 "Max TLEN/isize (post-liftover) accepted for a committed "
+                 "read.\n";
+    std::cerr << "                       * hdist         INT   "
+                 "Max NM:i (Edit distance) (post-liftover) accepted for a "
+                 "committed read.\n"
+                 "                                             "
+                 "`-m` and `-f` must be set.\n";
+    std::cerr << "                       * clipped_frac  FLOAT "
+                 "Max fraction of clipped bases (post-liftover) accepted for a "
+                 "committed read.\n"
+                 "                                             "
+                 "A higher value results in fewer committed reads.\n";
     std::cerr << "           Example: `-S mapq:20 -S aln_score:20` commits "
                  "MQ>=20 and AS>=20 alignments.\n";
     std::cerr << "           -r string Path to a BED file (source "
