@@ -996,7 +996,7 @@ class Leviosam2WorkflowPacbioHifiPreset(Leviosam2Workflow):
             )
         if args.use_preset:
             self.lift_max_gap = 1000
-            self.lift_commit_max_hdit = 100
+            self.lift_commit_max_hdist = 100
 
 
 class Leviosam2WorkflowOntPreset(Leviosam2Workflow):
@@ -1016,7 +1016,7 @@ class Leviosam2WorkflowOntPreset(Leviosam2Workflow):
             )
         if args.use_preset:
             self.lift_max_gap = 1500
-            self.lift_commit_max_hdit = 6000
+            self.lift_commit_max_hdist = 6000
 
 
 def run_workflow(args: argparse.Namespace):
