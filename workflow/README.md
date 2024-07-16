@@ -3,7 +3,8 @@
 ## Dependencies
 
 All dependent software is included in our Docker/Singularity container.
-Users of other installation approaches may install the dependencies using conda, pre-built binary, or building from source.
+Users of other installation approaches may install the dependencies using
+conda, pre-built binary, or building from source.
 
 - Aligner: [minimap2](https://github.com/lh3/minimap2)/[winnowmap2](https://github.com/marbl/Winnowmap)/[bwa mem](https://github.com/lh3/bwa)/[Bowtie 2](http://bowtie-bio.sourceforge.net/bowtie2/manual.shtml)
 - samtools, bgzip
@@ -24,7 +25,7 @@ python leviosam2.py \
     -fi bt2/grch38.fna \
     --sequence_type ilmn_pe \
     -a bowtie2 \
-    --use_preset True \
+    --use_preset \
     --lift_bed_commit_source suppress_annotations.bed \  # optional
     --lift_bed_defer_target defer_annotations.bed   # optional
 ```
@@ -56,7 +57,7 @@ python leviosam2.py \
     -fi bwa/grch38.fna \
     --sequence_type ilmn_pe \
     -a bwamem \
-    --use_preset True \
+    --use_preset \
     --lift_bed_commit_source suppress_annotations.bed \  # optional
     --lift_bed_defer_target defer_annotations.bed   # optional
 ```
@@ -96,7 +97,7 @@ python leviosam2.py \
     -f grch38.fna \
     --sequence_type pb_hifi \
     -a minimap2 \
-    --use_preset True \
+    --use_preset \
     --lift_realign_config ../configs/pacbio_all.yaml \
     --lift_bed_commit_source suppress_annotations.bed  # optional
 ```
@@ -126,7 +127,7 @@ python leviosam2.py \
     -f grch38.fna \
     --sequence_type ont \
     -a minimap2 \
-    --use_preset True \
+    --use_preset \
     --lift_realign_config ../configs/ont_all.yaml \
     --lift_bed_commit_source suppress_annotations.bed  # optional
 ```
