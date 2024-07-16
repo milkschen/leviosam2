@@ -231,8 +231,7 @@ def parse_args() -> argparse.Namespace:
     # )
     parser.add_argument(
         "--use_preset",
-        type=bool,
-        default=True,
+        action="store_true",
         help="Use default workflow parameters",
     )
     parser.add_argument(
