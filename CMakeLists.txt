@@ -14,7 +14,7 @@ execute_process(
     OUTPUT_STRIP_TRAILING_WHITESPACE
 )
 
-set(PROJECT_VER "0.4.2-${GIT_HASH}")
+set(PROJECT_VER "0.5.0-${GIT_HASH}")
 
 find_library(HTS_LIB hts)
 if(NOT HTS_LIB)
