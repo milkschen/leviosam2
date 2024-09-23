@@ -14,7 +14,11 @@ execute_process(
     OUTPUT_STRIP_TRAILING_WHITESPACE
 )
 
-set(PROJECT_VER "0.5.0-${GIT_HASH}")
+if("${CMAKE_BUILD_TYPE}" STREQUAL "dev")
+    set(PROJECT_VER "0.5.0-${GIT_HASH}")
+else()
+    set(PROJECT_VER "0.5.0")
+endif()
 
 find_library(HTS_LIB hts)
 if(NOT HTS_LIB)
