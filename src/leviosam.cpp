@@ -504,8 +504,9 @@ void print_lift_help_msg() {
                  "Path to the FASTA file of the target reference. \n";
     std::cerr << "         -x path   Re-alignment preset. [] \n";
     std::cerr << "         -G INT    "
-                 "Number of allowed CIGAR changes (in base pairs) for one "
-                 "alignment. [0]\n";
+                 "Maximum allowed gap size (in base pairs) between chain "
+                 "intervals for an alignment to be considered liftable. A "
+                 "value of 0 requires perfect chain interval continuity. [0]\n";
     std::cerr << "         -T INT    "
                  "Chunk size for each thread. [256] \n"
                  "                   "  // align
