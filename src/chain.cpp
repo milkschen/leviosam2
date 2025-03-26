@@ -1439,8 +1439,10 @@ std::queue<std::tuple<int32_t, int32_t>> ChainMap::get_bp(
  * @param read_name Read query name.
  * @param start_idx Interval index of the read starting position.
  * @param end_idx Interval index of the read ending position.
- * @param allowed_intvl_gaps Allowed number of gaps between the given range of
- * intervals.
+ * @param allowed_intvl_gaps Maximum allowed size of gaps (in base pairs)
+ * between chain intervals. If the offset difference between any adjacent
+ * interval pair or between the first and last interval exceeds this value, the
+ * alignment will be considered unliftable.
  * @return True if liftable; false if not.
  */
 bool ChainMap::check_multi_intvl_legality(const std::string &source_contig,
@@ -1456,7 +1458,7 @@ bool ChainMap::check_multi_intvl_legality(const std::string &source_contig,
         std::cerr << "[D::chain::check_multi_intvl_legality] next_sintvl: ";
         next_sintvl.debug_print_interval();
     }
-    // Check the gap between the first and the last intervals
+    // Check the gap size between the intervals
     int chain_gap = std::abs(next_sintvl.offset - start_sintvl.offset);
     if (chain_gap > allowed_intvl_gaps) {
         if (verbose >= VERBOSE_INFO) {
