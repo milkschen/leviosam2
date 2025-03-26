@@ -2,7 +2,7 @@
 FROM leviosam2_env:latest AS lev
 
 FROM ubuntu:20.04
-MAINTAINER naechyun@jhu.edu
+LABEL org.opencontainers.image.authors="naechyun@jhu.edu"
 
 ENV TZ=America/New_York
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
