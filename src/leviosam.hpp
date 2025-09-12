@@ -587,7 +587,7 @@ class LiftMap {
                         overlap = 1;
                     if (overlap) {
                         if (verbose)
-                            fprintf(stderr, "Skipping variant %s:%lld\n",
+                            fprintf(stderr, "Skipping variant %s:%ld\n",
                                     bcf_seqname(hdr, rec), rec->pos + 1);
                         continue;
                     }
