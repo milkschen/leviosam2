@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <ctime>
 #include <vector>
+#include <fstream>
 
 #include "aln.hpp"
 #include "collate.hpp"
@@ -112,7 +113,8 @@ void serialize_run(lift_opts args) {
                                             args.haplotype, args.name_map,
                                             args.length_map));
         std::ofstream o(fn_index, std::ios::binary);
-        l.serialize(o);
+        size_t bytes = l.serialize(o);
+        l.log_index_size(bytes);
         std::cerr << "[I::serialize_run] levioSAM VcfMap saved to " << fn_index
                   << "\n";
         // ChainMap
@@ -121,7 +123,8 @@ void serialize_run(lift_opts args) {
         chain::ChainMap cfp(args.chain_fname, args.verbose,
                             args.allowed_cigar_changes, args.length_map);
         std::ofstream o(fn_index, std::ios::binary);
-        cfp.serialize(o);
+        size_t bytes = cfp.serialize(o);
+        cfp.log_index_size(bytes);
         std::cerr << "[I::serialize_run] levioSAM ChainMap saved to "
                   << fn_index << "\n";
     } else {
@@ -299,10 +302,13 @@ std::map<std::string, std::string> load_fasta(std::string ref_name) {
 }
 
 void lift_run(lift_opts args) {
+    size_t chain_bytes = 0;
     chain::ChainMap chain_map = [&] {
         if (args.chainmap_fname != "") {
             std::cerr << "[I::lift_run] Loading levioSAM index...";
             std::ifstream in(args.chainmap_fname, std::ios::binary);
+            std::ifstream fs(args.chainmap_fname, std::ios::binary | std::ios::ate);
+            chain_bytes = fs.tellg();
             return chain::ChainMap(in, args.verbose,
                                    args.allowed_cigar_changes);
         } else if (args.chain_fname != "") {
@@ -319,10 +325,13 @@ void lift_run(lift_opts args) {
             return chain::ChainMap();
         }
     }();
+    size_t lift_bytes = 0;
     lift::LiftMap lift_map = [&] {
         if (args.lift_fname != "") {
             std::cerr << "[I::lift_run] Loading levioSAM index...";
             std::ifstream in(args.lift_fname, std::ios::binary);
+            std::ifstream fs(args.lift_fname, std::ios::binary | std::ios::ate);
+            lift_bytes = fs.tellg();
             return lift::LiftMap(in);
             // if "-l" not specified, then create a levioSAM
         } else if (args.vcf_fname != "") {
@@ -349,6 +358,10 @@ void lift_run(lift_opts args) {
         exit(1);
     }
     std::cerr << "done\n";
+    if (args.chainmap_fname != "" || args.chain_fname != "")
+        chain_map.log_index_size(chain_bytes);
+    if (args.lift_fname != "" || args.vcf_fname != "")
+        lift_map.log_index_size(lift_bytes);
 
     samFile *sam_fp = (args.sam_fname == "")
                           ? sam_open("-", "r")

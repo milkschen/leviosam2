@@ -18,6 +18,7 @@
 
 #include <cstdio>
 #include <iostream>
+#include <vector>
 #include <sdsl/bit_vectors.hpp>
 #include <sdsl/util.hpp>
 #include <thread>
@@ -395,6 +396,21 @@ class Lift {
                                    : ins_rs0(ins.size() - 1) + 1;
     }
 
+    size_t count_ins() const {
+        sdsl::sd_vector<>::rank_1_type r(&ins);
+        return r(ins.size());
+    }
+
+    size_t count_del() const {
+        sdsl::sd_vector<>::rank_1_type r(&del);
+        return r(del.size());
+    }
+
+    size_t count_snp() const {
+        sdsl::sd_vector<>::rank_1_type r(&snp);
+        return r(snp.size());
+    }
+
     // returns size of s2 sequence
     // size_t s2_len() {
     //     return del[del.size() - 1] ? del_rs0(del.size() - 1) :
@@ -767,6 +783,44 @@ class LiftMap {
         s2_map.load(in);
         name_map.load(in);
         length_map = LevioSamUtils::load_lengthmap(in);
+    }
+
+    void log_index_size(size_t bytes = 0) const {
+        struct CStats {
+            size_t ins;
+            size_t del;
+            size_t snp;
+        };
+        std::vector<std::pair<std::string, CStats>> stats;
+        stats.reserve(s2_map.size());
+        size_t total_ins = 0, total_del = 0, total_snp = 0;
+        for (const auto &kv : s2_map) {
+            const auto &l = lmap[kv.second];
+            size_t ins = l.count_ins();
+            size_t del = l.count_del();
+            size_t snp = l.count_snp();
+            total_ins += ins;
+            total_del += del;
+            total_snp += snp;
+            stats.push_back({kv.first, {ins, del, snp}});
+        }
+        size_t total_var = total_ins + total_del + total_snp;
+        std::cerr << "[I::log_index_size] contigs=" << s2_map.size()
+                  << " variants=" << total_var
+                  << " ins=" << total_ins
+                  << " del=" << total_del
+                  << " snp=" << total_snp;
+        if (bytes)
+            std::cerr << " bytes=" << bytes;
+        std::cerr << "\n";
+        for (const auto &s : stats) {
+            size_t var = s.second.ins + s.second.del + s.second.snp;
+            std::cerr << "[I::log_index_size] " << s.first
+                      << " variants=" << var
+                      << " ins=" << s.second.ins
+                      << " del=" << s.second.del
+                      << " snp=" << s.second.snp << "\n";
+        }
     }
 
     // get names and lengths of s1 sequences

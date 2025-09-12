@@ -210,6 +210,38 @@ bool ChainMap::interval_map_sanity_check() {
     return true;
 }
 
+void ChainMap::log_index_size(size_t bytes) const {
+    size_t total_intervals = 0;
+    size_t total_bases = 0;
+    std::vector<std::pair<std::string, std::pair<size_t, size_t>>> stats;
+    stats.reserve(interval_map.size());
+    for (const auto &kv : interval_map) {
+        size_t n = kv.second.size();
+        size_t bases = 0;
+        for (const auto &intvl : kv.second) {
+            bases += static_cast<size_t>(intvl.source_end) -
+                     static_cast<size_t>(intvl.source_start);
+        }
+        total_intervals += n;
+        total_bases += bases;
+        stats.push_back({kv.first, {n, bases}});
+    }
+    size_t avg_len = total_intervals ? total_bases / total_intervals : 0;
+    std::cerr << "[I::log_index_size] contigs=" << interval_map.size()
+              << " intervals=" << total_intervals << " bases=" << total_bases
+              << " avg_len=" << avg_len;
+    if (bytes)
+        std::cerr << " bytes=" << bytes;
+    std::cerr << "\n";
+    for (const auto &s : stats) {
+        size_t avg = s.second.first ? s.second.second / s.second.first : 0;
+        std::cerr << "[I::log_index_size] " << s.first
+                  << " intervals=" << s.second.first
+                  << " bases=" << s.second.second
+                  << " avg_len=" << avg << "\n";
+    }
+}
+
 /* Get the rank in the start bitvector at contig[pos]
  * If pos > len(contig): return rank(contig[-1])
  *
