@@ -4,7 +4,7 @@ project(leviosam2 CXX C)
 
 set(PROJECT_URL "https://github.com/milkschen/leviosam2")
 set(PROJECT_DESCRIPTION "leviosam2")
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 14)
 
 # Get the latest abbreviated commit hash of the working branch
 execute_process(
