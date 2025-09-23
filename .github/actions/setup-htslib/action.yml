@@ -1,0 +1,43 @@
+name: 'Setup htslib'
+description: 'Install and configure htslib with caching'
+inputs:
+  version:
+    description: 'htslib version to install'
+    required: true
+  cache-enabled:
+    description: 'Enable caching for htslib builds'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Cache htslib
+      if: inputs.cache-enabled == 'true'
+      uses: actions/cache@v3
+      with:
+        path: /tmp/htslib-${{ inputs.version }}
+        key: htslib-${{ inputs.version }}-${{ runner.os }}-${{ hashFiles('**/CMakeLists.txt') }}
+        restore-keys: |
+          htslib-${{ inputs.version }}-${{ runner.os }}-
+          htslib-${{ inputs.version }}-
+    
+    - name: Set up SDSL
+      shell: bash
+      run: sudo apt-get -y install libsdsl-dev
+    
+    - name: Set up htslib
+      shell: bash
+      run: |
+        if [ ! -d "/tmp/htslib-${{ inputs.version }}" ]; then
+          sudo apt-get -y install libbz2-dev liblzma-dev &&
+          wget https://github.com/samtools/htslib/releases/download/${{ inputs.version }}/htslib-${{ inputs.version }}.tar.bz2 &&
+          tar -vxjf htslib-${{ inputs.version }}.tar.bz2 &&
+          cd htslib-${{ inputs.version }} &&
+          ./configure --prefix=/tmp/htslib-${{ inputs.version }} &&
+          make &&
+          make install &&
+          cd ../ &&
+          rm htslib-${{ inputs.version }}.tar.bz2
+        fi
+        sudo cp -r /tmp/htslib-${{ inputs.version }}/* /usr/local/

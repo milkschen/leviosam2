@@ -1,0 +1,39 @@
+name: 'Build and Test LevioSAM2'
+description: 'Build and test LevioSAM2 with CMake'
+inputs:
+  build-type:
+    description: 'CMake build type'
+    required: false
+    default: 'Release'
+  cache-enabled:
+    description: 'Enable caching for CMake builds'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Cache CMake build
+      if: inputs.cache-enabled == 'true'
+      uses: actions/cache@v3
+      with:
+        path: ${{github.workspace}}/build
+        key: cmake-build-${{ runner.os }}-${{ inputs.build-type }}-${{ hashFiles('**/CMakeLists.txt', '**/src/**') }}
+        restore-keys: |
+          cmake-build-${{ runner.os }}-${{ inputs.build-type }}-
+          cmake-build-${{ runner.os }}-
+    
+    - name: Configure CMake
+      shell: bash
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{ inputs.build-type }}
+
+    - name: Build
+      shell: bash
+      run: |
+        gcc -v &&
+        cmake --build ${{github.workspace}}/build --config ${{ inputs.build-type }}
+
+    - name: Test
+      shell: bash
+      working-directory: ${{github.workspace}}/build
+      run: ./leviosam2 -h && ctest -C ${{ inputs.build-type }}
