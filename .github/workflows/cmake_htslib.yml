@@ -30,8 +30,8 @@ jobs:
   critical_tests:
     strategy:
       matrix:
-        version: [1.12, 1.22.1]  # Oldest and newest supported versions
-        os: [ubuntu-latest]
+        version: ['1.12', '1.22.1']  # Oldest and newest supported versions
+        os: ['ubuntu-latest']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
@@ -47,8 +47,8 @@ jobs:
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
     strategy:
       matrix:
-        version: [1.19.1, 1.20, 1.21]  # Representative middle versions
-        os: [ubuntu-22.04]
+        version: ['1.19.1', '1.20', '1.21']  # Representative middle versions
+        os: ['ubuntu-22.04']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
@@ -65,8 +65,8 @@ jobs:
     strategy:
       matrix:
         # Test the oldest supported version (1.12) and four most recent versions
-        version: [1.12, 1.19.1, 1.20, 1.21, 1.22.1]
-        os: [ubuntu-22.04, ubuntu-latest]
+        version: ['1.12', '1.19.1', '1.20', '1.21', '1.22.1']
+        os: ['ubuntu-22.04', 'ubuntu-latest']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
