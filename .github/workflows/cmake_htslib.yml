@@ -1,4 +1,4 @@
-name: Build and ctest
+name: Build and ctest (with cache)
 
 on:
   push:
@@ -11,8 +11,7 @@ on:
       - 'CMakeLists.txt.in'
       - 'testdata/**'
   pull_request:
-    branches:
-      - 'main'
+    branches: [ main ]
     paths:
       - '.github/**'
       - 'src/**'
@@ -20,17 +19,48 @@ on:
       - 'CMakeLists.txt'
       - 'CMakeLists.txt.in'
       - 'testdata/**'
+  workflow_dispatch:
+    inputs:
+      test_level:
+        description: 'Test level to run'
+        required: true
+        default: 'smart'
+        type: choice
+        options:
+        - smart
+        - extended
+        - full
 
 env:
-  # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
   BUILD_TYPE: Release
 
 jobs:
-  # Critical compatibility tests - always run
+  # Setup job to define version lists
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      all_versions: ${{ steps.versions.outputs.all }}
+      critical_versions: ${{ steps.versions.outputs.critical }}
+      extended_versions: ${{ steps.versions.outputs.extended }}
+    steps:
+      - name: Define version lists
+        id: versions
+        run: |
+          ALL_VERSIONS='["1.12", "1.19.1", "1.20", "1.21", "1.22.1"]'
+          CRITICAL_VERSIONS='["1.12", "1.22.1"]'
+          EXTENDED_VERSIONS='["1.19.1", "1.20", "1.21"]'
+          
+          echo "all=$ALL_VERSIONS" >> $GITHUB_OUTPUT
+          echo "critical=$CRITICAL_VERSIONS" >> $GITHUB_OUTPUT
+          echo "extended=$EXTENDED_VERSIONS" >> $GITHUB_OUTPUT
+
+  # Critical matrix testing - tests edge cases and representative versions
   critical_tests:
+    needs: setup
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.test_level == 'smart' || github.event_name != 'workflow_dispatch'
     strategy:
       matrix:
-        version: ['1.12', '1.22.1']  # Oldest and newest supported versions
+        version: ${{ fromJSON(needs.setup.outputs.critical_versions) }}  # Oldest and newest supported versions
         os: ['ubuntu-latest']
     runs-on: ${{ matrix.os }}
     steps:
@@ -38,16 +68,20 @@ jobs:
       - uses: ./.github/actions/setup-htslib
         with:
           version: ${{ matrix.version }}
+          cache-enabled: 'true'
       - uses: ./.github/actions/build-test
         with:
           build-type: ${{ env.BUILD_TYPE }}
-    
-  # Extended compatibility tests - run on PRs and main branch
+          cache-enabled: 'true'
+
+  # Extended testing for PRs
   extended_tests:
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    needs: setup
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.event.inputs.test_level == 'extended')
     strategy:
       matrix:
-        version: ['1.19.1', '1.20', '1.21']  # Representative middle versions
+        # Representative middle versions
+        version: ${{ fromJSON(needs.setup.outputs.extended_versions) }}
         os: ['ubuntu-22.04']
     runs-on: ${{ matrix.os }}
     steps:
@@ -55,17 +89,20 @@ jobs:
       - uses: ./.github/actions/setup-htslib
         with:
           version: ${{ matrix.version }}
+          cache-enabled: 'true'
       - uses: ./.github/actions/build-test
         with:
           build-type: ${{ env.BUILD_TYPE }}
-    
-  # Full compatibility tests - run only on main branch or manual trigger
+          cache-enabled: 'true'
+
+  # Full compatibility matrix - only for releases or manual trigger
   full_tests:
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    needs: setup
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.test_level == 'full')
     strategy:
       matrix:
-        # Test the oldest supported version (1.12) and four most recent versions
-        version: ['1.12', '1.19.1', '1.20', '1.21', '1.22.1']
+        # Test all supported versions
+        version: ${{ fromJSON(needs.setup.outputs.all_versions) }}
         os: ['ubuntu-22.04', 'ubuntu-latest']
     runs-on: ${{ matrix.os }}
     steps:
@@ -73,6 +110,8 @@ jobs:
       - uses: ./.github/actions/setup-htslib
         with:
           version: ${{ matrix.version }}
+          cache-enabled: 'true'
       - uses: ./.github/actions/build-test
         with:
           build-type: ${{ env.BUILD_TYPE }}
+          cache-enabled: 'true'
