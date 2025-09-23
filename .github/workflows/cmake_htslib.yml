@@ -30,111 +30,49 @@ jobs:
   critical_tests:
     strategy:
       matrix:
-        version: [1.12, 1.18]  # Oldest and newest supported versions
+        version: [1.12, 1.22.1]  # Oldest and newest supported versions
         os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
-      
-      - name: Set up SDSL
-        run: sudo apt-get -y install libsdsl-dev
-      
-      - name: Set up htslib
-        run:
-          sudo apt-get -y install libbz2-dev liblzma-dev &&
-          wget https://github.com/samtools/htslib/releases/download/${{ matrix.version }}/htslib-${{ matrix.version }}.tar.bz2 &&
-          tar -vxjf htslib-${{ matrix.version }}.tar.bz2 &&
-          cd htslib-${{ matrix.version }} &&
-          ./configure &&
-          make &&
-          sudo make install &&
-          cd ../ &&
-          rm htslib-${{ matrix.version }}.tar.bz2
-      
-      - name: Configure CMake
-        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
-
-      - name: Build
-        run: 
-          gcc -v &&
-          cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
-
-      - name: Test
-        working-directory: ${{github.workspace}}/build
-        run: ./leviosam2 -h && ctest -C ${{env.BUILD_TYPE}}
+      - uses: ./.github/actions/setup-htslib
+        with:
+          version: ${{ matrix.version }}
+      - uses: ./.github/actions/build-test
+        with:
+          build-type: ${{ env.BUILD_TYPE }}
     
   # Extended compatibility tests - run on PRs and main branch
   extended_tests:
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
     strategy:
       matrix:
-        version: [1.13, 1.15, 1.17]  # Representative middle versions
+        version: [1.19.1, 1.20, 1.21]  # Representative middle versions
         os: [ubuntu-22.04]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
-      
-      - name: Set up SDSL
-        run: sudo apt-get -y install libsdsl-dev
-      
-      - name: Set up htslib
-        run:
-          sudo apt-get -y install libbz2-dev liblzma-dev &&
-          wget https://github.com/samtools/htslib/releases/download/${{ matrix.version }}/htslib-${{ matrix.version }}.tar.bz2 &&
-          tar -vxjf htslib-${{ matrix.version }}.tar.bz2 &&
-          cd htslib-${{ matrix.version }} &&
-          ./configure &&
-          make &&
-          sudo make install &&
-          cd ../ &&
-          rm htslib-${{ matrix.version }}.tar.bz2
-      
-      - name: Configure CMake
-        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
-
-      - name: Build
-        run: 
-          gcc -v &&
-          cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
-
-      - name: Test
-        working-directory: ${{github.workspace}}/build
-        run: ./leviosam2 -h && ctest -C ${{env.BUILD_TYPE}}
+      - uses: ./.github/actions/setup-htslib
+        with:
+          version: ${{ matrix.version }}
+      - uses: ./.github/actions/build-test
+        with:
+          build-type: ${{ env.BUILD_TYPE }}
     
   # Full compatibility tests - run only on main branch or manual trigger
   full_tests:
     if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     strategy:
       matrix:
-        version: [1.12, 1.13, 1.14, 1.15, 1.16, 1.17, 1.18]
+        # Test the oldest supported version (1.12) and four most recent versions
+        version: [1.12, 1.19.1, 1.20, 1.21, 1.22.1]
         os: [ubuntu-22.04, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
-      
-      - name: Set up SDSL
-        run: sudo apt-get -y install libsdsl-dev
-      
-      - name: Set up htslib
-        run:
-          sudo apt-get -y install libbz2-dev liblzma-dev &&
-          wget https://github.com/samtools/htslib/releases/download/${{ matrix.version }}/htslib-${{ matrix.version }}.tar.bz2 &&
-          tar -vxjf htslib-${{ matrix.version }}.tar.bz2 &&
-          cd htslib-${{ matrix.version }} &&
-          ./configure &&
-          make &&
-          sudo make install &&
-          cd ../ &&
-          rm htslib-${{ matrix.version }}.tar.bz2
-      
-      - name: Configure CMake
-        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
-
-      - name: Build
-        run: 
-          gcc -v &&
-          cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
-
-      - name: Test
-        working-directory: ${{github.workspace}}/build
-        run: ./leviosam2 -h && ctest -C ${{env.BUILD_TYPE}}
+      - uses: ./.github/actions/setup-htslib
+        with:
+          version: ${{ matrix.version }}
+      - uses: ./.github/actions/build-test
+        with:
+          build-type: ${{ env.BUILD_TYPE }}
