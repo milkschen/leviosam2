@@ -587,8 +587,9 @@ class LiftMap {
                         overlap = 1;
                     if (overlap) {
                         if (verbose)
-                            fprintf(stderr, "Skipping variant %s:%lld\n",
-                                    bcf_seqname(hdr, rec), rec->pos + 1);
+                            std::cerr << "[I::LiftMap] Skipping variant " <<
+                                         bcf_seqname(hdr, rec) << ":" << 
+                                         rec->pos + 1 << "\n";
                         continue;
                     }
                 }

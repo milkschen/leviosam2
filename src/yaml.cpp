@@ -11,10 +11,9 @@
  * Distributed under the MIT license
  * https://github.com/milkschen/leviosam2
  */
-#include "yaml.hpp"
-
-#include <iostream>
 #define RYML_SINGLE_HDR_DEFINE_NOW
+#include "yaml.hpp"
+#include <iostream>
 #include "rapidyaml.hpp"
 
 namespace Yaml {
