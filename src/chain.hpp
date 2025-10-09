@@ -62,7 +62,7 @@ class ChainMap {
     void sort_intervals(std::string contig);
     void debug_print_interval_map();
     void debug_print_intervals(std::string contig, const int n);
-    bool interval_map_sanity_check();
+    bool validate_intervals();
     void log_index_size(size_t bytes = 0) const;
     int get_start_rank(std::string contig, int pos);
     int get_end_rank(std::string contig, int pos);
@@ -115,6 +115,8 @@ class ChainMap {
     size_t serialize(std::ofstream &out);
     void load(std::ifstream &in);
     std::vector<std::pair<std::string, int32_t>> length_map;
+    
+    void add_interval(const std::string& contig, const Interval& interval);
 
    private:
     void init_rs();

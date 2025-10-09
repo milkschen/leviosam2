@@ -19,6 +19,14 @@
 #include "leviosam_utils.hpp"
 
 namespace chain {
+/**
+ * @brief Default constructor for Interval.
+ * 
+ * Creates an empty interval with default values:
+ * - Empty target string
+ * - Zero offset and coordinates
+ * - Positive strand (true)
+ */
 Interval::Interval() {
     target = "";
     offset = 0;
@@ -27,6 +35,18 @@ Interval::Interval() {
     strand = true;
 }
 
+/**
+ * @brief Parameterized constructor for Interval.
+ * 
+ * Creates an interval with specified alignment coordinates and properties.
+ * An interval represents a gapless alignment segment between source and target references.
+ * 
+ * @param t Target reference/contig name
+ * @param so Source start position (0-based)
+ * @param se Source end position (0-based, exclusive)
+ * @param o Offset to convert source positions to target positions
+ * @param ss Strand orientation (true = forward/+, false = reverse/-)
+ */
 Interval::Interval(std::string t, int32_t so, int32_t se, int32_t o, bool ss) {
     target = t;
     offset = o;
@@ -35,6 +55,14 @@ Interval::Interval(std::string t, int32_t so, int32_t se, int32_t o, bool ss) {
     strand = ss;
 }
 
+/**
+ * @brief Constructs an Interval by loading data from a binary input stream.
+ * 
+ * This constructor loads a previously serialized Interval from a binary stream.
+ * The data must have been written using the serialize() method.
+ * 
+ * @param in Input stream containing the serialized Interval data
+ */
 Interval::Interval(std::ifstream &in) { load(in); }
 
 void Interval::debug_print_interval() {
@@ -84,11 +112,39 @@ void Interval::load(std::istream &in) {
     strand = load_strand;
 }
 
+/**
+ * @brief Constructs a ChainMap by loading a pre-built index from an input stream.
+ * 
+ * This constructor loads a previously serialized ChainMap index from a binary stream.
+ * The index must have been created using the serialize() method.
+ * 
+ * @param in Input stream containing the serialized ChainMap data
+ * @param verbose Verbosity level (0=quiet, higher=more verbose)
+ * @param allowed_intvl_gaps Maximum allowed gaps between intervals for lift-over
+ */
 ChainMap::ChainMap(std::ifstream &in, int verbose, int allowed_intvl_gaps)
     : verbose(verbose), allowed_intvl_gaps(allowed_intvl_gaps) {
     load(in);
 }
 
+/**
+ * @brief Constructs a ChainMap by parsing a chain file and building the index.
+ * 
+ * This constructor reads a chain file (typically from UCSC's liftOver tool) and
+ * builds an efficient index for performing lift-over operations. The chain file
+ * contains pairwise alignments between source and target reference sequences.
+ * 
+ * The constructor:
+ * - Parses chain file format and extracts alignment intervals
+ * - Builds bit vectors for efficient interval queries
+ * - Sorts intervals and validates for overlaps
+ * - Exits with error if interval sanity check fails
+ * 
+ * @param fname Path to the chain file to parse
+ * @param verbose Verbosity level (0=quiet, higher=more verbose)
+ * @param allowed_intvl_gaps Maximum allowed gaps between intervals for lift-over
+ * @param lm Length map containing chromosome/contig lengths for validation
+ */
 ChainMap::ChainMap(std::string fname, int verbose, int allowed_intvl_gaps,
                    LengthMap &lm)
     : verbose(verbose), allowed_intvl_gaps(allowed_intvl_gaps), length_map(lm) {
@@ -132,8 +188,10 @@ ChainMap::ChainMap(std::string fname, int verbose, int allowed_intvl_gaps,
     if (verbose > 2) {
         debug_print_interval_map();
     }
-    // TEMP
-    interval_map_sanity_check();
+    if (!validate_intervals()) {
+        std::cerr << "[E::chain::build] Interval validation failed\n";
+        exit(1);
+    }
 }
 
 /* Create start and end bitvectors when see a new `source`.
@@ -187,17 +245,33 @@ void ChainMap::debug_print_intervals(std::string contig, const int n) {
     std::cerr << "\n";
 }
 
-/* Check if the interval map contains any overlaps in the source reference
- * Logic: for each interval, its ending position <= next starting position
- *
- * Return true if pass; false otherwise.
+/**
+ * @brief Adds an interval to the specified contig for testing purposes.
+ * 
+ * This method allows adding intervals to the interval map, primarily intended
+ * for unit testing scenarios where controlled interval data is needed.
+ * 
+ * @param contig The contig/chromosome name to add the interval to
+ * @param interval The interval to add
  */
-bool ChainMap::interval_map_sanity_check() {
+void ChainMap::add_interval(const std::string& contig, const Interval& interval) {
+    interval_map[contig].push_back(interval);
+}
+
+/**
+ * @brief Validates that intervals in the interval map do not overlap in the source reference.
+ *
+ * For each interval in each contig, this function ensures that the end position
+ * of the current interval is less than or equal to the start position of the next interval.
+ *
+ * @return true if validation passes (no overlaps found), false otherwise.
+ */
+bool ChainMap::validate_intervals() {
     for (auto &itr : interval_map) {
         std::vector<chain::Interval> v = interval_map[itr.first];
         for (int i = 0; i < v.size() - 1; i++) {
             if (v[i].source_end > v[i + 1].source_start) {
-                std::cerr << "[E::chain::interval_map_sanity_check]  "
+                std::cerr << "[E::chain::validate_intervals]  "
                           << itr.first << "\n";
                 v[i].debug_print_interval();
                 v[i + 1].debug_print_interval();
@@ -205,8 +279,7 @@ bool ChainMap::interval_map_sanity_check() {
             }
         }
     }
-    std::cerr << "[I::chain::interval_map_sanity_check] Interval_map sanity "
-                 "check: passed (no overlaps)\n";
+    std::cerr << "[I::chain::validate_intervals] Interval validation: passed (no overlaps)\n";
     return true;
 }
 
