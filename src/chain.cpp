@@ -84,11 +84,39 @@ void Interval::load(std::istream &in) {
     strand = load_strand;
 }
 
+/**
+ * @brief Constructs a ChainMap by loading a pre-built index from an input stream.
+ * 
+ * This constructor loads a previously serialized ChainMap index from a binary stream.
+ * The index must have been created using the serialize() method.
+ * 
+ * @param in Input stream containing the serialized ChainMap data
+ * @param verbose Verbosity level (0=quiet, higher=more verbose)
+ * @param allowed_intvl_gaps Maximum allowed gaps between intervals for lift-over
+ */
 ChainMap::ChainMap(std::ifstream &in, int verbose, int allowed_intvl_gaps)
     : verbose(verbose), allowed_intvl_gaps(allowed_intvl_gaps) {
     load(in);
 }
 
+/**
+ * @brief Constructs a ChainMap by parsing a chain file and building the index.
+ * 
+ * This constructor reads a chain file (typically from UCSC's liftOver tool) and
+ * builds an efficient index for performing lift-over operations. The chain file
+ * contains pairwise alignments between source and target reference sequences.
+ * 
+ * The constructor:
+ * - Parses chain file format and extracts alignment intervals
+ * - Builds bit vectors for efficient interval queries
+ * - Sorts intervals and validates for overlaps
+ * - Exits with error if interval sanity check fails
+ * 
+ * @param fname Path to the chain file to parse
+ * @param verbose Verbosity level (0=quiet, higher=more verbose)
+ * @param allowed_intvl_gaps Maximum allowed gaps between intervals for lift-over
+ * @param lm Length map containing chromosome/contig lengths for validation
+ */
 ChainMap::ChainMap(std::string fname, int verbose, int allowed_intvl_gaps,
                    LengthMap &lm)
     : verbose(verbose), allowed_intvl_gaps(allowed_intvl_gaps), length_map(lm) {
@@ -132,8 +160,10 @@ ChainMap::ChainMap(std::string fname, int verbose, int allowed_intvl_gaps,
     if (verbose > 2) {
         debug_print_interval_map();
     }
-    // TEMP
-    interval_map_sanity_check();
+    if (!interval_map_sanity_check()) {
+        std::cerr << "[E::chain::build] Interval map sanity check failed\n";
+        exit(1);
+    }
 }
 
 /* Create start and end bitvectors when see a new `source`.
