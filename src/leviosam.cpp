@@ -113,8 +113,7 @@ void serialize_run(lift_opts args) {
                                             args.haplotype, args.name_map,
                                             args.length_map));
         std::ofstream o(fn_index, std::ios::binary);
-        size_t bytes = l.serialize(o);
-        l.log_index_size(bytes);
+        l.serialize(o);
         std::cerr << "[I::serialize_run] levioSAM VcfMap saved to " << fn_index
                   << "\n";
         // ChainMap
@@ -305,14 +304,14 @@ void lift_run(lift_opts args) {
     size_t chain_bytes = 0;
     chain::ChainMap chain_map = [&] {
         if (args.chainmap_fname != "") {
-            std::cerr << "[I::lift_run] Loading levioSAM index...";
+            std::cerr << "[I::lift_run] Loading levioSAM 2 index...";
             std::ifstream in(args.chainmap_fname, std::ios::binary);
             std::ifstream fs(args.chainmap_fname, std::ios::binary | std::ios::ate);
             chain_bytes = fs.tellg();
             return chain::ChainMap(in, args.verbose,
                                    args.allowed_cigar_changes);
         } else if (args.chain_fname != "") {
-            std::cerr << "[I::lift_run] Building levioSAM index...";
+            std::cerr << "[I::lift_run] Building levioSAM 2 index...";
             if (args.length_map.size() == 0) {
                 std::cerr << "[E::lift_run] No length map is found. Please "
                              "set -F properly.\n";
@@ -325,13 +324,10 @@ void lift_run(lift_opts args) {
             return chain::ChainMap();
         }
     }();
-    size_t lift_bytes = 0;
     lift::LiftMap lift_map = [&] {
         if (args.lift_fname != "") {
             std::cerr << "[I::lift_run] Loading levioSAM index...";
             std::ifstream in(args.lift_fname, std::ios::binary);
-            std::ifstream fs(args.lift_fname, std::ios::binary | std::ios::ate);
-            lift_bytes = fs.tellg();
             return lift::LiftMap(in);
             // if "-l" not specified, then create a levioSAM
         } else if (args.vcf_fname != "") {
@@ -360,8 +356,6 @@ void lift_run(lift_opts args) {
     std::cerr << "done\n";
     if (args.chainmap_fname != "" || args.chain_fname != "")
         chain_map.log_index_size(chain_bytes);
-    if (args.lift_fname != "" || args.vcf_fname != "")
-        lift_map.log_index_size(lift_bytes);
 
     samFile *sam_fp = (args.sam_fname == "")
                           ? sam_open("-", "r")
