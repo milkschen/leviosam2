@@ -19,6 +19,14 @@
 #include "leviosam_utils.hpp"
 
 namespace chain {
+/**
+ * @brief Default constructor for Interval.
+ * 
+ * Creates an empty interval with default values:
+ * - Empty target string
+ * - Zero offset and coordinates
+ * - Positive strand (true)
+ */
 Interval::Interval() {
     target = "";
     offset = 0;
@@ -27,6 +35,18 @@ Interval::Interval() {
     strand = true;
 }
 
+/**
+ * @brief Parameterized constructor for Interval.
+ * 
+ * Creates an interval with specified alignment coordinates and properties.
+ * An interval represents a gapless alignment segment between source and target references.
+ * 
+ * @param t Target reference/contig name
+ * @param so Source start position (0-based)
+ * @param se Source end position (0-based, exclusive)
+ * @param o Offset to convert source positions to target positions
+ * @param ss Strand orientation (true = forward/+, false = reverse/-)
+ */
 Interval::Interval(std::string t, int32_t so, int32_t se, int32_t o, bool ss) {
     target = t;
     offset = o;
@@ -35,6 +55,14 @@ Interval::Interval(std::string t, int32_t so, int32_t se, int32_t o, bool ss) {
     strand = ss;
 }
 
+/**
+ * @brief Constructs an Interval by loading data from a binary input stream.
+ * 
+ * This constructor loads a previously serialized Interval from a binary stream.
+ * The data must have been written using the serialize() method.
+ * 
+ * @param in Input stream containing the serialized Interval data
+ */
 Interval::Interval(std::ifstream &in) { load(in); }
 
 void Interval::debug_print_interval() {
@@ -217,10 +245,26 @@ void ChainMap::debug_print_intervals(std::string contig, const int n) {
     std::cerr << "\n";
 }
 
-/* Check if the interval map contains any overlaps in the source reference
- * Logic: for each interval, its ending position <= next starting position
+/**
+ * @brief Adds an interval to the specified contig for testing purposes.
+ * 
+ * This method allows adding intervals to the interval map, primarily intended
+ * for unit testing scenarios where controlled interval data is needed.
+ * 
+ * @param contig The contig/chromosome name to add the interval to
+ * @param interval The interval to add
+ */
+void ChainMap::add_interval(const std::string& contig, const Interval& interval) {
+    interval_map[contig].push_back(interval);
+}
+
+/**
+ * @brief Checks if the interval map contains overlapping intervals in the source reference.
  *
- * Return true if pass; false otherwise.
+ * For each interval in each contig, this function ensures that the end position
+ * of the current interval is less than or equal to the start position of the next interval.
+ *
+ * @return true if no overlaps are found (sanity check passed), false otherwise.
  */
 bool ChainMap::interval_map_sanity_check() {
     for (auto &itr : interval_map) {

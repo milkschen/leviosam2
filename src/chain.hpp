@@ -115,6 +115,8 @@ class ChainMap {
     size_t serialize(std::ofstream &out);
     void load(std::ifstream &in);
     std::vector<std::pair<std::string, int32_t>> length_map;
+    
+    void add_interval(const std::string& contig, const Interval& interval);
 
    private:
     void init_rs();

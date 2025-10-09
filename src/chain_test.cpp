@@ -548,20 +548,16 @@ TEST(ChainTest, IntervalMapSanityCheckEmpty) {
 TEST(ChainTest, IntervalMapSanityCheckSingleInterval) {
     chain::ChainMap cmap;
     // Single interval should pass sanity check
-    cmap.interval_map["chr1"].push_back(
-        chain::Interval("chr1_dest", 100, 200, 50, true));
+    cmap.add_interval("chr1", chain::Interval("chr1_dest", 100, 200, 50, true));
     EXPECT_EQ(cmap.interval_map_sanity_check(), true);
 }
 
 TEST(ChainTest, IntervalMapSanityCheckNoOverlaps) {
     chain::ChainMap cmap;
     // Add non-overlapping intervals
-    cmap.interval_map["chr1"].push_back(
-        chain::Interval("chr1_dest", 100, 200, 50, true));
-    cmap.interval_map["chr1"].push_back(
-        chain::Interval("chr1_dest", 250, 350, 50, true));
-    cmap.interval_map["chr1"].push_back(
-        chain::Interval("chr1_dest", 400, 500, 50, true));
+    cmap.add_interval("chr1", chain::Interval("chr1_dest", 100, 200, 50, true));
+    cmap.add_interval("chr1", chain::Interval("chr1_dest", 250, 350, 50, true));
+    cmap.add_interval("chr1", chain::Interval("chr1_dest", 400, 500, 50, true));
     
     EXPECT_EQ(cmap.interval_map_sanity_check(), true);
 }
@@ -569,10 +565,8 @@ TEST(ChainTest, IntervalMapSanityCheckNoOverlaps) {
 TEST(ChainTest, IntervalMapSanityCheckWithOverlaps) {
     chain::ChainMap cmap;
     // Add overlapping intervals - first interval ends at 200, second starts at 150
-    cmap.interval_map["chr1"].push_back(
-        chain::Interval("chr1_dest", 100, 200, 50, true));
-    cmap.interval_map["chr1"].push_back(
-        chain::Interval("chr1_dest", 150, 250, 50, true));
+    cmap.add_interval("chr1", chain::Interval("chr1_dest", 100, 200, 50, true));
+    cmap.add_interval("chr1", chain::Interval("chr1_dest", 150, 250, 50, true));
     
     EXPECT_EQ(cmap.interval_map_sanity_check(), false);
 }
@@ -580,10 +574,8 @@ TEST(ChainTest, IntervalMapSanityCheckWithOverlaps) {
 TEST(ChainTest, IntervalMapSanityCheckAdjacentIntervals) {
     chain::ChainMap cmap;
     // Add adjacent intervals (no gap, no overlap) - should pass
-    cmap.interval_map["chr1"].push_back(
-        chain::Interval("chr1_dest", 100, 200, 50, true));
-    cmap.interval_map["chr1"].push_back(
-        chain::Interval("chr1_dest", 200, 300, 50, true));
+    cmap.add_interval("chr1", chain::Interval("chr1_dest", 100, 200, 50, true));
+    cmap.add_interval("chr1", chain::Interval("chr1_dest", 200, 300, 50, true));
     
     EXPECT_EQ(cmap.interval_map_sanity_check(), true);
 }
@@ -592,16 +584,12 @@ TEST(ChainTest, IntervalMapSanityCheckMultipleContigs) {
     chain::ChainMap cmap;
     // Add intervals to multiple contigs - some with overlaps, some without
     // chr1: no overlaps (should pass)
-    cmap.interval_map["chr1"].push_back(
-        chain::Interval("chr1_dest", 100, 200, 50, true));
-    cmap.interval_map["chr1"].push_back(
-        chain::Interval("chr1_dest", 250, 350, 50, true));
+    cmap.add_interval("chr1", chain::Interval("chr1_dest", 100, 200, 50, true));
+    cmap.add_interval("chr1", chain::Interval("chr1_dest", 250, 350, 50, true));
     
     // chr2: has overlaps (should fail)
-    cmap.interval_map["chr2"].push_back(
-        chain::Interval("chr2_dest", 100, 200, 50, true));
-    cmap.interval_map["chr2"].push_back(
-        chain::Interval("chr2_dest", 150, 250, 50, true));
+    cmap.add_interval("chr2", chain::Interval("chr2_dest", 100, 200, 50, true));
+    cmap.add_interval("chr2", chain::Interval("chr2_dest", 150, 250, 50, true));
     
     // Should fail because chr2 has overlaps
     EXPECT_EQ(cmap.interval_map_sanity_check(), false);
@@ -611,20 +599,15 @@ TEST(ChainTest, IntervalMapSanityCheckAllContigsValid) {
     chain::ChainMap cmap;
     // Add intervals to multiple contigs - all valid (no overlaps)
     // chr1: no overlaps
-    cmap.interval_map["chr1"].push_back(
-        chain::Interval("chr1_dest", 100, 200, 50, true));
-    cmap.interval_map["chr1"].push_back(
-        chain::Interval("chr1_dest", 250, 350, 50, true));
+    cmap.add_interval("chr1", chain::Interval("chr1_dest", 100, 200, 50, true));
+    cmap.add_interval("chr1", chain::Interval("chr1_dest", 250, 350, 50, true));
     
     // chr2: no overlaps
-    cmap.interval_map["chr2"].push_back(
-        chain::Interval("chr2_dest", 100, 200, 50, true));
-    cmap.interval_map["chr2"].push_back(
-        chain::Interval("chr2_dest", 300, 400, 50, true));
+    cmap.add_interval("chr2", chain::Interval("chr2_dest", 100, 200, 50, true));
+    cmap.add_interval("chr2", chain::Interval("chr2_dest", 300, 400, 50, true));
     
     // chr3: single interval
-    cmap.interval_map["chr3"].push_back(
-        chain::Interval("chr3_dest", 500, 600, 50, true));
+    cmap.add_interval("chr3", chain::Interval("chr3_dest", 500, 600, 50, true));
     
     // Should pass because all contigs have valid intervals
     EXPECT_EQ(cmap.interval_map_sanity_check(), true);
@@ -633,10 +616,8 @@ TEST(ChainTest, IntervalMapSanityCheckAllContigsValid) {
 TEST(ChainTest, IntervalMapSanityCheckExactOverlap) {
     chain::ChainMap cmap;
     // Add intervals with exact overlap (same start/end positions)
-    cmap.interval_map["chr1"].push_back(
-        chain::Interval("chr1_dest", 100, 200, 50, true));
-    cmap.interval_map["chr1"].push_back(
-        chain::Interval("chr1_dest", 100, 200, 50, true));
+    cmap.add_interval("chr1", chain::Interval("chr1_dest", 100, 200, 50, true));
+    cmap.add_interval("chr1", chain::Interval("chr1_dest", 100, 200, 50, true));
     
     EXPECT_EQ(cmap.interval_map_sanity_check(), false);
 }
@@ -644,12 +625,21 @@ TEST(ChainTest, IntervalMapSanityCheckExactOverlap) {
 TEST(ChainTest, IntervalMapSanityCheckPartialOverlap) {
     chain::ChainMap cmap;
     // Add intervals with partial overlap
-    cmap.interval_map["chr1"].push_back(
-        chain::Interval("chr1_dest", 100, 300, 50, true));
-    cmap.interval_map["chr1"].push_back(
-        chain::Interval("chr1_dest", 250, 400, 50, true));
+    cmap.add_interval("chr1", chain::Interval("chr1_dest", 100, 300, 50, true));
+    cmap.add_interval("chr1", chain::Interval("chr1_dest", 250, 400, 50, true));
     
     EXPECT_EQ(cmap.interval_map_sanity_check(), false);
+}
+
+TEST(ChainTest, IntervalMapSanityCheckDestOverlap) {
+    chain::ChainMap cmap;
+    // The dest intervals overlap, but the source intervals do not
+    // Dest intervals: chr1_dest: [100, 300), chr1_dest: [100, 200)
+    // Source intervals: chr1: [100, 300), chr1: [300, 400)
+    cmap.add_interval("chr1", chain::Interval("chr1_dest", 100, 300, 0, true));
+    cmap.add_interval("chr1", chain::Interval("chr1_dest", 300, 400, -200, true));
+    
+    EXPECT_EQ(cmap.interval_map_sanity_check(), true);
 }
 
 int main(int argc, char **argv) {
