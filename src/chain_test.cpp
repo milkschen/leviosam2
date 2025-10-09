@@ -542,14 +542,14 @@ TEST(ChainTest, UpdateIntervalIndexes) {
 TEST(ChainTest, IntervalMapSanityCheckEmpty) {
     chain::ChainMap cmap;
     // Empty interval map should pass sanity check
-    EXPECT_EQ(cmap.interval_map_sanity_check(), true);
+    EXPECT_EQ(cmap.validate_intervals(), true);
 }
 
 TEST(ChainTest, IntervalMapSanityCheckSingleInterval) {
     chain::ChainMap cmap;
     // Single interval should pass sanity check
     cmap.add_interval("chr1", chain::Interval("chr1_dest", 100, 200, 50, true));
-    EXPECT_EQ(cmap.interval_map_sanity_check(), true);
+    EXPECT_EQ(cmap.validate_intervals(), true);
 }
 
 TEST(ChainTest, IntervalMapSanityCheckNoOverlaps) {
@@ -559,7 +559,7 @@ TEST(ChainTest, IntervalMapSanityCheckNoOverlaps) {
     cmap.add_interval("chr1", chain::Interval("chr1_dest", 250, 350, 50, true));
     cmap.add_interval("chr1", chain::Interval("chr1_dest", 400, 500, 50, true));
     
-    EXPECT_EQ(cmap.interval_map_sanity_check(), true);
+    EXPECT_EQ(cmap.validate_intervals(), true);
 }
 
 TEST(ChainTest, IntervalMapSanityCheckWithOverlaps) {
@@ -568,7 +568,7 @@ TEST(ChainTest, IntervalMapSanityCheckWithOverlaps) {
     cmap.add_interval("chr1", chain::Interval("chr1_dest", 100, 200, 50, true));
     cmap.add_interval("chr1", chain::Interval("chr1_dest", 150, 250, 50, true));
     
-    EXPECT_EQ(cmap.interval_map_sanity_check(), false);
+    EXPECT_EQ(cmap.validate_intervals(), false);
 }
 
 TEST(ChainTest, IntervalMapSanityCheckAdjacentIntervals) {
@@ -577,7 +577,7 @@ TEST(ChainTest, IntervalMapSanityCheckAdjacentIntervals) {
     cmap.add_interval("chr1", chain::Interval("chr1_dest", 100, 200, 50, true));
     cmap.add_interval("chr1", chain::Interval("chr1_dest", 200, 300, 50, true));
     
-    EXPECT_EQ(cmap.interval_map_sanity_check(), true);
+    EXPECT_EQ(cmap.validate_intervals(), true);
 }
 
 TEST(ChainTest, IntervalMapSanityCheckMultipleContigs) {
@@ -592,7 +592,7 @@ TEST(ChainTest, IntervalMapSanityCheckMultipleContigs) {
     cmap.add_interval("chr2", chain::Interval("chr2_dest", 150, 250, 50, true));
     
     // Should fail because chr2 has overlaps
-    EXPECT_EQ(cmap.interval_map_sanity_check(), false);
+    EXPECT_EQ(cmap.validate_intervals(), false);
 }
 
 TEST(ChainTest, IntervalMapSanityCheckAllContigsValid) {
@@ -610,7 +610,7 @@ TEST(ChainTest, IntervalMapSanityCheckAllContigsValid) {
     cmap.add_interval("chr3", chain::Interval("chr3_dest", 500, 600, 50, true));
     
     // Should pass because all contigs have valid intervals
-    EXPECT_EQ(cmap.interval_map_sanity_check(), true);
+    EXPECT_EQ(cmap.validate_intervals(), true);
 }
 
 TEST(ChainTest, IntervalMapSanityCheckExactOverlap) {
@@ -619,7 +619,7 @@ TEST(ChainTest, IntervalMapSanityCheckExactOverlap) {
     cmap.add_interval("chr1", chain::Interval("chr1_dest", 100, 200, 50, true));
     cmap.add_interval("chr1", chain::Interval("chr1_dest", 100, 200, 50, true));
     
-    EXPECT_EQ(cmap.interval_map_sanity_check(), false);
+    EXPECT_EQ(cmap.validate_intervals(), false);
 }
 
 TEST(ChainTest, IntervalMapSanityCheckPartialOverlap) {
@@ -628,7 +628,7 @@ TEST(ChainTest, IntervalMapSanityCheckPartialOverlap) {
     cmap.add_interval("chr1", chain::Interval("chr1_dest", 100, 300, 50, true));
     cmap.add_interval("chr1", chain::Interval("chr1_dest", 250, 400, 50, true));
     
-    EXPECT_EQ(cmap.interval_map_sanity_check(), false);
+    EXPECT_EQ(cmap.validate_intervals(), false);
 }
 
 TEST(ChainTest, IntervalMapSanityCheckDestOverlap) {
@@ -639,7 +639,7 @@ TEST(ChainTest, IntervalMapSanityCheckDestOverlap) {
     cmap.add_interval("chr1", chain::Interval("chr1_dest", 100, 300, 0, true));
     cmap.add_interval("chr1", chain::Interval("chr1_dest", 300, 400, -200, true));
     
-    EXPECT_EQ(cmap.interval_map_sanity_check(), true);
+    EXPECT_EQ(cmap.validate_intervals(), true);
 }
 
 int main(int argc, char **argv) {

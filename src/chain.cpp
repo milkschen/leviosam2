@@ -188,8 +188,8 @@ ChainMap::ChainMap(std::string fname, int verbose, int allowed_intvl_gaps,
     if (verbose > 2) {
         debug_print_interval_map();
     }
-    if (!interval_map_sanity_check()) {
-        std::cerr << "[E::chain::build] Interval map sanity check failed\n";
+    if (!validate_intervals()) {
+        std::cerr << "[E::chain::build] Interval validation failed\n";
         exit(1);
     }
 }
@@ -259,19 +259,19 @@ void ChainMap::add_interval(const std::string& contig, const Interval& interval)
 }
 
 /**
- * @brief Checks if the interval map contains overlapping intervals in the source reference.
+ * @brief Validates that intervals in the interval map do not overlap in the source reference.
  *
  * For each interval in each contig, this function ensures that the end position
  * of the current interval is less than or equal to the start position of the next interval.
  *
- * @return true if no overlaps are found (sanity check passed), false otherwise.
+ * @return true if validation passes (no overlaps found), false otherwise.
  */
-bool ChainMap::interval_map_sanity_check() {
+bool ChainMap::validate_intervals() {
     for (auto &itr : interval_map) {
         std::vector<chain::Interval> v = interval_map[itr.first];
         for (int i = 0; i < v.size() - 1; i++) {
             if (v[i].source_end > v[i + 1].source_start) {
-                std::cerr << "[E::chain::interval_map_sanity_check]  "
+                std::cerr << "[E::chain::validate_intervals]  "
                           << itr.first << "\n";
                 v[i].debug_print_interval();
                 v[i + 1].debug_print_interval();
@@ -279,8 +279,7 @@ bool ChainMap::interval_map_sanity_check() {
             }
         }
     }
-    std::cerr << "[I::chain::interval_map_sanity_check] Interval_map sanity "
-                 "check: passed (no overlaps)\n";
+    std::cerr << "[I::chain::validate_intervals] Interval validation: passed (no overlaps)\n";
     return true;
 }
 
