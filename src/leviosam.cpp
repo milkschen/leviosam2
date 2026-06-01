@@ -487,7 +487,7 @@ void print_lift_help_msg() {
     std::cerr << "                   "
                  "Leave empty or set to \"-\" to read from stdin.\n";
     std::cerr << "         -p string Prefix of the output files. [stdout]\n";
-    std::cerr << "         -O string Format of the output file: sam, bam, or cram. [bam]\n";
+    std::cerr << "         -O string Format of the output file: sam or bam. [sam]\n";
     std::cerr << "         -t INT    Number of threads used.\n"
                  "                   "
                  "If -t is not set, the value would be the sum of\n"
