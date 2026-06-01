@@ -75,7 +75,7 @@ function print_usage_and_exit {
     echo "    -w path     Path to the input FASTQ (read 1) []"
     echo "    -W path     Path to the input FASTQ (read 2, optional) []"
     echo "  LevioSAM2-lift:"
-    echo "    -g INT      Number of gaps allowed during leviosam2-lift [0]"
+    echo "    -g INT      Max chain gap size allowed (in base pairs) during leviosam2-lift [0]"
     echo "    -x path     Path to the levioSAM2 re-alignment config YAML []"
     echo "  Commit/Defer/Suppress rules:"
     echo "    -A INT      Alignment score cutoff for the defer rule []"
