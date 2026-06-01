@@ -1,5 +1,14 @@
 # LevioSAM2 workflow
 
+> [!WARNING]
+> **CLI Flag Differences between Workflows and the C++ Binary:**
+> The flag names in these workflow scripts (`leviosam2.py` / `leviosam2.sh`) differ from those of the underlying C++ binary (`leviosam2 lift`). If you run the C++ binary directly, verify the option mappings:
+> * **Gap size threshold:** Use `-g` in Python/Bash scripts, but **`-G`** in the C++ binary. (The C++ binary's `-g` is reserved for VCF haplotype).
+> * **Sequence / Aligner / Sample flags:** `-s` specifies sequence type in Python, source index path in Bash, and VCF sample name in the C++ binary.
+> * **Commit / Suppress annotations:** Use `--lift_bed_commit_source` (Python) or `-R` (Bash), but **`-r`** in the C++ binary.
+> * **Defer rules (`-m` and `-p`):** In Bash, `-m` is the template size cutoff and `-p` is the clipped fraction cutoff. In the C++ binary, `-m` enables MD/NM tags, and `-p` is the **output prefix**.
+> Check `leviosam2 lift -h` for details.
+
 ## Dependencies
 
 All dependent software is included in our Docker/Singularity container.
@@ -30,7 +39,7 @@ python leviosam2.py \
     --lift_bed_defer_target defer_annotations.bed   # optional
 ```
 
-With the bash worklow (older workflow to be deprecated):
+Alternative with the Bash workflow (not recommended):
 
 ```shell
 bash leviosam2.sh \
@@ -62,7 +71,7 @@ python leviosam2.py \
     --lift_bed_defer_target defer_annotations.bed   # optional
 ```
 
-With the bash worklow (older workflow to be deprecated):
+Alternative with the Bash workflow (not recommended):
 
 ```shell
 bash leviosam2.sh \
@@ -102,7 +111,7 @@ python leviosam2.py \
     --lift_bed_commit_source suppress_annotations.bed  # optional
 ```
 
-With the bash worklow (older workflow to be deprecated):
+Alternative with the Bash workflow (not recommended):
 
 ```shell
 bash leviosam2.sh \
@@ -132,7 +141,7 @@ python leviosam2.py \
     --lift_bed_commit_source suppress_annotations.bed  # optional
 ```
 
-With the bash worklow (older workflow to be deprecated):
+Alternative with the Bash workflow (not recommended):
 
 ```shell
 bash leviosam2.sh \
