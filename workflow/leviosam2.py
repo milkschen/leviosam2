@@ -166,7 +166,7 @@ def parse_args() -> argparse.Namespace:
         "--lift_bed_defer_target",
         type=str,
         help=(
-            "[lift] Path to a BED (target cooridnates)"
+            "[lift] Path to a BED (target coordinates) "
             "where reads in the regions are always "
             "deferred"
         ),
