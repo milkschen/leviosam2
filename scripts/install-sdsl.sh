@@ -33,7 +33,7 @@ fi
 
 git -C "${SDSL_SOURCE_DIR}" submodule update --init --recursive
 
-readonly SDSL_PATCH="${PIXI_PROJECT_ROOT}/scripts/sdsl-2.1.1-apple-clang.patch"
+readonly SDSL_PATCH="${PIXI_PROJECT_ROOT}/scripts/sdsl-2.1.1-louds-tree-swap.patch"
 if git -C "${SDSL_SOURCE_DIR}" apply --check "${SDSL_PATCH}" 2>/dev/null; then
     git -C "${SDSL_SOURCE_DIR}" apply "${SDSL_PATCH}"
 elif ! git -C "${SDSL_SOURCE_DIR}" apply --reverse --check "${SDSL_PATCH}" 2>/dev/null; then
