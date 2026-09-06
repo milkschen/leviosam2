@@ -7,4 +7,5 @@ test_*.*am
 v*/
 figures/*
 build/*
+.pixi/
 dev/

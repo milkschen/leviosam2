@@ -1,0 +1,21 @@
+[workspace]
+name = "leviosam2"
+version = "0.5.0"
+description = "Native development environment for LevioSAM2"
+channels = ["conda-forge", "bioconda"]
+platforms = ["osx-arm64"]
+
+[dependencies]
+cmake = ">=3.20,<4"
+git = ">=2.40"
+htslib = ">=1.12,<2"
+ninja = ">=1.11"
+
+[tasks]
+sdsl = { cmd = "bash scripts/install-sdsl.sh", description = "Build and install SDSL 2.1.1 into the Pixi environment" }
+configure = { cmd = "cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX -DCMAKE_PREFIX_PATH=$CONDA_PREFIX -DCMAKE_LIBRARY_PATH=$CONDA_PREFIX/lib -DCMAKE_INCLUDE_PATH=$CONDA_PREFIX/include", depends-on = ["sdsl"], description = "Configure the LevioSAM2 build" }
+build = { cmd = "cmake --build build --parallel", depends-on = ["configure"], description = "Build LevioSAM2 and its unit tests" }
+test = { cmd = "ctest --test-dir build --output-on-failure", depends-on = ["build"], description = "Run the unit tests" }
+install = { cmd = "cmake --install build", depends-on = ["build"], description = "Install LevioSAM2 into the Pixi environment" }
+setup = { depends-on = ["install"], description = "Build and install a local development copy" }
+check = { depends-on = ["test"], description = "Build and run the unit tests" }
