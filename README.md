@@ -83,12 +83,31 @@ leviosam2 lift -C source_to_target.clft -a aligned_to_source.bam -p lifted_from_
 
 The levioSAM2 workflow includes lift-over using the `leviosam2-lift` kernel and a selective re-mapping strategy. This approach can improve accuracy.
 
-Example:
+We highly recommend using the **Python workflow (`leviosam2.py`)** as it is the newer, standard interface. The older Bash workflow (`leviosam2.sh`) is supported but not recommended.
+
+**Primary Example (Python script):**
 
 ```shell
-# You may skip the indexing step if you've already run it
+# Index the chain file first (if not already done)
 leviosam2 index -c source_to_target.chain -p source_to_target -F target.fai
-sh leviosam2.sh \
+
+# Run the Python workflow script
+python workflow/leviosam2.py \
+    -i aligned_to_source.bam \
+    -o aligned_to_source-lifted \
+    -C source_to_target.clft \
+    -f target.fna \
+    -fi bt2/target \
+    -a bowtie2 \
+    -s ilmn_pe \
+    -t 16 \
+    --use_preset
+```
+
+**Alternative Example (Bash script - not recommended):**
+
+```shell
+sh workflow/leviosam2.sh \
     -a bowtie2 -A -10 -q 10 -H 5 \
     -i aligned_to_source.bam \
     -o aligned_to_source-lifted \
@@ -98,7 +117,7 @@ sh leviosam2.sh \
     -t 16
 ```
 
-See [this README](https://github.com/milkschen/leviosam2/blob/main/workflow/README.md) to learn more about running the full levioSAM2 workflow.
+See [workflow README](https://github.com/milkschen/leviosam2/blob/main/workflow/README.md) to learn more about running the full levioSAM2 workflow and how the parameter options differ between scripts and the binary.
 
 ## Publication
 

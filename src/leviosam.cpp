@@ -486,6 +486,8 @@ void print_lift_help_msg() {
                  "to be lifted. \n";
     std::cerr << "                   "
                  "Leave empty or set to \"-\" to read from stdin.\n";
+    std::cerr << "         -p string Prefix of the output files. [stdout]\n";
+    std::cerr << "         -O string Format of the output file: sam or bam. [sam]\n";
     std::cerr << "         -t INT    Number of threads used.\n"
                  "                   "
                  "If -t is not set, the value would be the sum of\n"
@@ -509,11 +511,21 @@ void print_lift_help_msg() {
                  "Add MD and NM to output alignment records (requires -f)\n";
     std::cerr << "         -f path   "
                  "Path to the FASTA file of the target reference. \n";
+    std::cerr << "         -F path   "
+                 "Path to the FAI (FASTA index) file of the target reference. \n";
     std::cerr << "         -x path   Re-alignment preset. [] \n";
     std::cerr << "         -G INT    "
                  "Maximum allowed gap size (in base pairs) between chain "
                  "intervals for an alignment to be considered liftable. A "
                  "value of 0 requires perfect chain interval continuity. [0]\n";
+    std::cerr << "         -g INT    "
+                 "Haplotype (0 or 1) for variant-aware (VCF) mode. \n"
+                 "                   "
+                 "NOTE: Do not confuse with workflow script's `-g` (gap size).\n";
+    std::cerr << "         -s string "
+                 "Sample name for variant-aware (VCF) mode.\n";
+    std::cerr << "         -v path   "
+                 "Path to the VCF file for variant-aware mode.\n";
     std::cerr << "         -T INT    "
                  "Chunk size for each thread. [256] \n"
                  "                   "  // align
@@ -522,12 +534,14 @@ void print_lift_help_msg() {
                  "Setting a larger -T uses slightly more "
                  "memory but might benefit thread scaling.\n";
     std::cerr << "\n";
-    std::cerr << "         Commit/defer rule options:\n";
+    std::cerr << "         Commit/defer/suppress rule options:\n";
     std::cerr << "           -S string<:int/float> Key-value pair of "
                  "a split rule. We allow appending multiple `-S` options.\n";
     std::cerr << "                     Options: "
-                 "mapq:<int>, aln_score:<int>, isize:<int>, hdist:<int>, "
-                 "clipped_frac:<float>. lifted. [none]\n";
+                 "lifted, mapq:<int>, aln_score:<int>, isize:<int>, hdist:<int>, "
+                 "clipped_frac:<float> [none]\n";
+    std::cerr << "                       * lifted              "
+                 "Defer alignments that are unlifted (unmapped) after liftover.\n";
     std::cerr << "                       * mapq          INT   "
                  "Min MAPQ (pre-liftover) accepted for a committed read.\n";
     std::cerr << "                       * aln_score     INT   "
@@ -549,10 +563,10 @@ void print_lift_help_msg() {
     std::cerr << "           Example: `-S mapq:20 -S aln_score:20` commits "
                  "MQ>=20 and AS>=20 alignments.\n";
     std::cerr << "           -r string Path to a BED file (source "
-                 "coordinates). Reads overlap with the regions are always "
+                 "coordinates). Reads overlapping with the regions are always "
                  "committed. [none]\n";
     std::cerr << "           -D string Path to a BED file (dest coordinates). "
-                 "Reads overlap with the regions are always deferred. [none]\n";
+                 "Reads overlapping with the regions are always deferred. [none]\n";
     std::cerr << "           -B float  Threshold for BED record intersection. "
                  "[0]\n"
                  "                     If <= 0: consider any overlap (>0 bp)\n"
