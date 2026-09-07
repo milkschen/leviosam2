@@ -160,7 +160,13 @@ execute_process(
             -p "${TEST_TMP_DIR}/invalid-thread-sum"
             --lift_threads 2147483647 --hts_threads 2147483647
     RESULT_VARIABLE INVALID_THREAD_SUM_RESULT
-    OUTPUT_QUIET ERROR_QUIET)
-if(INVALID_THREAD_SUM_RESULT EQUAL 0)
-    message(FATAL_ERROR "overflowing thread sum was accepted")
+    OUTPUT_QUIET ERROR_VARIABLE INVALID_THREAD_SUM_STDERR)
+string(FIND "${INVALID_THREAD_SUM_STDERR}"
+       "The sum of --lift_threads and --hts_threads exceeds INT_MAX"
+       INVALID_THREAD_SUM_MESSAGE_POS)
+if(NOT INVALID_THREAD_SUM_RESULT EQUAL 21 OR
+   INVALID_THREAD_SUM_MESSAGE_POS EQUAL -1)
+    message(FATAL_ERROR
+        "overflowing thread sum did not fail cleanly: "
+        "exit=${INVALID_THREAD_SUM_RESULT}, stderr=${INVALID_THREAD_SUM_STDERR}")
 endif()
