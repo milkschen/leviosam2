@@ -38,6 +38,11 @@ pixi run check
 conda install -c conda-forge -c bioconda leviosam2
 ```
 
+Bioconda currently provides native packages for `linux-64`, `linux-aarch64`,
+and `osx-64`, but not for Apple Silicon (`osx-arm64`). On Apple Silicon, use
+the Pixi instructions above to build and install levioSAM2 natively from source;
+the `pixi run setup` task also builds the required SDSL library.
+
 ## Use a levioSAM2 Docker image
 
 You can obtain a Docker image of the latest version from Docker hub:
