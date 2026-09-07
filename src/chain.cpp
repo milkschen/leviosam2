@@ -152,19 +152,27 @@ ChainMap::ChainMap(std::string fname, int verbose, int allowed_intvl_gaps,
     std::string line;
     BitVectorMap start_bv_map;
     BitVectorMap end_bv_map;
-    if (chain_f.is_open()) {
-        std::string source;
-        std::string target;
-        int32_t source_offset = 0;
-        int32_t target_offset = 0;
-        int source_len = 0;
-        bool current_ss = true;
-        while (getline(chain_f, line)) {
-            parse_chain_line(line, source, target, source_len, source_offset,
-                             target_offset, current_ss, start_bv_map,
-                             end_bv_map, lm);
-        }
-        chain_f.close();
+    if (!chain_f.is_open()) {
+        std::cerr << "[E::chain::build] Cannot open chain file " << fname
+                  << "\n";
+        exit(1);
+    }
+    std::string source;
+    std::string target;
+    int32_t source_offset = 0;
+    int32_t target_offset = 0;
+    int source_len = 0;
+    bool current_ss = true;
+    while (getline(chain_f, line)) {
+        parse_chain_line(line, source, target, source_len, source_offset,
+                         target_offset, current_ss, start_bv_map,
+                         end_bv_map, lm);
+    }
+    chain_f.close();
+    if (interval_map.empty()) {
+        std::cerr << "[E::chain::build] No chain intervals found in " << fname
+                  << "\n";
+        exit(1);
     }
     // biv_vector to sd_vector
     for (auto &it : start_bv_map) {
@@ -511,7 +519,6 @@ int ChainMap::lift_cigar(const std::string &contig, bam1_t *aln) {
     auto end_sidx = get_start_rank(contig, pos_end) - 1;
     auto end_eidx = get_end_rank(contig, pos_end) - 1;
 
-    auto next_intvl = interval_map[contig][start_sidx + 1];
     int32_t num_sclip_start =
         get_num_clipped(c->pos, true, contig, start_sidx, start_eidx);
     int32_t num_sclip_end =
@@ -638,6 +645,11 @@ void ChainMap::lift_cigar_core_one_run(
                 return;
             }
         }
+        if (break_points.empty()) {
+            Cigar::push_cigar(new_cigar, cigar_op_len, cigar_op, false);
+            query_offset += cigar_op_len;
+            return;
+        }
         auto next_bp = std::get<0>(break_points.front());
         auto next_q_offset = query_offset + cigar_op_len;
         if (verbose >= VERBOSE_DEV) {
@@ -652,7 +664,7 @@ void ChainMap::lift_cigar_core_one_run(
         }
         // Push the current CIGAR OP and advance if have not reached the next
         // breakpoint or there are no remaining breakpoints
-        if (next_q_offset <= next_bp || break_points.size() == 0) {
+        if (next_q_offset <= next_bp) {
             Cigar::push_cigar(new_cigar, cigar_op_len, cigar_op, false);
             query_offset += cigar_op_len;
             // Split one CIGAR chunk into two parts and insert lift-over bases
@@ -714,13 +726,9 @@ void ChainMap::lift_cigar_core_one_run(
                     query_offset -= diff;
                 }
 
-                // Popping an empty queue results in undefined behaviors
-                if (break_points.size() == 0) {
-                    break;
-                } else {
-                    break_points.pop();
-                    next_bp = std::get<0>(break_points.front());
-                }
+                break_points.pop();
+                if (break_points.empty()) break;
+                next_bp = std::get<0>(break_points.front());
             }
             if (second_half_len < 0) {
                 // tmp_gap = -second_half_len;
@@ -1493,7 +1501,7 @@ std::queue<std::tuple<int32_t, int32_t>> ChainMap::get_bp(
     const std::string &contig, const bam1_core_t *const c,
     const int &start_sidx, const int &end_sidx) {
     std::queue<std::tuple<int32_t, int32_t>> break_points;
-    for (auto i = start_sidx; i <= end_sidx; i++) {
+    for (auto i = start_sidx; i < end_sidx; i++) {
         int bp = interval_map[contig][i].source_end - c->pos;
         int diff;
         // forward strand
@@ -1571,8 +1579,16 @@ bool ChainMap::check_multi_intvl_legality(const std::string &source_contig,
         std::cerr << "[D::chain::check_multi_intvl_legality] next_sintvl: ";
         next_sintvl.debug_print_interval();
     }
-    // Check the gap size between the intervals
-    int chain_gap = std::abs(next_sintvl.offset - start_sintvl.offset);
+    auto transform_offset = [](const Interval &intvl) -> int64_t {
+        if (intvl.strand) return intvl.offset;
+        return static_cast<int64_t>(intvl.offset) + intvl.source_start +
+               intvl.source_end;
+    };
+    // Check the gap size between the intervals. Reverse intervals need the
+    // full coordinate transform rather than their raw stored offset.
+    int64_t chain_gap =
+        std::abs(transform_offset(next_sintvl) -
+                 transform_offset(start_sintvl));
     if (chain_gap > allowed_intvl_gaps) {
         if (verbose >= VERBOSE_INFO) {
             std::cerr
@@ -1607,8 +1623,8 @@ bool ChainMap::check_multi_intvl_legality(const std::string &source_contig,
             }
             return false;
         }
-        if (std::abs(interval_map[source_contig][j + 1].offset -
-                     interval_map[source_contig][j].offset) >
+        if (std::abs(transform_offset(interval_map[source_contig][j + 1]) -
+                     transform_offset(interval_map[source_contig][j])) >
             allowed_intvl_gaps) {
             if (verbose >= VERBOSE_INFO) {
                 std::cerr << "[I::chain::check_multi_intvl_legality] Set `"

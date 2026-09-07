@@ -76,9 +76,9 @@ struct lift_opts {
     std::string split_mode = "";
     std::vector<std::pair<std::string, float>> split_rules;
     int allowed_cigar_changes = 0;
-    uint16_t threads = DEFAULT_NUM_THREADS;
-    uint16_t lift_threads = DEFAULT_NUM_LIFT_THREADS;
-    uint16_t hts_threads = DEFAULT_NUM_HTS_THREADS;
+    int threads = DEFAULT_NUM_THREADS;
+    int lift_threads = DEFAULT_NUM_LIFT_THREADS;
+    int hts_threads = DEFAULT_NUM_HTS_THREADS;
     int chunk_size = 256;
     int verbose = 0;
     int md_flag = 0;
@@ -447,31 +447,10 @@ class LiftMap {
 
     LiftMap(std::ifstream &in) { this->load(in); }
 
-    // copy constructor
-    LiftMap(const LiftMap &rhs)
-        : lmap(rhs.lmap), s1_map(rhs.s1_map), s2_map(rhs.s2_map) {}
-
-    // move constructor
-    LiftMap(LiftMap &&rhs)
-        : lmap(std::move(rhs.lmap)),
-          s1_map(std::move(rhs.s1_map)),
-          s2_map(std::move(s2_map)) {}
-
-    // copy assignment operator
-    LiftMap &operator=(const LiftMap &rhs) {
-        lmap = rhs.lmap;
-        s1_map.clear();
-        s2_map.clear();
-        return *this;
-    }
-
-    // move assignment operator
-    LiftMap &operator=(LiftMap &&rhs) {
-        lmap = std::move(rhs.lmap);
-        s1_map = std::move(s1_map);
-        s2_map = std::move(s2_map);
-        return *this;
-    }
+    LiftMap(const LiftMap &rhs) = default;
+    LiftMap(LiftMap &&rhs) = default;
+    LiftMap &operator=(const LiftMap &rhs) = default;
+    LiftMap &operator=(LiftMap &&rhs) = default;
 
     /* creates a liftover from specified sample in VCF file.
      * input: vcfFile, bcf_hdr_t* of input VCF (via htslib)
