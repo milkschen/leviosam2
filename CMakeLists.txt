@@ -169,7 +169,11 @@ ENDMACRO(FindSSE)
 
 if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "(aarch|arm)64")
     include_directories(${PROJECT_SOURCE_DIR}/src/sse2neon)
-    add_definitions(-D__ARM_NEON__ -D__SSE2__ -D__SSE4_1__)
+    set_source_files_properties(
+        src/ksw2_extd2_sse.c
+        src/ksw2_extz2_sse.c
+        PROPERTIES COMPILE_DEFINITIONS "__ARM_NEON__;__SSE2__;__SSE4_1__"
+    )
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=armv8-a+fp+simd")
 else()
     FindSSE()
@@ -204,6 +208,16 @@ target_link_libraries(leviosam2 ${HTS_LIB})
 target_link_libraries(leviosam2 ${SDSL_LIB})
 target_link_libraries(leviosam2 pthread)
 target_link_libraries(leviosam2 z)
+
+if(APPLE)
+    set_target_properties(leviosam2 PROPERTIES
+        INSTALL_RPATH "@loader_path/../lib"
+    )
+elseif(UNIX)
+    set_target_properties(leviosam2 PROPERTIES
+        INSTALL_RPATH "\$ORIGIN/../lib"
+    )
+endif()
 
 
 # Download and unpack googletest at configure time
@@ -290,4 +304,3 @@ add_test(NAME reconcile_test COMMAND reconcile_test
 
 INSTALL(TARGETS leviosam2 DESTINATION bin)
 INSTALL(FILES src/leviosam.hpp DESTINATION include)
-

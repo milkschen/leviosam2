@@ -1,0 +1,11 @@
+diff --git a/include/sdsl/louds_tree.hpp b/include/sdsl/louds_tree.hpp
+index 2dad808..99a5b7d 100644
+--- a/include/sdsl/louds_tree.hpp
++++ b/include/sdsl/louds_tree.hpp
+@@ -181,4 +181,4 @@ class louds_tree
+             m_bv.swap(tree.m_bv);
+-            util::swap_support(m_bv_select1, tree.m_select1, &m_bv, &(tree.m_bv));
+-            util::swap_support(m_bv_select0, tree.m_select0, &m_bv, &(tree.m_bv));
++            util::swap_support(m_bv_select1, tree.m_bv_select1, &m_bv, &(tree.m_bv));
++            util::swap_support(m_bv_select0, tree.m_bv_select0, &m_bv, &(tree.m_bv));
+         }

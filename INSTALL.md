@@ -2,10 +2,35 @@
 
 levioSAM2 supports a variety of methods for installation:
 
+- Pixi (recommended for a reproducible development environment)
 - Conda
 - Docker
 - Singularity
 - CMake
+
+## Set up a development environment with Pixi
+
+The checked-in Pixi workspace supports Linux on x86_64 and ARM64, and macOS
+on Intel and Apple Silicon. It installs the build tools and HTSlib, then
+installs levioSAM2 into the project environment. Linux and Intel macOS use
+the conda-forge `sdsl-lite` package. Apple Silicon builds SDSL 2.1.1 from its
+pinned source revision because conda-forge does not currently publish an
+`osx-arm64` package.
+
+Install a C and C++ compiler first: GCC on Linux or the Xcode Command Line
+Tools on macOS. Pixi supplies CMake, Ninja, Git, HTSlib, and the remaining
+packaged dependencies.
+
+```shell
+pixi run setup
+pixi run leviosam2 --help
+```
+
+Run the unit tests with:
+
+```shell
+pixi run check
+```
 
 ## Install levioSAM2 via Conda
 
