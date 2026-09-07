@@ -154,3 +154,13 @@ foreach(INVALID_ARGS "-T;0" "-t;not-a-number" "-G;-1")
         message(FATAL_ERROR "invalid arguments were accepted: ${INVALID_ARGS}")
     endif()
 endforeach()
+
+execute_process(
+    COMMAND "${LEVIOSAM2}" lift -C "${INDEX_PREFIX}.clft" -a "${SAM}"
+            -p "${TEST_TMP_DIR}/invalid-thread-sum"
+            --lift_threads 2147483647 --hts_threads 2147483647
+    RESULT_VARIABLE INVALID_THREAD_SUM_RESULT
+    OUTPUT_QUIET ERROR_QUIET)
+if(INVALID_THREAD_SUM_RESULT EQUAL 0)
+    message(FATAL_ERROR "overflowing thread sum was accepted")
+endif()

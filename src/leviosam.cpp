@@ -105,6 +105,11 @@ uint8_t update_thread_allocation(lift_opts &args) {
         args.lift_threads = args.threads - args.hts_threads;
     } else if (args.lift_threads != DEFAULT_NUM_LIFT_THREADS ||
                args.hts_threads != DEFAULT_NUM_HTS_THREADS) {
+        if (args.lift_threads > INT_MAX - args.hts_threads) {
+            std::cerr << "[E::update_thread_allocation] The sum of "
+                         "--lift_threads and --hts_threads exceeds INT_MAX.\n";
+            return 1;
+        }
         args.threads = args.hts_threads + args.lift_threads;
     }
     std::cerr << "[I::update_thread_allocation] --theads=" << args.threads
