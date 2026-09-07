@@ -6,10 +6,14 @@ readonly SDSL_VERSION="2.1.1"
 readonly SDSL_COMMIT="0546faf0552142f06ff4b201b671a5769dd007ad"
 readonly SDSL_SOURCE_DIR="${PIXI_PROJECT_ROOT}/.pixi/source/sdsl-lite-${SDSL_VERSION}"
 readonly SDSL_BUILD_DIR="${PIXI_PROJECT_ROOT}/.pixi/build/sdsl-lite-${SDSL_VERSION}"
-readonly SDSL_LIBRARY="${CONDA_PREFIX}/lib/libsdsl.a"
 
-if [[ -f "${SDSL_LIBRARY}" ]]; then
+if compgen -G "${CONDA_PREFIX}/lib/libsdsl.*" >/dev/null; then
     exit 0
+fi
+
+if [[ "$(uname -s)" != "Darwin" || "$(uname -m)" != "arm64" ]]; then
+    echo "SDSL was not installed by Pixi for this platform." >&2
+    exit 1
 fi
 
 mkdir -p "$(dirname "${SDSL_SOURCE_DIR}")" "$(dirname "${SDSL_BUILD_DIR}")"
