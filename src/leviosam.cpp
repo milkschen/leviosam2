@@ -19,9 +19,13 @@
 #include <zlib.h>
 
 #include <algorithm>
+#include <cerrno>
+#include <climits>
+#include <cmath>
+#include <cstdlib>
 #include <ctime>
-#include <vector>
 #include <fstream>
+#include <vector>
 
 #include "aln.hpp"
 #include "collate.hpp"
@@ -31,6 +35,32 @@
 #include "yaml.hpp"
 
 KSEQ_INIT(gzFile, gzread);
+
+static int parse_int_option(const char *option, const char *value, int minimum) {
+    char *end = nullptr;
+    errno = 0;
+    long parsed = std::strtol(value, &end, 10);
+    if (errno == ERANGE || end == value || *end != '\0' || parsed < minimum ||
+        parsed > INT_MAX) {
+        std::cerr << "[E::main] Invalid value for " << option << ": " << value
+                  << "\n";
+        exit(1);
+    }
+    return static_cast<int>(parsed);
+}
+
+static float parse_float_option(const char *option, const char *value) {
+    char *end = nullptr;
+    errno = 0;
+    float parsed = std::strtof(value, &end);
+    if (errno == ERANGE || end == value || *end != '\0' ||
+        !std::isfinite(parsed)) {
+        std::cerr << "[E::main] Invalid value for " << option << ": " << value
+                  << "\n";
+        exit(1);
+    }
+    return parsed;
+}
 
 /** Updates allocated threads given input args.
  *
@@ -46,9 +76,18 @@ KSEQ_INIT(gzFile, gzread);
  * @return 0 if successful, 1 if not.
  */
 uint8_t update_thread_allocation(lift_opts &args) {
+    if (args.threads < 1) {
+        std::cerr << "[E::update_thread_allocation] --threads must be >= 1.\n";
+        return 1;
+    }
     if (args.lift_threads < 1) {
         std::cerr << "[E::update_thread_allocation] --lift_threads must "
-                     ">= 1.\n";
+                     "be >= 1.\n";
+        return 1;
+    }
+    if (args.hts_threads < 0) {
+        std::cerr << "[E::update_thread_allocation] --hts_threads must be >= "
+                     "0.\n";
         return 1;
     }
     if (args.threads > DEFAULT_NUM_THREADS) {
@@ -77,10 +116,15 @@ uint8_t update_thread_allocation(lift_opts &args) {
 NameMap parse_name_map(const char *fname) {
     NameMap names;
     FILE *fp = fopen(fname, "r");
+    if (fp == nullptr) {
+        std::cerr << "[E::parse_name_map] Cannot open name map " << fname
+                  << "\n";
+        exit(1);
+    }
     char n1[255];
     char n2[255];
     int x;
-    while ((x = fscanf(fp, "%[^\t]\t%[^\n]\n", n1, n2)) != EOF) {
+    while ((x = fscanf(fp, "%254[^\t]\t%254[^\n]\n", n1, n2)) != EOF) {
         if (x <= 0) {
             std::cerr << "[E::parse_name_map] Failed to read name map from "
                       << fname << "\n";
@@ -113,7 +157,18 @@ void serialize_run(lift_opts args) {
                                             args.haplotype, args.name_map,
                                             args.length_map));
         std::ofstream o(fn_index, std::ios::binary);
+        if (!o) {
+            std::cerr << "[E::serialize_run] Cannot open output " << fn_index
+                      << "\n";
+            exit(1);
+        }
         l.serialize(o);
+        o.flush();
+        if (!o) {
+            std::cerr << "[E::serialize_run] Failed writing " << fn_index
+                      << "\n";
+            exit(1);
+        }
         std::cerr << "[I::serialize_run] levioSAM VcfMap saved to " << fn_index
                   << "\n";
         // ChainMap
@@ -122,7 +177,18 @@ void serialize_run(lift_opts args) {
         chain::ChainMap cfp(args.chain_fname, args.verbose,
                             args.allowed_cigar_changes, args.length_map);
         std::ofstream o(fn_index, std::ios::binary);
+        if (!o) {
+            std::cerr << "[E::serialize_run] Cannot open output " << fn_index
+                      << "\n";
+            exit(1);
+        }
         size_t bytes = cfp.serialize(o);
+        o.flush();
+        if (!o) {
+            std::cerr << "[E::serialize_run] Failed writing " << fn_index
+                      << "\n";
+            exit(1);
+        }
         cfp.log_index_size(bytes);
         std::cerr << "[I::serialize_run] levioSAM ChainMap saved to "
                   << fn_index << "\n";
@@ -158,6 +224,11 @@ void read_and_lift(T *lift_map, std::mutex *mutex_fread,
             std::lock_guard<std::mutex> g(*mutex_fread);
             for (int i = 0; i < args.chunk_size; i++) {
                 read = sam_read1(sam_fp, hdr_source, aln_vec[i]);
+                if (read < -1) {
+                    std::cerr << "[E::read_and_lift] Failed to read alignment "
+                                 "input\n";
+                    exit(1);
+                }
                 if (read < 0) {
                     num_actual_reads = i;
                     break;
@@ -307,6 +378,11 @@ void lift_run(lift_opts args) {
             std::cerr << "[I::lift_run] Loading levioSAM 2 index...";
             std::ifstream in(args.chainmap_fname, std::ios::binary);
             std::ifstream fs(args.chainmap_fname, std::ios::binary | std::ios::ate);
+            if (!in || !fs || fs.tellg() <= 0) {
+                std::cerr << "[E::lift_run] Cannot open ChainMap index "
+                          << args.chainmap_fname << "\n";
+                exit(1);
+            }
             chain_bytes = fs.tellg();
             return chain::ChainMap(in, args.verbose,
                                    args.allowed_cigar_changes);
@@ -328,6 +404,11 @@ void lift_run(lift_opts args) {
         if (args.lift_fname != "") {
             std::cerr << "[I::lift_run] Loading levioSAM index...";
             std::ifstream in(args.lift_fname, std::ios::binary);
+            if (!in) {
+                std::cerr << "[E::lift_run] Cannot open levioSAM index "
+                          << args.lift_fname << "\n";
+                exit(1);
+            }
             return lift::LiftMap(in);
             // if "-l" not specified, then create a levioSAM
         } else if (args.vcf_fname != "") {
@@ -361,11 +442,14 @@ void lift_run(lift_opts args) {
                           ? sam_open("-", "r")
                           : sam_open(args.sam_fname.data(), "r");
 
-    // Gets extra threads to decompress HTS files when requested
-    if (args.hts_threads > 0) hts_set_threads(sam_fp, args.hts_threads);
-
     if (!sam_fp) {
         std::cerr << "[E::lift_run] Invalid alignment input\n";
+        exit(1);
+    }
+    // Gets extra threads to decompress HTS files when requested
+    if (args.hts_threads > 0 &&
+        hts_set_threads(sam_fp, args.hts_threads) != 0) {
+        std::cerr << "[E::lift_run] Failed to configure input HTS threads\n";
         exit(1);
     }
     std::string out_mode = (args.out_format == "sam") ? "w" : "wb";
@@ -382,7 +466,11 @@ void lift_run(lift_opts args) {
         exit(1);
     }
     // Gets extra threads to compress HTS files when requested
-    if (args.hts_threads > 0) hts_set_threads(out_sam_fp, args.hts_threads);
+    if (args.hts_threads > 0 &&
+        hts_set_threads(out_sam_fp, args.hts_threads) != 0) {
+        std::cerr << "[E::lift_run] Failed to configure output HTS threads\n";
+        exit(1);
+    }
 
     sam_hdr_t *hdr_orig = sam_hdr_read(sam_fp);
     if (!hdr_orig) {
@@ -394,7 +482,10 @@ void lift_run(lift_opts args) {
                    NULL);
     sam_hdr_add_pg(hdr_orig, "leviosam2", "VN", VERSION, "CL", args.cmd.data(),
                    NULL);
-    auto write_hdr = sam_hdr_write(out_sam_fp, hdr);
+    if (sam_hdr_write(out_sam_fp, hdr) < 0) {
+        std::cerr << "[E::lift_run] Failed to write output header\n";
+        exit(1);
+    }
 
     if (args.md_flag) {
         if (args.ref_name == "") {
@@ -610,7 +701,6 @@ int main(int argc, char **argv) {
     } else if (!strcmp(argv[optind], "reconcile")) {
         return reconcile_run(argc, argv);
     }
-
     double start_cputime = std::clock();
     auto start_walltime = std::chrono::system_clock::now();
 
@@ -667,7 +757,8 @@ int main(int argc, char **argv) {
                 args.sam_fname = optarg;
                 break;
             case 'B':
-                args.bed_isec_threshold = std::stof(optarg);
+                args.bed_isec_threshold = parse_float_option("-B", optarg);
+                break;
             case 'c':
                 args.chain_fname = optarg;
                 break;
@@ -691,7 +782,7 @@ int main(int argc, char **argv) {
                 args.haplotype = optarg;
                 break;
             case 'G':
-                args.allowed_cigar_changes = atoi(optarg);
+                args.allowed_cigar_changes = parse_int_option("-G", optarg, 0);
                 break;
             case 'l':
                 args.lift_fname = optarg;
@@ -722,13 +813,13 @@ int main(int argc, char **argv) {
                 }
                 break;
             case 't':
-                args.threads = atoi(optarg);
+                args.threads = parse_int_option("-t", optarg, 1);
                 break;
             case 'T':
-                args.chunk_size = atoi(optarg);
+                args.chunk_size = parse_int_option("-T", optarg, 1);
                 break;
             case 'V':
-                args.verbose = atoi(optarg);
+                args.verbose = parse_int_option("-V", optarg, 0);
                 break;
             case 'v':
                 args.vcf_fname = optarg;
@@ -746,10 +837,12 @@ int main(int argc, char **argv) {
                 args.keep_mapq = true;
                 break;
             case OPT_LIFT_THREADS:
-                args.lift_threads = atoi(optarg);
+                args.lift_threads =
+                    parse_int_option("--lift_threads", optarg, 1);
                 break;
             case OPT_HTS_THREADS:
-                args.hts_threads = atoi(optarg);
+                args.hts_threads =
+                    parse_int_option("--hts_threads", optarg, 0);
                 break;
             default:
                 std::cerr << "[E::main] Invalid flag value " << c << "\n";
@@ -812,6 +905,10 @@ int main(int argc, char **argv) {
     } else if (!strcmp(argv[optind], "serialize") ||
                !strcmp(argv[optind], "index")) {
         serialize_run(args);
+    } else {
+        std::cerr << "[E::main] Unknown command: " << argv[optind] << "\n";
+        print_main_help_msg();
+        return 1;
     }
 
     double cpu_duration =

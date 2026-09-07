@@ -13,6 +13,7 @@
 
 #include <unistd.h>
 
+#include <fstream>
 #include <iostream>
 
 #include "gtest/gtest.h"
@@ -160,6 +161,47 @@ TEST(ChainTest, LiftCigarCoreOneRun) {
     EXPECT_EQ(bam_cigar_op(new_cigar[1]), BAM_CINS);
     EXPECT_EQ(bam_cigar_oplen(new_cigar[2]), 32);
     EXPECT_EQ(bam_cigar_op(new_cigar[2]), BAM_CMATCH);
+}
+
+TEST(ChainTest, LiftCigarCoreOneRunWithNoBreakpoints) {
+    std::vector<uint32_t> new_cigar;
+    int query_offset = 0;
+    int tmp_gap = 0;
+    std::queue<std::tuple<int32_t, int32_t>> break_points;
+    chain::ChainMap cmap;
+
+    cmap.lift_cigar_core_one_run(new_cigar, break_points, 10, BAM_CMATCH, 10,
+                                 tmp_gap, query_offset);
+
+    ASSERT_EQ(new_cigar.size(), 1);
+    EXPECT_EQ(bam_cigar_oplen(new_cigar[0]), 10);
+    EXPECT_EQ(bam_cigar_op(new_cigar[0]), BAM_CMATCH);
+    EXPECT_EQ(query_offset, 10);
+    EXPECT_EQ(tmp_gap, 0);
+}
+
+TEST(ChainTest, SerializationRoundTrip) {
+    std::vector<std::pair<std::string, int32_t>> lm;
+    lm.push_back(std::make_pair("chr1", 248387328));
+    chain::ChainMap original("small.chain", 0, 0, lm);
+
+    char path[] = "/tmp/leviosam2-chain-roundtrip-XXXXXX";
+    int fd = mkstemp(path);
+    ASSERT_GE(fd, 0);
+    close(fd);
+    {
+        std::ofstream out(path, std::ios::binary | std::ios::trunc);
+        ASSERT_TRUE(out.good());
+        original.serialize(out);
+    }
+    std::ifstream in(path, std::ios::binary);
+    ASSERT_TRUE(in.good());
+    chain::ChainMap restored(in, 0, 0);
+    unlink(path);
+
+    EXPECT_EQ(restored.length_map, original.length_map);
+    EXPECT_EQ(restored.lift_contig("chr1", 674047), "chr1");
+    EXPECT_EQ(restored.lift_pos("chr1", 674047, 0, true), 100272);
 }
 
 TEST(ChainTest, LiftCigar1) {

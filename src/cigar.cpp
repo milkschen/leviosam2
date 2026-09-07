@@ -224,12 +224,6 @@ void update_cigar(bam1_t* aln, CigarVector& new_cigar_vec) {
         memmove(aln->data + cigar_st + n_cigar4,
                 aln->data + cigar_st + fake_bytes,
                 orig_len - (cigar_st + fake_bytes));
-        // If new n_cigar is greater, copy the real CIGAR to the right place.
-        // Skipped this if new n_cigar is smaller than the original value.
-        if (n_cigar4 > fake_bytes) {
-            memcpy(aln->data + cigar_st,
-                   aln->data + (n_cigar4 - fake_bytes) + 8, n_cigar4);
-        }
         aln->core.n_cigar = new_cigar_vec.size();
     }
     for (int i = 0; i < aln->core.n_cigar; i++) {
