@@ -13,6 +13,7 @@
 
 #include <unistd.h>
 
+#include <fstream>
 #include <iostream>
 #include <string>
 
@@ -230,6 +231,40 @@ TEST(LiftMap, SimpleBamLift) {
 
     sam_hdr_destroy(sam_hdr);
     sam_close(sam_fp);
+}
+
+TEST(LiftMap, CopyAndMovePreserveSerializedState) {
+    std::ifstream in("major.lft", std::ios::binary);
+    ASSERT_TRUE(in.good());
+    lift::LiftMap original(in);
+
+    char path[] = "/tmp/leviosam2-liftmap-copy-XXXXXX";
+    int fd = mkstemp(path);
+    ASSERT_GE(fd, 0);
+    close(fd);
+    std::ofstream original_out(path, std::ios::binary | std::ios::trunc);
+    size_t original_size = original.serialize(original_out);
+    original_out.close();
+
+    lift::LiftMap copy_assigned;
+    copy_assigned = original;
+    std::ofstream copy_out(path, std::ios::binary | std::ios::trunc);
+    EXPECT_EQ(copy_assigned.serialize(copy_out), original_size);
+    copy_out.close();
+
+    lift::LiftMap copied(original);
+    lift::LiftMap move_assigned;
+    move_assigned = std::move(copied);
+    std::ofstream move_assignment_out(path,
+                                      std::ios::binary | std::ios::trunc);
+    EXPECT_EQ(move_assigned.serialize(move_assignment_out), original_size);
+    move_assignment_out.close();
+
+    lift::LiftMap moved(std::move(original));
+    std::ofstream move_out(path, std::ios::binary | std::ios::trunc);
+    EXPECT_EQ(moved.serialize(move_out), original_size);
+    move_out.close();
+    unlink(path);
 }
 
 TEST(LiftMap, SimpleBamCigarLift) {
