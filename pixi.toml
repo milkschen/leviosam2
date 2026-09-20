@@ -17,6 +17,11 @@ sdsl-lite = ">=2.1.1,<3"
 [target.osx-64.dependencies]
 sdsl-lite = ">=2.1.1,<3"
 
+[feature.integration.dependencies]
+python = ">=3.10"
+pysam = ">=0.22"
+picard = ">=3"
+
 [tasks]
 sdsl = { cmd = "bash scripts/install-sdsl.sh", description = "Ensure SDSL 2.1.1 is available" }
 configure = { cmd = "cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX -DCMAKE_PREFIX_PATH=$CONDA_PREFIX -DCMAKE_LIBRARY_PATH=$CONDA_PREFIX/lib -DCMAKE_INCLUDE_PATH=$CONDA_PREFIX/include", depends-on = ["sdsl"], description = "Configure the LevioSAM2 build" }
@@ -25,3 +30,9 @@ test = { cmd = "ctest --test-dir build --output-on-failure", depends-on = ["buil
 install = { cmd = "cmake --install build", depends-on = ["build"], description = "Install LevioSAM2 into the Pixi environment" }
 setup = { depends-on = ["install"], description = "Build and install a local development copy" }
 check = { depends-on = ["test"], description = "Build and run the unit tests" }
+
+[feature.integration.tasks]
+test-integration = { cmd = "python leviosam-test.py build/leviosam2", depends-on = ["build"], description = "Run the extended pysam and Picard integration tests" }
+
+[environments]
+integration = ["integration"]

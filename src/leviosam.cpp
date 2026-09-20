@@ -247,6 +247,10 @@ void read_and_lift(T *lift_map, std::mutex *mutex_fread,
             std::string null_dest_contig;
             lift_map->lift_aln(aln_vec[i], hdr_source, hdr_dest,
                                null_dest_contig, args.keep_mapq);
+            // MC describes the mate's source-reference CIGAR. Lifting this
+            // record cannot reliably update that CIGAR without its mate, so
+            // do not emit a stale tag.
+            LevioSamUtils::remove_aux_tag(aln_vec[i], "MC");
             // Skip update MD, NM tags and realignment if `md_flag` is not
             // set
             if (!args.md_flag) {
@@ -483,6 +487,24 @@ void lift_run(lift_opts args) {
         exit(1);
     }
     sam_hdr_t *hdr = LevioSamUtils::lengthmap_to_hdr(args.length_map, hdr_orig);
+    // Coordinate liftover can change relative record order, and parallel
+    // workers do not promise input order. Do not retain a source header's
+    // coordinate-sorted claim on the lifted output.
+    kstring_t hd_line = KS_INITIALIZE;
+    int hd_status = sam_hdr_find_line_id(hdr, "HD", NULL, NULL, &hd_line);
+    free(hd_line.s);
+    int sort_order_status =
+        (hd_status == 0)
+            ? sam_hdr_update_line(hdr, "HD", NULL, NULL, "SO", "unsorted",
+                                  NULL)
+            : (hd_status == -1)
+                  ? sam_hdr_add_line(hdr, "HD", "VN", "1.6", "SO",
+                                     "unsorted", NULL)
+                  : -1;
+    if (sort_order_status < 0) {
+        std::cerr << "[E::lift_run] Failed to update output sort order\n";
+        exit(1);
+    }
     sam_hdr_add_pg(hdr, "leviosam2", "VN", VERSION, "CL", args.cmd.data(),
                    NULL);
     sam_hdr_add_pg(hdr_orig, "leviosam2", "VN", VERSION, "CL", args.cmd.data(),

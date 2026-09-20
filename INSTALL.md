@@ -109,11 +109,17 @@ cmake -D CMAKE_LIBRARY_PATH="/path/to/libsdsl/;/path/to/libhts/" \
 
 ## Testing
 
-We provide an end-to-end test and a set of unit tests for levioSAM.
+We provide a dependency-minimal CTest suite and an extended end-to-end suite.
 
-- The end-to-end test can be run with `python leviosam-test.py`. This test includes running levioSAM on several test files in `testdata`. We also use `picard` to validate the lifted results.
+- Run the unit and lightweight CLI integration tests with `pixi run test`.
 
-- The unit test can be run with the command `cd build; ctest --verbose`.
+- Run the extended pysam and Picard tests with
+  `pixi run -e integration test-integration`. Pixi installs the additional
+  Python, pysam, and Picard dependencies in a separate environment. The tests
+  use temporary output directories and do not modify `testdata`.
+
+- If dependencies are installed manually, run the extended suite from any
+  directory with `python /path/to/leviosam-test.py /path/to/leviosam2`.
 
 ## ARM64
 

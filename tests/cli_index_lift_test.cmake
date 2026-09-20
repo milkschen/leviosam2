@@ -19,7 +19,7 @@ file(WRITE "${CHAIN}"
     "50\n")
 file(WRITE "${FAI}" "dst\t1000\nrevdst\t1000\n")
 file(WRITE "${SAM}"
-    "@HD\tVN:1.6\tSO:unsorted\n"
+    "@HD\tVN:1.6\tSO:coordinate\n"
     "@SQ\tSN:src\tLN:1000\n"
     "@SQ\tSN:revsrc\tLN:1000\n"
     "forward\t0\tsrc\t111\t60\t10M\t*\t0\t0\tAAAAAAAAAA\tIIIIIIIIII\n"
@@ -47,6 +47,10 @@ if(NOT LIFT_RESULT EQUAL 0)
     message(FATAL_ERROR "indexed lift failed (${LIFT_RESULT}): ${LIFT_STDERR}")
 endif()
 file(READ "${LIFT_PREFIX}.sam" LIFTED)
+string(FIND "${LIFTED}" "@HD\tVN:1.6\tSO:unsorted" HEADER_POS)
+if(HEADER_POS EQUAL -1)
+    message(FATAL_ERROR "lift output did not declare unsorted order: ${LIFTED}")
+endif()
 
 foreach(EXPECTED
         "forward\t0\tdst\t311\t60\t10M\t*\t0\t0\tAAAAAAAAAA\tIIIIIIIIII\tLO:Z:L"

@@ -678,6 +678,10 @@ class LiftMap {
                     dest_contig = this->lift_contig(source_contig, c.mpos);
                     pos = this->lift_pos(source_contig, c.mpos);
                     aln->core.pos = pos;
+                    // An unmapped segment conventionally carries its mapped
+                    // mate's position in both POS and PNEXT. Keep the two
+                    // coordinates reciprocal after lifting the mate.
+                    aln->core.mpos = pos;
                     lift_status = LIFT_R1_UM_R2_L;
                 }
                 // R1 mapped
