@@ -9,6 +9,8 @@ on:
       - 'leviosam-test.py'
       - 'CMakeLists.txt'
       - 'CMakeLists.txt.in'
+      - 'pixi.toml'
+      - 'pixi.lock'
       - 'testdata/**'
   pull_request:
     branches:
@@ -19,6 +21,8 @@ on:
       - 'leviosam-test.py'
       - 'CMakeLists.txt'
       - 'CMakeLists.txt.in'
+      - 'pixi.toml'
+      - 'pixi.lock'
       - 'testdata/**'
 
 env:
@@ -78,5 +82,4 @@ jobs:
 
       - name: Run leviosam-test
         run: |
-            cd testdata
-            python ../leviosam-test.py ../build/leviosam2
+            python leviosam-test.py build/leviosam2
