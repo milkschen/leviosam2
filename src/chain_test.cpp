@@ -15,9 +15,142 @@
 
 #include <fstream>
 #include <iostream>
+#include <memory>
+#include <string>
+#include <tuple>
+#include <vector>
 
 #include "gtest/gtest.h"
 #include "leviosam_utils.hpp"
+
+namespace {
+
+using BamPtr = std::unique_ptr<bam1_t, decltype(&bam_destroy1)>;
+
+std::string write_temporary_file(const std::string &contents) {
+    char path[] = "/tmp/leviosam2-chain-matrix-XXXXXX";
+    int fd = mkstemp(path);
+    if (fd < 0) return "";
+    close(fd);
+    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    out << contents;
+    out.close();
+    return path;
+}
+
+BamPtr parse_alignment(sam_hdr_t *header, const std::string &contig,
+                       int32_t position, const std::string &cigar) {
+    std::string record = "matrix\t0\t" + contig + "\t" +
+                         std::to_string(position + 1) + "\t60\t" + cigar +
+                         "\t*\t0\t0\t*\t*";
+    kstring_t line = KS_INITIALIZE;
+    kputs(record.c_str(), &line);
+    BamPtr alignment(bam_init1(), bam_destroy1);
+    if (sam_parse1(&line, header, alignment.get()) < 0) alignment.reset();
+    free(line.s);
+    return alignment;
+}
+
+std::string cigar_string(const bam1_t *alignment) {
+    std::string result;
+    const uint32_t *cigar = bam_get_cigar(alignment);
+    for (uint32_t i = 0; i < alignment->core.n_cigar; ++i) {
+        result += std::to_string(bam_cigar_oplen(cigar[i]));
+        result += bam_cigar_opchr(cigar[i]);
+    }
+    return result;
+}
+
+struct CigarResult {
+    int status;
+    std::string cigar;
+    hts_pos_t query_length;
+
+    bool operator==(const CigarResult &other) const {
+        return std::tie(status, cigar, query_length) ==
+               std::tie(other.status, other.cigar, other.query_length);
+    }
+};
+
+class SyntheticChainMatrixTest : public testing::Test {
+   protected:
+    void SetUp() override {
+        static const std::string chains =
+            "chain 1 src 100 + 0 100 dst 120 + 10 111 1\n"
+            "20 0 3\n"
+            "20 2 0\n"
+            "20 0 0\n"
+            "38\n"
+            "\n"
+            "chain 1 revsrc 100 + 0 100 revdst 120 - 10 108 2\n"
+            "40 2 0\n"
+            "58\n";
+        chain_path = write_temporary_file(chains);
+        ASSERT_FALSE(chain_path.empty());
+
+        chain::LengthMap lengths{{"dst", 120}, {"revdst", 120}};
+        parsed.reset(new chain::ChainMap(chain_path, 0, 10, lengths));
+
+        index_path = write_temporary_file("");
+        ASSERT_FALSE(index_path.empty());
+        {
+            std::ofstream out(index_path,
+                              std::ios::binary | std::ios::trunc);
+            ASSERT_TRUE(out.good());
+            parsed->serialize(out);
+        }
+        std::ifstream in(index_path, std::ios::binary);
+        ASSERT_TRUE(in.good());
+        restored.reset(new chain::ChainMap(in, 0, 10));
+
+        const std::string header_text =
+            "@HD\tVN:1.6\tSO:unsorted\n"
+            "@SQ\tSN:src\tLN:100\n"
+            "@SQ\tSN:revsrc\tLN:100\n";
+        header = sam_hdr_parse(header_text.size(), header_text.c_str());
+        ASSERT_NE(header, nullptr);
+    }
+
+    void TearDown() override {
+        sam_hdr_destroy(header);
+        unlink(chain_path.c_str());
+        unlink(index_path.c_str());
+    }
+
+    CigarResult lift_cigar(chain::ChainMap &chain_map,
+                           const std::string &contig, int32_t position,
+                           const std::string &cigar) {
+        BamPtr alignment = parse_alignment(header, contig, position, cigar);
+        EXPECT_NE(alignment, nullptr);
+        if (!alignment) return {-1, "", 0};
+        hts_pos_t query_length = bam_cigar2qlen(
+            alignment->core.n_cigar, bam_get_cigar(alignment.get()));
+        int status = chain_map.lift_cigar(contig, alignment.get());
+        hts_pos_t lifted_query_length = bam_cigar2qlen(
+            alignment->core.n_cigar, bam_get_cigar(alignment.get()));
+        EXPECT_EQ(lifted_query_length, query_length);
+        return {status, cigar_string(alignment.get()), lifted_query_length};
+    }
+
+    void expect_cigar(const std::string &contig, int32_t position,
+                      const std::string &input, const std::string &expected) {
+        CigarResult parsed_result =
+            lift_cigar(*parsed, contig, position, input);
+        CigarResult restored_result =
+            lift_cigar(*restored, contig, position, input);
+        EXPECT_EQ(parsed_result, restored_result);
+        EXPECT_EQ(parsed_result.status, 0);
+        EXPECT_EQ(parsed_result.cigar, expected);
+    }
+
+    std::string chain_path;
+    std::string index_path;
+    std::unique_ptr<chain::ChainMap> parsed;
+    std::unique_ptr<chain::ChainMap> restored;
+    sam_hdr_t *header = nullptr;
+};
+
+}  // namespace
 
 /* Chain tests */
 TEST(ChainTest, SimpleRankAndLift) {
@@ -135,51 +268,6 @@ TEST(ChainTest, LiftBamInReversedRegion) {
     }
 }
 
-TEST(ChainTest, LiftCigarCoreOneRun) {
-    std::vector<uint32_t> new_cigar;
-    int query_offset = 0;
-    int tmp_gap = 0;
-    uint32_t qlen = 252;
-    chain::ChainMap cmap;
-    std::queue<std::tuple<int32_t, int32_t>> bp;
-    bp.push(std::make_tuple(195, -18));
-    bp.push(std::make_tuple(217, -2));
-
-    cmap.lift_cigar_core_one_run(new_cigar, bp, 200, BAM_CMATCH, qlen, tmp_gap,
-                                 query_offset);
-    EXPECT_EQ(tmp_gap, 13);
-    cmap.lift_cigar_core_one_run(new_cigar, bp, 5, BAM_CINS, qlen, tmp_gap,
-                                 query_offset);
-    EXPECT_EQ(tmp_gap, 15);
-    cmap.lift_cigar_core_one_run(new_cigar, bp, 47, BAM_CMATCH, qlen, tmp_gap,
-                                 query_offset);
-    EXPECT_EQ(tmp_gap, 0);
-    // LevioSamUtils::debug_print_cigar(new_cigar.data(), new_cigar.size());
-    EXPECT_EQ(bam_cigar_oplen(new_cigar[0]), 195);
-    EXPECT_EQ(bam_cigar_op(new_cigar[0]), BAM_CMATCH);
-    EXPECT_EQ(bam_cigar_oplen(new_cigar[1]), 25);
-    EXPECT_EQ(bam_cigar_op(new_cigar[1]), BAM_CINS);
-    EXPECT_EQ(bam_cigar_oplen(new_cigar[2]), 32);
-    EXPECT_EQ(bam_cigar_op(new_cigar[2]), BAM_CMATCH);
-}
-
-TEST(ChainTest, LiftCigarCoreOneRunWithNoBreakpoints) {
-    std::vector<uint32_t> new_cigar;
-    int query_offset = 0;
-    int tmp_gap = 0;
-    std::queue<std::tuple<int32_t, int32_t>> break_points;
-    chain::ChainMap cmap;
-
-    cmap.lift_cigar_core_one_run(new_cigar, break_points, 10, BAM_CMATCH, 10,
-                                 tmp_gap, query_offset);
-
-    ASSERT_EQ(new_cigar.size(), 1);
-    EXPECT_EQ(bam_cigar_oplen(new_cigar[0]), 10);
-    EXPECT_EQ(bam_cigar_op(new_cigar[0]), BAM_CMATCH);
-    EXPECT_EQ(query_offset, 10);
-    EXPECT_EQ(tmp_gap, 0);
-}
-
 TEST(ChainTest, SerializationRoundTrip) {
     std::vector<std::pair<std::string, int32_t>> lm;
     lm.push_back(std::make_pair("chr1", 248387328));
@@ -202,6 +290,84 @@ TEST(ChainTest, SerializationRoundTrip) {
     EXPECT_EQ(restored.length_map, original.length_map);
     EXPECT_EQ(restored.lift_contig("chr1", 674047), "chr1");
     EXPECT_EQ(restored.lift_pos("chr1", 674047, 0, true), 100272);
+}
+
+TEST_F(SyntheticChainMatrixTest, PositionBoundariesMatchAfterSerialization) {
+    struct PositionCase {
+        std::string contig;
+        hts_pos_t source;
+        hts_pos_t expected;
+    };
+    const std::vector<PositionCase> cases{
+        {"src", 0, 10},  {"src", 19, 29}, {"src", 20, 33},
+        {"src", 39, 52}, {"src", 40, 53}, {"src", 41, 53},
+        {"src", 42, 53}, {"src", 99, 110}};
+
+    for (const auto &test_case : cases) {
+        SCOPED_TRACE(test_case.contig + ":" +
+                     std::to_string(test_case.source));
+        hts_pos_t parsed_position =
+            parsed->lift_pos(test_case.contig, test_case.source, 2, true);
+        hts_pos_t restored_position =
+            restored->lift_pos(test_case.contig, test_case.source, 2, true);
+        EXPECT_EQ(parsed_position, restored_position);
+        EXPECT_EQ(parsed_position, test_case.expected);
+        EXPECT_EQ(parsed->lift_contig(test_case.contig, test_case.source),
+                  restored->lift_contig(test_case.contig, test_case.source));
+    }
+
+    EXPECT_EQ(parsed->lift_pos("missing", 10, 0, true), -1);
+    EXPECT_EQ(restored->lift_pos("missing", 10, 0, true), -1);
+    EXPECT_EQ(parsed->lift_contig("missing", 10), "*");
+    EXPECT_EQ(restored->lift_contig("missing", 10), "*");
+    EXPECT_EQ(parsed->lift_pos("src", 100, 0, true), -1);
+    EXPECT_EQ(restored->lift_pos("src", 100, 0, true), -1);
+    EXPECT_EQ(parsed->lift_contig("src", 100), "*");
+    EXPECT_EQ(restored->lift_contig("src", 100), "*");
+}
+
+TEST_F(SyntheticChainMatrixTest, CigarBoundaryAndGapMatrix) {
+    // Exact interval ends and starts do not acquire a chain-gap operation.
+    expect_cigar("src", 15, "5M", "5M");
+    expect_cigar("src", 20, "5M", "5M");
+
+    // A target-only gap becomes a deletion; a source-only gap becomes an
+    // insertion while preserving query length.
+    expect_cigar("src", 15, "10M", "5M3D5M");
+    expect_cigar("src", 35, "12M", "5M2I5M");
+    expect_cigar("src", 15, "55M", "5M3D20M2I28M");
+    expect_cigar("revsrc", 35, "12M", "5M2I5M");
+
+    // Reads beginning or ending in a small internal source gap are clipped to
+    // the neighboring mapped interval.
+    expect_cigar("src", 41, "6M", "1S5M");
+    expect_cigar("src", 35, "6M", "5M1S");
+    expect_cigar("revsrc", 41, "6M", "5M1S");
+    expect_cigar("revsrc", 35, "6M", "1S5M");
+}
+
+TEST_F(SyntheticChainMatrixTest, PreservesAndNormalizesCigarOperations) {
+    expect_cigar("src", 5, "2S3=1X2I4M2D3N1H",
+                 "2S4M2I4M2D3N1H");
+    expect_cigar("revsrc", 20, "2S3=1X2I4M2D3N1H",
+                 "1H3N2D4M2I4M2S");
+}
+
+TEST_F(SyntheticChainMatrixTest, PlacesGapsByReferenceConsumption) {
+    // D and N consume the source reference but not the query. The chain
+    // breakpoint must therefore be placed after them rather than after the
+    // same number of query bases.
+    expect_cigar("src", 10, "5M5D10M", "5M8D10M");
+    expect_cigar("src", 10, "5M5N10M", "5M5N3D10M");
+
+    // I consumes query but not source reference, so it must not advance the
+    // chain breakpoint.
+    expect_cigar("src", 10, "5M5I10M", "5M5I5M3D5M");
+    expect_cigar("revsrc", 35, "3M2I9M", "5M2I2M2I3M");
+
+    // A source-side chain deletion covered by a read deletion cancels that
+    // deletion instead of manufacturing query-consuming inserted bases.
+    expect_cigar("src", 30, "10M2D10M", "20M");
 }
 
 TEST(ChainTest, LiftCigar1) {

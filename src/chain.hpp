@@ -15,10 +15,13 @@
 #include <htslib/sam.h>
 
 #include <iostream>
+#include <queue>
 #include <regex>
 #include <sdsl/bit_vectors.hpp>
 #include <sdsl/util.hpp>
+#include <tuple>
 #include <unordered_map>
+#include <vector>
 
 namespace chain {
 /* Chain interval object
@@ -80,11 +83,6 @@ class ChainMap {
                                           const int &end_sidx,
                                           const int &num_sclip_start,
                                           const int &num_sclip_end);
-    void lift_cigar_core_one_run(
-        std::vector<uint32_t> &new_cigar,
-        std::queue<std::tuple<int32_t, int32_t>> &break_points,
-        uint32_t cigar_op_len, unsigned int cigar_op, const uint32_t qlen,
-        int &tmp_gap, int &query_offset);
 
     void lift_pos(bam1_t *aln, const hts_pos_t &pos_end,
                   const chain::Interval &intvl, const bool &first_seg);
