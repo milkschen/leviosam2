@@ -22,15 +22,16 @@ runs:
           htslib-${{ inputs.version }}-${{ runner.os }}-
           htslib-${{ inputs.version }}-
     
-    - name: Set up SDSL
+    - name: Install build dependencies
       shell: bash
-      run: sudo apt-get -y install libsdsl-dev
+      run: |
+        sudo apt-get update &&
+        sudo apt-get -y install libsdsl-dev libbz2-dev liblzma-dev
     
     - name: Set up htslib
       shell: bash
       run: |
         if [ ! -d "/tmp/htslib-${{ inputs.version }}" ]; then
-          sudo apt-get -y install libbz2-dev liblzma-dev &&
           wget https://github.com/samtools/htslib/releases/download/${{ inputs.version }}/htslib-${{ inputs.version }}.tar.bz2 &&
           tar -vxjf htslib-${{ inputs.version }}.tar.bz2 &&
           cd htslib-${{ inputs.version }} &&
