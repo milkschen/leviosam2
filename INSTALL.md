@@ -57,7 +57,7 @@ docker pull naechyun/leviosam2:latest
 singularity pull docker://naechyun/leviosam2:latest
 ```
 
-## Intall levioSAM2 from scratch using CMake
+## Install levioSAM2 from scratch using CMake
 
 ### Dependencies
 
@@ -108,6 +108,26 @@ cmake -D CMAKE_LIBRARY_PATH="/path/to/libsdsl/;/path/to/libhts/" \
 ```
 
 ## Testing
+
+Tests are enabled by default (`BUILD_TESTING=ON`). CMake uses an installed
+GoogleTest CMake package when available; otherwise it downloads the pinned
+GoogleTest release and requires Git and network access. To build tests offline
+with an existing GoogleTest checkout, configure with:
+
+```shell
+cmake -S . -B build -DLEVIOSAM2_GTEST_SOURCE_DIR=/path/to/googletest
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
+
+For a production build without GoogleTest, Git, or network access, disable tests:
+
+```shell
+cmake -S . -B build -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX=/path/to/install
+cmake --build build
+cmake --install build
+```
+
 
 We provide a dependency-minimal CTest suite and an extended end-to-end suite.
 
