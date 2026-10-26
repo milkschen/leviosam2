@@ -293,6 +293,21 @@ def validate_executable(cmd: str, lenient: bool = False) -> None:
 class Leviosam2Workflow:
     """LevioSAM2 workflow object."""
 
+    @staticmethod
+    def _run_command(cmd: str, stage: str):
+        """Run a stage, including failures in any part of a shell pipeline.
+
+        Keep stderr attached so tools can report their original diagnostics.
+        Bash's pipefail is required because /bin/sh can hide producer failures.
+        """
+        try:
+            return subprocess.run(["bash", "-o", "pipefail", "-c", cmd], check=True)
+        except subprocess.CalledProcessError as error:
+            logger.error(
+                "%s failed (exit %s): %s", stage, error.returncode, cmd
+            )
+            raise
+
     def _infer_aligner_exe(self):
         """Infers aligner executable name."""
         if self.aligner in ["bowtie2", "minimap2", "winnowmap2", "strobealign"]:
@@ -383,7 +398,7 @@ class Leviosam2Workflow:
                 )
                 return SKIP_MSG
             logger.info(cmd)
-            return subprocess.run([cmd], shell=True)
+            return self._run_command(cmd, "run_leviosam2")
 
     def run_sort_committed(
         self,
@@ -410,7 +425,7 @@ class Leviosam2Workflow:
                 )
                 return SKIP_MSG
             logger.info(cmd)
-            return subprocess.run([cmd], shell=True)
+            return self._run_command(cmd, "run_sort_committed")
 
     def run_collate_pe(
         self,
@@ -447,7 +462,7 @@ class Leviosam2Workflow:
                 )
                 return SKIP_MSG
             logger.info(cmd)
-            return subprocess.run([cmd], shell=True)
+            return self._run_command(cmd, "run_collate_pe")
 
     # def run_intial_align(
     #     self,
@@ -660,7 +675,7 @@ class Leviosam2Workflow:
                 logger.info(f"Skip run_realign_deferred -- {fn_out} exists")
                 return SKIP_MSG
             logger.info(cmd)
-            return subprocess.run([cmd], shell=True)
+            return self._run_command(cmd, "run_realign_deferred")
 
     def run_refflow_merge_pe(
         self,
@@ -711,7 +726,7 @@ class Leviosam2Workflow:
                 )
                 return SKIP_MSG
             logger.info(cmd)
-            return subprocess.run([cmd], shell=True)
+            return self._run_command(cmd, "run_refflow_merge_pe")
 
     def run_merge_and_index(
         self,
@@ -744,7 +759,7 @@ class Leviosam2Workflow:
                 )
                 return SKIP_MSG
             logger.info(cmd)
-            return subprocess.run([cmd], shell=True)
+            return self._run_command(cmd, "run_merge_and_index")
 
     def run_bam_to_fastq_se(
         self,
@@ -766,7 +781,7 @@ class Leviosam2Workflow:
                 )
                 return SKIP_MSG
             logger.info(cmd)
-            return subprocess.run([cmd], shell=True)
+            return self._run_command(cmd, "run_bam_to_fastq_se")
 
     def run_bam_to_cram(
         self,
@@ -776,6 +791,7 @@ class Leviosam2Workflow:
         We have not supported writing to the CRAM format in the leviosam2
         software. This function converts the final BAM file to the CRAM format.
         """
+        self._cram_completed = False
         fn_final_cram = self._fn_final.with_suffix(".cram")
         cmd = (
             f"{self.time_cmd}{self.samtools} view -T {self.target_fasta} "
@@ -787,7 +803,9 @@ class Leviosam2Workflow:
             return cmd
         else:
             logger.info(cmd)
-            return subprocess.run([cmd], shell=True)
+            result = self._run_command(cmd, "run_bam_to_cram")
+            self._cram_completed = True
+            return result
 
     def run_clean(self) -> Union[str, "subprocess.CompletedProcess[bytes]"]:
         logger.info(f"Unlink {self._fn_committed}")
@@ -819,7 +837,7 @@ class Leviosam2Workflow:
                 self._fn_deferred_realigned_pe.unlink()
                 self._fn_deferred_realigned_pe_sortn.unlink()
                 self._fn_deferred_reconciled.unlink()
-            if self.out_format == "cram":
+            if self.out_format == "cram" and self._cram_completed:
                 # Removes the final BAM file if the output format is set to
                 # CRAM.
                 self._fn_final.unlink()
@@ -898,6 +916,7 @@ class Leviosam2Workflow:
         check_file_exists(self.input_bam)
 
     def __init__(self, args: argparse.Namespace) -> None:
+        self._cram_completed = False
         self.aligner = args.aligner
         self.aligner_exe = args.aligner_exe
         if self.aligner_exe == "auto":

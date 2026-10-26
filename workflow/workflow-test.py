@@ -9,6 +9,9 @@ import argparse
 import copy
 import pathlib
 import sys
+import subprocess
+import tempfile
+from unittest import mock
 import unittest
 
 import leviosam2
@@ -69,6 +72,100 @@ class Workflow(unittest.TestCase):
         self.args = args
         self.workflow = leviosam2.Leviosam2Workflow(args)
         self.workflow._set_filenames()
+
+    def failure_workflow(self, directory):
+        workflow = copy.deepcopy(self.workflow)
+        workflow.dryrun = False
+        workflow.forcerun = True
+        workflow.keep_tmp_files = False
+        workflow.out_prefix = pathlib.Path(directory) / "result"
+        workflow.input_bam = pathlib.Path(directory) / "input.bam"
+        workflow.input_bam.touch()
+        workflow._set_filenames()
+        return workflow
+
+    def test_failed_lift_stops_workflow(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workflow = self.failure_workflow(directory)
+            workflow.leviosam2 = "false"
+            with mock.patch.object(workflow, "run_sort_committed") as sort, \
+                    mock.patch.object(workflow, "run_clean") as clean:
+                with self.assertLogs(leviosam2.logger, level="ERROR") as logs:
+                    with self.assertRaises(subprocess.CalledProcessError):
+                        workflow.run_workflow()
+                self.assertIn("run_leviosam2 failed", logs.output[0])
+                sort.assert_not_called()
+                clean.assert_not_called()
+
+    def test_failed_pipeline_producer_stops_workflow(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workflow = self.failure_workflow(directory)
+            workflow.is_single_end = True
+            workflow._fn_deferred.touch()
+            workflow.samtools = "false"
+            workflow.bgzip = "cat"
+            with mock.patch.object(workflow, "run_leviosam2"), \
+                    mock.patch.object(workflow, "run_sort_committed"), \
+                    mock.patch.object(workflow, "run_realign_deferred") as realign, \
+                    mock.patch.object(workflow, "run_clean") as clean:
+                with self.assertRaises(subprocess.CalledProcessError):
+                    workflow.run_workflow()
+                realign.assert_not_called()
+                clean.assert_not_called()
+
+    def test_failed_aligner_pipeline_stops_before_merge(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workflow = self.failure_workflow(directory)
+            workflow._fn_deferred_pe_fq1.touch()
+            workflow._fn_deferred_pe_fq2.touch()
+            workflow.aligner_exe = "false"
+            # The consumer succeeds even though the aligner fails.
+            workflow.samtools = "true"
+            with mock.patch.object(workflow, "run_leviosam2"), \
+                    mock.patch.object(workflow, "run_sort_committed"), \
+                    mock.patch.object(workflow, "run_collate_pe"), \
+                    mock.patch.object(workflow, "run_refflow_merge_pe") as merge, \
+                    mock.patch.object(workflow, "run_clean") as clean:
+                with self.assertRaises(subprocess.CalledProcessError):
+                    workflow.run_workflow()
+                merge.assert_not_called()
+                clean.assert_not_called()
+
+    def test_failed_cram_conversion_or_index_retains_bam(self):
+        for failed_stage in ("view", "index"):
+            with self.subTest(failed_stage=failed_stage), \
+                    tempfile.TemporaryDirectory() as directory:
+                workflow = self.failure_workflow(directory)
+                workflow.out_format = "cram"
+                workflow._fn_final.write_text("original BAM")
+                bam_index = workflow._fn_final.with_suffix(".bam.bai")
+                bam_index.touch()
+                marker = pathlib.Path(directory) / "index-ran"
+                tool = pathlib.Path(directory) / "samtools.sh"
+                tool.write_text(
+                    'if [ "$1" = "index" ]; then touch ' + str(marker) + '; fi\n'
+                    'if [ "$1" = "' + failed_stage + '" ]; then exit 23; fi\n'
+                )
+                workflow.samtools = "bash " + str(tool)
+                # Isolate the finalization path; all preceding stages succeeded.
+                stages = ["run_leviosam2", "run_sort_committed", "run_collate_pe",
+                          "run_realign_deferred", "run_refflow_merge_pe",
+                          "run_merge_and_index"]
+                patches = [mock.patch.object(workflow, stage) for stage in stages]
+                for patch in patches:
+                    patch.start()
+                try:
+                    with mock.patch.object(workflow, "run_clean") as clean:
+                        with self.assertRaises(subprocess.CalledProcessError) as error:
+                            workflow.run_workflow()
+                        self.assertEqual(error.exception.returncode, 23)
+                        clean.assert_not_called()
+                    self.assertEqual(workflow._fn_final.read_text(), "original BAM")
+                    self.assertTrue(bam_index.is_file())
+                    self.assertEqual(marker.exists(), failed_stage == "index")
+                finally:
+                    for patch in patches:
+                        patch.stop()
 
     # TODO
     # def test_set_filenames_single_end(self):
