@@ -310,5 +310,13 @@ add_test(NAME cli_index_lift_test
 )
 set_tests_properties(cli_index_lift_test PROPERTIES TIMEOUT 30)
 
+add_test(NAME reconcile_eof_test
+    COMMAND ${CMAKE_COMMAND}
+        "-DLEVIOSAM2=$<TARGET_FILE:leviosam2>"
+        "-DTEST_TMP_DIR=${CMAKE_CURRENT_BINARY_DIR}/reconcile-eof-test"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/reconcile_eof_test.cmake
+)
+set_tests_properties(reconcile_eof_test PROPERTIES TIMEOUT 30)
+
 INSTALL(TARGETS leviosam2 DESTINATION bin)
 INSTALL(FILES src/leviosam.hpp DESTINATION include)
