@@ -1,24 +1,26 @@
-# Input version name
-VER=${1}
+#!/bin/sh
+# Build and publish one release. VERSION is the tag without the leading "v".
+set -eu
 
-if [[ -z ${VER} ]]; then
-    echo "Error: input VER is not set"
-    echo "Usage: sh update_docker.sh <version_name>"
-    exit
+if [ "$#" -ne 1 ] || [ -z "$1" ]; then
+    echo "Usage: sh $0 <version-without-v>" >&2
+    exit 1
 fi
+VERSION=$1
+case "$VERSION" in
+    *[!a-zA-Z0-9_.-]* | [!0-9]*)
+        echo "Error: version must start with a digit and contain only letters, digits, ., _, or -" >&2
+        exit 1
+        ;;
+esac
 
-# build the environment image
-cd env
-docker build --tag leviosam2_env .
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+IMAGE=naechyun/leviosam2
+ENV_IMAGE=naechyun/leviosam2_env:$VERSION
 
-# build the production image
-cd ../production
-docker build --tag leviosam2:${VER} --tag leviosam2:latest .
+docker build --build-arg "VERSION=$VERSION" --tag "$ENV_IMAGE" "$SCRIPT_DIR/env"
+docker build --build-arg "ENV_IMAGE=$ENV_IMAGE" \
+    --tag "$IMAGE:$VERSION" --tag "$IMAGE:latest" "$SCRIPT_DIR/production"
 
-# push using the ${VER} tag
-# docker tag leviosam2 naechyun/leviosam2:${VER}
-docker push naechyun/leviosam2:${VER}
-
-# push using the tag "latest"
-# docker tag leviosam2 naechyun/leviosam2:latest
-docker push naechyun/leviosam2:latest
+docker push "$IMAGE:$VERSION"
+docker push "$IMAGE:latest"

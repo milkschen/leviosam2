@@ -1,5 +1,6 @@
 # image: leviosam2
-FROM leviosam2_env:latest AS lev
+ARG ENV_IMAGE
+FROM ${ENV_IMAGE} AS lev
 
 FROM ubuntu:20.04
 LABEL org.opencontainers.image.authors="naechyun@jhu.edu"
