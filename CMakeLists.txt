@@ -220,95 +220,111 @@ elseif(UNIX)
 endif()
 
 
-# Download and unpack googletest at configure time
-configure_file(CMakeLists.txt.in googletest-download/CMakeLists.txt)
-execute_process(COMMAND ${CMAKE_COMMAND} -G "${CMAKE_GENERATOR}" .
-        RESULT_VARIABLE result
-        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/googletest-download )
-if(result)
-    message(FATAL_ERROR "CMake step for googletest failed: ${result}")
+include(CTest)
+if(BUILD_TESTING)
+    set(LEVIOSAM2_GTEST_SOURCE_DIR "" CACHE PATH
+        "Existing GoogleTest source directory (avoids downloading GoogleTest)")
+    set(LEVIOSAM2_GTEST_SOURCE "")
+    if(LEVIOSAM2_GTEST_SOURCE_DIR)
+        if(NOT EXISTS "${LEVIOSAM2_GTEST_SOURCE_DIR}/CMakeLists.txt")
+            message(FATAL_ERROR "LEVIOSAM2_GTEST_SOURCE_DIR must contain GoogleTest's CMakeLists.txt")
+        endif()
+        set(LEVIOSAM2_GTEST_SOURCE "${LEVIOSAM2_GTEST_SOURCE_DIR}")
+    else()
+        find_package(GTest CONFIG QUIET)
+        if(NOT GTest_FOUND)
+            # Download only when tests are enabled and no local dependency exists.
+            configure_file(CMakeLists.txt.in googletest-download/CMakeLists.txt)
+            execute_process(COMMAND ${CMAKE_COMMAND} -G "${CMAKE_GENERATOR}" .
+                RESULT_VARIABLE result
+                WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/googletest-download)
+            if(result)
+                message(FATAL_ERROR "CMake step for googletest failed: ${result}")
+            endif()
+            execute_process(COMMAND ${CMAKE_COMMAND} --build .
+                RESULT_VARIABLE result
+                WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/googletest-download)
+            if(result)
+                message(FATAL_ERROR "Build step for googletest failed: ${result}. For offline builds, set LEVIOSAM2_GTEST_SOURCE_DIR or BUILD_TESTING=OFF.")
+            endif()
+            set(LEVIOSAM2_GTEST_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/googletest-src")
+        endif()
+    endif()
+    if(LEVIOSAM2_GTEST_SOURCE)
+        # Preserve the parent project's compiler/linker settings on Windows.
+        set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+        add_subdirectory("${LEVIOSAM2_GTEST_SOURCE}"
+                         "${CMAKE_CURRENT_BINARY_DIR}/googletest-build"
+                         EXCLUDE_FROM_ALL)
+        set(LEVIOSAM2_GTEST_LIBRARIES gtest gtest_main)
+    else()
+        set(LEVIOSAM2_GTEST_LIBRARIES GTest::gtest GTest::gtest_main)
+    endif()
+
+    # leviosam_utils_test
+    add_executable(leviosam_utils_test src/leviosam_utils_test.cpp)
+    target_link_libraries(leviosam_utils_test lvsam)
+    target_link_libraries(leviosam_utils_test ${HTS_LIB})
+    target_link_libraries(leviosam_utils_test ${SDSL_LIB})
+    target_link_libraries(leviosam_utils_test ${LEVIOSAM2_GTEST_LIBRARIES})
+
+    add_test(NAME leviosam_utils_test COMMAND leviosam_utils_test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/testdata
+    )
+
+    # chain_test
+    add_executable(chain_test src/chain_test.cpp)
+    target_link_libraries(chain_test lvsam)
+    target_link_libraries(chain_test ${HTS_LIB})
+    target_link_libraries(chain_test ${SDSL_LIB})
+    target_link_libraries(chain_test ${LEVIOSAM2_GTEST_LIBRARIES})
+
+    add_test(NAME chain_test COMMAND chain_test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/testdata
+    )
+
+    # cigar_test
+    add_executable(cigar_test src/cigar_test.cpp)
+    target_link_libraries(cigar_test lvsam)
+    target_link_libraries(cigar_test ${HTS_LIB})
+    target_link_libraries(cigar_test ${SDSL_LIB})
+    target_link_libraries(cigar_test ${LEVIOSAM2_GTEST_LIBRARIES})
+
+    add_test(NAME cigar_test COMMAND cigar_test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/testdata
+    )
+
+    # bed_test
+    add_executable(bed_test src/bed_test.cpp)
+    target_link_libraries(bed_test lvsam)
+    target_link_libraries(bed_test ${HTS_LIB})
+    target_link_libraries(bed_test ${SDSL_LIB})
+    target_link_libraries(bed_test ${LEVIOSAM2_GTEST_LIBRARIES})
+
+    add_test(NAME bed_test COMMAND bed_test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/testdata
+    )
+
+    # reconcile_test
+    add_executable(reconcile_test src/reconcile_test.cpp)
+    target_link_libraries(reconcile_test lvsam)
+    target_link_libraries(reconcile_test ${HTS_LIB})
+    target_link_libraries(reconcile_test ${SDSL_LIB})
+    target_link_libraries(reconcile_test ${LEVIOSAM2_GTEST_LIBRARIES})
+
+    add_test(NAME reconcile_test COMMAND reconcile_test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/testdata
+    )
+
+    add_test(NAME cli_index_lift_test
+        COMMAND ${CMAKE_COMMAND}
+            "-DLEVIOSAM2=$<TARGET_FILE:leviosam2>"
+            "-DTEST_TMP_DIR=${CMAKE_CURRENT_BINARY_DIR}/cli-index-lift-test"
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli_index_lift_test.cmake
+    )
+    set_tests_properties(cli_index_lift_test PROPERTIES TIMEOUT 30)
+
 endif()
-execute_process(COMMAND ${CMAKE_COMMAND} --build .
-        RESULT_VARIABLE result
-        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/googletest-download )
-if(result)
-    message(FATAL_ERROR "Build step for googletest failed: ${result}")
-endif()
-
-# Prevent overriding the parent project's compiler/linker
-# settings on Windows
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-
-enable_testing()
-
-# Add googletest directly to our build. This defines
-# the gtest and gtest_main targets.
-add_subdirectory(${CMAKE_CURRENT_BINARY_DIR}/googletest-src
-                 ${CMAKE_CURRENT_BINARY_DIR}/googletest-build
-                 EXCLUDE_FROM_ALL)
-
-# leviosam_utils_test
-add_executable(leviosam_utils_test src/leviosam_utils_test.cpp)
-target_link_libraries(leviosam_utils_test lvsam)
-target_link_libraries(leviosam_utils_test ${HTS_LIB})
-target_link_libraries(leviosam_utils_test ${SDSL_LIB})
-target_link_libraries(leviosam_utils_test gtest gtest_main)
-
-add_test(NAME leviosam_utils_test COMMAND leviosam_utils_test
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/testdata
-)
-
-# chain_test
-add_executable(chain_test src/chain_test.cpp)
-target_link_libraries(chain_test lvsam)
-target_link_libraries(chain_test ${HTS_LIB})
-target_link_libraries(chain_test ${SDSL_LIB})
-target_link_libraries(chain_test gtest gtest_main)
-
-add_test(NAME chain_test COMMAND chain_test
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/testdata
-)
-
-# cigar_test
-add_executable(cigar_test src/cigar_test.cpp)
-target_link_libraries(cigar_test lvsam)
-target_link_libraries(cigar_test ${HTS_LIB})
-target_link_libraries(cigar_test ${SDSL_LIB})
-target_link_libraries(cigar_test gtest gtest_main)
-
-add_test(NAME cigar_test COMMAND cigar_test
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/testdata
-)
-
-# bed_test
-add_executable(bed_test src/bed_test.cpp)
-target_link_libraries(bed_test lvsam)
-target_link_libraries(bed_test ${HTS_LIB})
-target_link_libraries(bed_test ${SDSL_LIB})
-target_link_libraries(bed_test gtest gtest_main)
-
-add_test(NAME bed_test COMMAND bed_test
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/testdata
-)
-
-# reconcile_test
-add_executable(reconcile_test src/reconcile_test.cpp)
-target_link_libraries(reconcile_test lvsam)
-target_link_libraries(reconcile_test ${HTS_LIB})
-target_link_libraries(reconcile_test ${SDSL_LIB})
-target_link_libraries(reconcile_test gtest gtest_main)
-
-add_test(NAME reconcile_test COMMAND reconcile_test
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/testdata
-)
-
-add_test(NAME cli_index_lift_test
-    COMMAND ${CMAKE_COMMAND}
-        "-DLEVIOSAM2=$<TARGET_FILE:leviosam2>"
-        "-DTEST_TMP_DIR=${CMAKE_CURRENT_BINARY_DIR}/cli-index-lift-test"
-        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli_index_lift_test.cmake
-)
-set_tests_properties(cli_index_lift_test PROPERTIES TIMEOUT 30)
 
 INSTALL(TARGETS leviosam2 DESTINATION bin)
 INSTALL(FILES src/leviosam.hpp DESTINATION include)
