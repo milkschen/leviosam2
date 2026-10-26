@@ -338,10 +338,13 @@ if(NOT DEFINED BUILD_TESTING OR BUILD_TESTING)
     )
     set_tests_properties(reconcile_headers_test PROPERTIES TIMEOUT 30)
 endif()
-add_test(NAME lift_tags_test
-    COMMAND ${CMAKE_COMMAND}
-        "-DLEVIOSAM2=$<TARGET_FILE:leviosam2>"
-        "-DTEST_TMP_DIR=${CMAKE_CURRENT_BINARY_DIR}/lift-tags-test"
-        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/lift_tags_test.cmake
-)
-set_tests_properties(lift_tags_test PROPERTIES TIMEOUT 30)
+
+if(NOT DEFINED BUILD_TESTING OR BUILD_TESTING)
+    add_test(NAME lift_tags_test
+        COMMAND ${CMAKE_COMMAND}
+            "-DLEVIOSAM2=$<TARGET_FILE:leviosam2>"
+            "-DTEST_TMP_DIR=${CMAKE_CURRENT_BINARY_DIR}/lift-tags-test"
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/lift_tags_test.cmake
+    )
+    set_tests_properties(lift_tags_test PROPERTIES TIMEOUT 30)
+endif()
