@@ -52,12 +52,13 @@ jobs:
           mamba-version: "*"
           channels: conda-forge,bioconda,defaults
           
-      - name: Set up SDSL
-        run: sudo apt-get -y install libsdsl-dev
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update &&
+          sudo apt-get -y install libsdsl-dev libbz2-dev liblzma-dev
       
       - name: Set up htslib (using v1.18)
         run:
-          sudo apt-get -y install libbz2-dev liblzma-dev &&
           wget https://github.com/samtools/htslib/releases/download/1.18/htslib-1.18.tar.bz2 &&
           tar -vxjf htslib-1.18.tar.bz2 &&
           cd htslib-1.18 &&
