@@ -3,7 +3,8 @@ FROM ubuntu:20.04
 LABEL org.opencontainers.image.authors="naechyun@jhu.edu"
 
 ENV TZ=America/New_York
-ENV VERSION 0.5.0
+ARG VERSION
+RUN test -n "$VERSION"
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 RUN apt-get update && apt-get install -y curl git build-essential cmake libsdsl-dev wget libbz2-dev zlib1g-dev liblzma-dev libncurses-dev zip
 RUN wget https://github.com/samtools/htslib/releases/download/1.16/htslib-1.16.tar.bz2 && \
@@ -50,7 +51,7 @@ RUN wget https://github.com/marbl/Winnowmap/archive/refs/tags/v2.03.tar.gz && \
     cp bin/winnowmap bin/meryl /usr/local/bin && \
     cd ../ && \
     rm v2.03.tar.gz
-RUN curl -k -L https://github.com/milkschen/leviosam2/archive/refs/tags/v${VERSION}.tar.gz -o leviosam2-v${VERSION}.tar.gz && \
+RUN curl --fail --location "https://github.com/milkschen/leviosam2/archive/refs/tags/v${VERSION}.tar.gz" -o "leviosam2-v${VERSION}.tar.gz" && \
     tar -xzf leviosam2-v${VERSION}.tar.gz && \
     mv leviosam2-${VERSION} leviosam2 && \
     cd leviosam2 && \
