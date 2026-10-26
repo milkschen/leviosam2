@@ -346,6 +346,10 @@ void reconcile_core(const std::vector<std::string>& sam_fns,
 }
 
 void reconcile(reconcile_opts args) {
+    if (args.inputs.empty() || args.output_fn.empty()) {
+        std::cerr << "[E::reconcile] Input and output files are required\n";
+        exit(1);
+    }
     if (args.paired_end)
         std::cerr << "[I::reconcile] Paired-end mode\n";
     else
@@ -374,12 +378,38 @@ void reconcile(reconcile_opts args) {
     std::vector<bam_hdr_t*> hdrs;
     for (int i = 0; i < sam_fns.size(); i++) {
         // Read each SAM file listed in `--sam_list`.
-        sam_fps.push_back(sam_open(sam_fns[i].data(), "r"));
-        hdrs.push_back(sam_hdr_read(sam_fps[i]));
-        if (sam_hdr_nref(hdrs[i]) != sam_hdr_nref(hdrs[0])) {
-            std::cerr << "[W::reconcile] Num REF in `" << sam_fns[i]
-                      << "` differs with `" << sam_fns[0]
-                      << "`. Please check.\n";
+        samFile* input = sam_open(sam_fns[i].data(), "r");
+        if (!input) {
+            std::cerr << "[E::reconcile] Failed to open input file "
+                      << sam_fns[i] << "\n";
+            exit(1);
+        }
+        sam_fps.push_back(input);
+        bam_hdr_t* header = sam_hdr_read(input);
+        if (!header) {
+            std::cerr << "[E::reconcile] Failed to read SAM header from file "
+                      << sam_fns[i] << "\n";
+            exit(1);
+        }
+        hdrs.push_back(header);
+        // Records retain numeric reference IDs when written with hdrs[0].
+        // Thus every dictionary must match, including reference order.
+        if (sam_hdr_nref(header) != sam_hdr_nref(hdrs[0])) {
+            std::cerr << "[E::reconcile] Incompatible reference dictionary in `"
+                      << sam_fns[i] << "` compared with `" << sam_fns[0]
+                      << "`: reference count differs\n";
+            exit(1);
+        }
+        for (int tid = 0; tid < sam_hdr_nref(header); ++tid) {
+            if (strcmp(sam_hdr_tid2name(header, tid),
+                       sam_hdr_tid2name(hdrs[0], tid)) != 0 ||
+                sam_hdr_tid2len(header, tid) != sam_hdr_tid2len(hdrs[0], tid)) {
+                std::cerr << "[E::reconcile] Incompatible reference dictionary in `"
+                          << sam_fns[i] << "` compared with `" << sam_fns[0]
+                          << "`: reference name, length, or order differs at index "
+                          << tid << "\n";
+                exit(1);
+            }
         }
     }
     std::string out_fn = args.output_fn;
@@ -388,6 +418,11 @@ void reconcile(reconcile_opts args) {
         out_mode = "w";
     }
     samFile* out_fp = sam_open(out_fn.data(), out_mode.data());
+    if (!out_fp) {
+        std::cerr << "[E::reconcile] Failed to open output file "
+                  << out_fn << "\n";
+        exit(1);
+    }
     if (sam_hdr_write(out_fp, hdrs[0])) {
         std::cerr << "[E::reconcile] Failed to write SAM header to file "
                   << out_fn << "\n";
@@ -397,6 +432,9 @@ void reconcile(reconcile_opts args) {
                    args.score_tag, args.conservative, args.rand_seed);
     for (auto& s : sam_fps) {
         sam_close(s);
+    }
+    for (auto& header : hdrs) {
+        bam_hdr_destroy(header);
     }
     sam_close(out_fp);
 }
