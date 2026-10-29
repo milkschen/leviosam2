@@ -6,8 +6,6 @@ gtest
 test_*.*am
 v*/
 figures/*
-!figures/levioSAM_S_bw.svg
-!figures/levioSAM_S_bw_dark.svg
 build/*
 .pixi/
 dev/
