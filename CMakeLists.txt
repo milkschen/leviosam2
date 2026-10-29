@@ -326,6 +326,16 @@ if(BUILD_TESTING)
 
 endif()
 
+if(NOT DEFINED BUILD_TESTING OR BUILD_TESTING)
+    add_test(NAME reconcile_eof_test
+        COMMAND ${CMAKE_COMMAND}
+            "-DLEVIOSAM2=$<TARGET_FILE:leviosam2>"
+            "-DTEST_TMP_DIR=${CMAKE_CURRENT_BINARY_DIR}/reconcile-eof-test"
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/reconcile_eof_test.cmake
+    )
+    set_tests_properties(reconcile_eof_test PROPERTIES TIMEOUT 30)
+endif()
+
 INSTALL(TARGETS leviosam2 DESTINATION bin)
 INSTALL(FILES src/leviosam.hpp DESTINATION include)
 

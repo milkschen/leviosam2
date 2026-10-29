@@ -238,36 +238,36 @@ void reconcile_core(const std::vector<std::string>& sam_fns,
         aln1s.push_back(bam_init1());
         if (is_paired_end) aln2s.push_back(bam_init1());
     }
-    bool end = false;
+    // htslib returns -1 for clean EOF and values below -1 for read errors.
+    // Secondary/supplementary records do not form reconciliation candidates.
+    auto read_primary = [&](size_t i, bam1_t* aln) {
+        int status;
+        do {
+            status = sam_read1(sam_fps[i], hdrs[i], aln);
+            if (status < -1) {
+                std::cerr << "[E::reconcile_core] Failed to read alignment from "
+                          << sam_fns[i] << " (status " << status << ").\n";
+                exit(1);
+            }
+        } while (status >= 0 &&
+                 (aln->core.flag & (BAM_FSECONDARY | BAM_FSUPPLEMENTARY)));
+        return status;
+    };
     int num_records = 0;
-    while (!end) {
-        // If in paired-end mode: read two reads from each of the SAM files in
-        // each iteration.
-        for (int i = 0; i < sam_fns.size(); i++) {
+    while (true) {
+        size_t eof_count = 0;
+        for (size_t i = 0; i < sam_fns.size(); i++) {
+            if (read_primary(i, aln1s[i]) == -1) {
+                ++eof_count;
+                continue;
+            }
             if (is_paired_end) {
-                while (1) {
-                    int read1 = sam_read1(sam_fps[i], hdrs[i], aln1s[i]);
-                    if (read1 < 0) {
-                        end = true;
-                        break;
-                    }
-                    if (!(aln1s[i]->core.flag & BAM_FSECONDARY) &&
-                        !(aln1s[i]->core.flag & BAM_FSUPPLEMENTARY)) {
-                        break;
-                    }
+                if (read_primary(i, aln2s[i]) == -1) {
+                    std::cerr << "[E::reconcile_core] Incomplete pair in "
+                              << sam_fns[i] << " for read "
+                              << bam_get_qname(aln1s[i]) << ".\n";
+                    exit(1);
                 }
-                while (1) {
-                    int read2 = sam_read1(sam_fps[i], hdrs[i], aln2s[i]);
-                    if (read2 < 0) {
-                        end = true;
-                        break;
-                    }
-                    if (!(aln2s[i]->core.flag & BAM_FSECONDARY) &&
-                        !(aln2s[i]->core.flag & BAM_FSUPPLEMENTARY)) {
-                        break;
-                    }
-                }
-                // Check read names: they should be identical.
                 if (strcmp(bam_get_qname(aln1s[i]), bam_get_qname(aln2s[i])) !=
                     0) {
                     std::cerr << "[E::reconcile_core] SAM file should be "
@@ -277,31 +277,25 @@ void reconcile_core(const std::vector<std::string>& sam_fns,
                               << " and " << bam_get_qname(aln2s[i]) << "\n";
                     exit(1);
                 }
-                if (end) {
-                    break;
-                }
-            } else {
-                // Single-end mode
-                if (sam_read1(sam_fps[i], hdrs[i], aln1s[i]) < 0) {
-                    end = true;
-                    break;
-                }
             }
-            num_records++;
-
-            // Check if read names from all files are identical.
-            if (i > 0)
-                if (strcmp(bam_get_qname(aln1s[0]), bam_get_qname(aln1s[i])) !=
-                    0) {
-                    std::cerr << "[E::reconcile_core] Reads mismatch across "
-                                 "SAM files.\n";
-                    std::cerr << "Mismatched reads: " << bam_get_qname(aln1s[0])
-                              << " and " << bam_get_qname(aln1s[i]) << "\n";
-                    exit(1);
-                }
         }
-
-        if (end) break;
+        // Inspect every input at the boundary, including when the first ends.
+        if (eof_count == sam_fns.size()) break;
+        if (eof_count != 0) {
+            std::cerr << "[E::reconcile_core] Input lengths mismatch: "
+                         "SAM files must reach EOF together.\n";
+            exit(1);
+        }
+        for (size_t i = 1; i < sam_fns.size(); i++) {
+            if (strcmp(bam_get_qname(aln1s[0]), bam_get_qname(aln1s[i])) != 0) {
+                std::cerr << "[E::reconcile_core] Reads mismatch across "
+                             "SAM files.\n";
+                std::cerr << "Mismatched reads: " << bam_get_qname(aln1s[0])
+                          << " and " << bam_get_qname(aln1s[i]) << "\n";
+                exit(1);
+            }
+        }
+        ++num_records;
         if (is_paired_end) {
             int best_idx = select_best_aln_paired_end(
                 aln1s, aln2s, score_tag, conservative, MERGE_PE_SUM, rand_seed);
