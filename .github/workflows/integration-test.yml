@@ -35,7 +35,7 @@ jobs:
       - name: Set up Pixi integration environment
         uses: prefix-dev/setup-pixi@v0.11.2
         with:
-          pixi-version: v0.79.0
+          pixi-version: latest
           environments: integration
           locked: true
 
