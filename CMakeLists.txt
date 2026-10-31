@@ -181,13 +181,13 @@ endif()
 
 
 file(GLOB LIB_SOURCES   src/reconcile.cpp src/lift_bed.cpp src/collate.cpp
-                        src/chain.cpp src/leviosam_utils.cpp src/bed.cpp
+                        src/chain.cpp src/leviosam_utils.cpp src/mate_metadata.cpp src/bed.cpp
                         src/lift_bed.cpp src/aln.cpp src/cigar.cpp src/yaml.cpp
                         src/ksw2_extd2_sse.c src/ksw2_extz2_sse.c src/ksw2_extz.c
                         src/bam_md.c src/bam_aux.c src/gzstream.C)
 file(GLOB LIB_HEADERS   src/leviosam.hpp
                         src/reconcile.hpp src/lift_bed.hpp src/collate.hpp
-                        src/chain.hpp src/leviosam_utils.hpp src/bed.hpp
+                        src/chain.hpp src/leviosam_utils.hpp src/mate_metadata.hpp src/bed.hpp
                         src/lift_bed.hpp src/aln.hpp src/cigar.hpp
                         src/yaml.hpp src/rapidyaml.hpp
                         src/ksw.h
@@ -315,6 +315,20 @@ if(BUILD_TESTING)
     add_test(NAME reconcile_test COMMAND reconcile_test
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/testdata
     )
+
+    add_executable(mate_metadata_test src/mate_metadata_test.cpp)
+    target_link_libraries(mate_metadata_test lvsam ${HTS_LIB} ${SDSL_LIB}
+        ${LEVIOSAM2_GTEST_LIBRARIES})
+    add_test(NAME mate_metadata_test COMMAND mate_metadata_test)
+    set_tests_properties(mate_metadata_test PROPERTIES TIMEOUT 90)
+
+    add_test(NAME mate_metadata_cli_test
+        COMMAND ${CMAKE_COMMAND}
+            "-DLEVIOSAM2=$<TARGET_FILE:leviosam2>"
+            "-DTEST_TMP_DIR=${CMAKE_CURRENT_BINARY_DIR}/mate-metadata-cli-test"
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/mate_metadata_cli_test.cmake
+    )
+    set_tests_properties(mate_metadata_cli_test PROPERTIES TIMEOUT 90)
 
     add_test(NAME cli_index_lift_test
         COMMAND ${CMAKE_COMMAND}

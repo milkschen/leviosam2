@@ -31,6 +31,7 @@
 #include "collate.hpp"
 #include "ksw2.h"
 #include "lift_bed.hpp"
+#include "mate_metadata.hpp"
 #include "reconcile.hpp"
 #include "yaml.hpp"
 
@@ -205,13 +206,34 @@ void serialize_run(lift_opts args) {
     }
 }
 
+static void write_lifted_record(bam1_t* lifted, bam1_t* source,
+                                samFile* output, sam_hdr_t* header,
+                                LevioSamUtils::WriteDeferred* wd,
+                                std::mutex* output_mutex) {
+    bool commit_dest = wd->commit_aln_dest(lifted);
+    bool commit_source = wd->commit_aln_source(source);
+    if (commit_dest || commit_source) {
+        std::lock_guard<std::mutex> lock(*output_mutex);
+        if (sam_write1(output, header, lifted) < 0)
+            throw std::runtime_error("Failed to write lifted record " +
+                                      std::string(bam_get_qname(lifted)));
+    }
+    if (!commit_dest) {
+        std::lock_guard<std::mutex> lock(wd->mutex_fwrite);
+        if (!commit_source) wd->write_deferred_bam(lifted, header);
+        wd->write_deferred_bam_orig(source);
+    }
+}
+
 template <class T>
 void read_and_lift(T *lift_map, std::mutex *mutex_fread,
                    std::mutex *mutex_fwrite, samFile *sam_fp,
                    samFile *out_sam_fp, sam_hdr_t *hdr_source,
                    sam_hdr_t *hdr_dest,
                    const std::map<std::string, std::string> *ref_dict,
-                   LevioSamUtils::WriteDeferred *wd, const lift_opts &args) {
+                   LevioSamUtils::WriteDeferred *wd,
+                   LevioSamUtils::MateMetadataSpool* mate_spool,
+                   const lift_opts &args) {
     std::string current_contig;
     std::vector<bam1_t *> aln_vec, aln_vec_clone;
     for (int i = 0; i < args.chunk_size; i++) {
@@ -291,10 +313,11 @@ void read_and_lift(T *lift_map, std::mutex *mutex_fread,
             uint8_t *nm_ptr = bam_aux_get(aln_vec[i], "NM");
             // Skip is the NM tag is not found
             if (nm_ptr == NULL) continue;
+            int64_t nm_value = bam_aux2i(nm_ptr);
             // Skip if unmapped
             if (aln_vec[i]->core.flag & BAM_FUNMAP) continue;
             // Skip if edit distance not greater than the threshold
-            if (bam_aux2i(nm_ptr) <= args.aln_opts.nm_threshold) continue;
+            if (nm_value <= args.aln_opts.nm_threshold) continue;
             std::string ref_seq =
                 ref.substr(aln_vec[i]->core.pos,
                            bam_cigar2rlen(aln_vec[i]->core.n_cigar,
@@ -313,46 +336,30 @@ void read_and_lift(T *lift_map, std::mutex *mutex_fread,
                 bam_aux_append(aln_vec[i], "LR", 'i', 4, (uint8_t *)&new_score);
             } else {
                 // If re-alignment fails, set this read to unmapped
-                bool first_seg =
-                    (aln_vec[i]->core.flag & BAM_FPAIRED)
-                        ? (aln_vec[i]->core.flag & BAM_FREAD1) ? true : false
-                        : true;
-                LevioSamUtils::update_flag_unmap(aln_vec[i], first_seg,
+                // This is the current record even when it is READ2; the
+                // boolean selects own vs mate fields, not READ1 vs READ2.
+                LevioSamUtils::update_flag_unmap(aln_vec[i], true,
                                                  args.keep_mapq);
+                Cigar::set_empty_cigar(aln_vec[i]);
                 if (args.verbose >= VERBOSE_INFO) {
                     std::cerr << "[I::read_and_lift] Zero-length new cigar for "
                               << bam_get_qname(aln_vec[i])
                               << "; flag = " << aln_vec[i]->core.flag
-                              << "; NM:i = " << bam_aux2i(nm_ptr)
+                              << "; NM:i = " << nm_value
                               << "; l_qseq = " << aln_vec[i]->core.l_qseq
                               << ". Set to unmapped.\n";
                 }
+                LevioSamUtils::remove_nm_md_tag(aln_vec[i]);
             }
         }
         for (int i = 0; i < num_actual_reads; i++) {
-            // If a read is committed
-            if (wd->commit_aln_dest(aln_vec[i]) == true ||
-                wd->commit_aln_source(aln_vec_clone[i]) == true) {
-                // write to file, thread corruption protected by lock_guard
-                std::lock_guard<std::mutex> g_commited(*mutex_fwrite);
-                if (sam_write1(out_sam_fp, hdr_dest, aln_vec[i]) < 0) {
-                    std::cerr << "[E::read_and_lift] Failed to write record "
-                              << bam_get_qname(aln_vec[i]) << "\n";
-                    exit(1);
-                }
-            }
-
-            // If suppress, only write the original alignment to
-            // `unliftable` If defer, write to both `unliftable` and `defer`
-            if (wd->commit_aln_dest(aln_vec[i]) == false) {
-                std::lock_guard<std::mutex> g_deferred(wd->mutex_fwrite);
-                // Write deferred reads
-                if (wd->commit_aln_source(aln_vec_clone[i]) == false) {
-                    // Optionally realign
-                    wd->write_deferred_bam(aln_vec[i], hdr_dest);
-                }
-                // Write suppressed reads
-                wd->write_deferred_bam_orig(aln_vec_clone[i]);
+            if (aln_vec[i]->core.flag & BAM_FPAIRED) {
+                std::lock_guard<std::mutex> lock(*mutex_fwrite);
+                mate_spool->append(aln_vec_clone[i], aln_vec[i], hdr_source,
+                                    hdr_dest);
+            } else {
+                write_lifted_record(aln_vec[i], aln_vec_clone[i], out_sam_fp,
+                                     hdr_dest, wd, mutex_fwrite);
             }
         }
     }
@@ -362,6 +369,93 @@ void read_and_lift(T *lift_map, std::mutex *mutex_fread,
     }
     aln_vec.clear();
     aln_vec_clone.clear();
+}
+
+// A primary mate may legitimately be absent from a region-subset BAM. MC gives
+// an exact source CIGAR for a virtual alignment; never substitute this record's
+// sequence length for the missing mate's reference span.
+template <class T>
+static bool lift_missing_mate(T* lift_map, const bam1_t* source,
+                              sam_hdr_t* source_header,
+                              sam_hdr_t* lifted_header, bool keep_mapq,
+                              LevioSamUtils::MateOutcome& result) {
+    if (source->core.flag & BAM_FMUNMAP) {
+        result = LevioSamUtils::MateOutcome();
+        return true;
+    }
+    uint8_t* mc = bam_aux_get(source, "MC");
+    if (!mc || source->core.mtid < 0 || source->core.mpos < 0) return false;
+    const char* text = bam_aux2Z(mc);
+    if (!text) throw std::runtime_error("MC tag must be a CIGAR string");
+    uint32_t* cigar = nullptr;
+    size_t capacity = 0;
+    char* end = nullptr;
+    ssize_t count = sam_parse_cigar(text, &end, &cigar, &capacity);
+    std::unique_ptr<uint32_t, decltype(&std::free)> storage(cigar, &std::free);
+    if (count <= 0 || !end || *end)
+        throw std::runtime_error("Invalid MC CIGAR for " +
+                                  std::string(bam_get_qname(source)));
+    std::unique_ptr<bam1_t, decltype(&bam_destroy1)> mate(bam_init1(), &bam_destroy1);
+    if (!mate) throw std::runtime_error("Cannot allocate virtual mate");
+    uint16_t flag = BAM_FSECONDARY;
+    if (source->core.flag & BAM_FMREVERSE) flag |= BAM_FREVERSE;
+    uint8_t mapq = 0;
+    uint8_t* mq = bam_aux_get(source, "MQ");
+    if (mq) {
+        int64_t value = bam_aux2i(mq);
+        if (value < 0 || value > 255)
+            throw std::runtime_error("Invalid MQ value for missing mate");
+        mapq = static_cast<uint8_t>(value);
+    }
+    if (bam_set1(mate.get(), 0, nullptr, flag, source->core.mtid,
+                 source->core.mpos, mapq, count, cigar, -1, -1, 0,
+                 0, nullptr, nullptr, 0) < 0)
+        throw std::runtime_error("Cannot construct virtual MC mate");
+    std::string dest;
+    lift_map->lift_aln(mate.get(), source_header, lifted_header, dest, keep_mapq);
+    result = LevioSamUtils::mate_outcome(mate.get(), source);
+    // Only proper-pair provenance is used from source_flag. It is shared by
+    // the two original primary ends even though source is the opposite end.
+    result.source_flag = source->core.flag;
+    return true;
+}
+
+template <class T>
+static void replay_mates(T* lift_map, LevioSamUtils::MateMetadataSpool& spool,
+                          sam_hdr_t* source_header, sam_hdr_t* lifted_header,
+                          samFile* output, LevioSamUtils::WriteDeferred* wd,
+                          std::mutex* output_mutex, const lift_opts& args) {
+    if (spool.empty()) return;
+    spool.begin_replay(source_header, lifted_header);
+    std::unique_ptr<bam1_t, decltype(&bam_destroy1)> source(bam_init1(), &bam_destroy1);
+    std::unique_ptr<bam1_t, decltype(&bam_destroy1)> lifted(bam_init1(), &bam_destroy1);
+    if (!source || !lifted) throw std::runtime_error("Cannot allocate mate replay records");
+    uint64_t unknown = 0, virtual_mates = 0;
+    while (spool.next(source.get(), lifted.get(), source_header, lifted_header)) {
+        LevioSamUtils::MateOutcome mate;
+        bool found = spool.find_mate(source.get(), mate);
+        if (!found) {
+            found = lift_missing_mate(lift_map, source.get(), source_header,
+                                       lifted_header, args.keep_mapq, mate);
+            if (found && !(source->core.flag & BAM_FMUNMAP)) ++virtual_mates;
+            if (!found) ++unknown;
+        }
+        LevioSamUtils::MateOutcome primary;
+        bool has_primary = (source->core.flag & (BAM_FSECONDARY | BAM_FSUPPLEMENTARY)) &&
+                           spool.find_primary(source.get(), primary);
+        LevioSamUtils::repair_mate_metadata(lifted.get(), source.get(),
+                                             found ? &mate : nullptr,
+                                             has_primary ? &primary : nullptr);
+        write_lifted_record(lifted.get(), source.get(), output, lifted_header,
+                             wd, output_mutex);
+    }
+    if (unknown)
+        std::cerr << "[W::lift_run] " << unknown << " paired records lack a primary "
+                     "mate and MC tag; target mate coordinates and TLEN are "
+                     "unknown and have been cleared\n";
+    if (virtual_mates)
+        std::cerr << "[I::lift_run] Reconstructed " << virtual_mates
+                  << " missing primary mates from source MC CIGARs\n";
 }
 
 /* Load a FASTA file and return a map */
@@ -546,28 +640,48 @@ void lift_run(lift_opts args) {
 
     std::vector<std::thread> threads;
     std::mutex mutex_fread, mutex_fwrite;
+    LevioSamUtils::MateMetadataSpool mate_spool;
     for (int j = 0; j < args.lift_threads; j++) {
-        if (args.chain_fname == "" && args.chainmap_fname == "") {
-            threads.push_back(std::thread(read_and_lift<lift::LiftMap>,
-                                          &lift_map, &mutex_fread,
-                                          &mutex_fwrite, sam_fp, out_sam_fp,
-                                          hdr_orig, hdr, &ref_dict, &wd, args));
-        } else {
-            threads.push_back(std::thread(read_and_lift<chain::ChainMap>,
-                                          &chain_map, &mutex_fread,
-                                          &mutex_fwrite, sam_fp, out_sam_fp,
-                                          hdr_orig, hdr, &ref_dict, &wd, args));
-        }
+        threads.emplace_back([&] {
+            try {
+                if (args.chain_fname == "" && args.chainmap_fname == "")
+                    read_and_lift(&lift_map, &mutex_fread, &mutex_fwrite,
+                                   sam_fp, out_sam_fp, hdr_orig, hdr, &ref_dict,
+                                   &wd, &mate_spool, args);
+                else
+                    read_and_lift(&chain_map, &mutex_fread, &mutex_fwrite,
+                                   sam_fp, out_sam_fp, hdr_orig, hdr, &ref_dict,
+                                   &wd, &mate_spool, args);
+            } catch (const std::exception& error) {
+                std::cerr << "[E::lift_run] " << error.what() << "\n";
+                std::exit(1);
+            }
+        });
     }
     for (int j = 0; j < args.lift_threads; j++) {
         if (threads[j].joinable()) threads[j].join();
     }
     threads.clear();
+    try {
+        if (args.chain_fname == "" && args.chainmap_fname == "")
+            replay_mates(&lift_map, mate_spool, hdr_orig, hdr, out_sam_fp,
+                           &wd, &mutex_fwrite, args);
+        else
+            replay_mates(&chain_map, mate_spool, hdr_orig, hdr, out_sam_fp,
+                           &wd, &mutex_fwrite, args);
+    } catch (const std::exception& error) {
+        std::cerr << "[E::lift_run] " << error.what() << "\n";
+        std::exit(1);
+    }
     sam_hdr_destroy(hdr);
     sam_hdr_destroy(hdr_orig);
-    sam_close(sam_fp);
-    sam_close(out_sam_fp);
+    int input_close = sam_close(sam_fp);
+    int output_close = sam_close(out_sam_fp);
     wd.close_sams();
+    if (input_close < 0 || output_close < 0) {
+        std::cerr << "[E::lift_run] Failed to finish alignment input/output\n";
+        std::exit(1);
+    }
 }
 
 /* This is a wrapper for the constructor of LiftMap.*/
