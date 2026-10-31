@@ -84,6 +84,102 @@ class Workflow(unittest.TestCase):
         workflow._set_filenames()
         return workflow
 
+    def test_restart_requires_success_and_invalidates_downstream(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workflow = self.failure_workflow(directory)
+            workflow.forcerun = False
+            outputs = [workflow._fn_committed, workflow._fn_deferred,
+                       pathlib.Path(f"{workflow.out_prefix}-unliftable.bam")]
+            later = workflow._stage_marker("run_merge_and_index")
+            calls = []
+
+            def produce(cmd, stage):
+                calls.append(stage)
+                for path in outputs:
+                    path.write_text("complete")
+
+            # Existing files from an interrupted run have no completion marker.
+            for path in outputs:
+                path.write_text("partial")
+            later.write_text("stale")
+            with mock.patch.object(workflow, "_run_command", side_effect=produce):
+                workflow.run_leviosam2()
+                self.assertFalse(later.exists())
+                self.assertEqual(workflow.run_leviosam2(), leviosam2.SKIP_MSG)
+                outputs[2].unlink()
+                workflow.run_leviosam2()
+                workflow.input_bam.write_text("changed input")
+                workflow.run_leviosam2()
+            self.assertEqual(len(calls), 3)
+
+            # A failed forced rerun removes its old marker before writing output.
+            workflow.forcerun = True
+            def fail(cmd, stage):
+                outputs[0].write_text("partial")
+                raise subprocess.CalledProcessError(1, cmd)
+            with mock.patch.object(workflow, "_run_command", side_effect=fail):
+                with self.assertRaises(subprocess.CalledProcessError):
+                    workflow.run_leviosam2()
+            self.assertFalse(workflow._stage_marker("run_leviosam2").exists())
+            workflow.forcerun = False
+            with mock.patch.object(workflow, "_run_command", side_effect=produce):
+                workflow.run_leviosam2()
+            self.assertEqual(len(calls), 4)
+
+    def test_missing_input_preserves_previous_lift_outputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workflow = self.failure_workflow(directory)
+            workflow._fn_committed.write_text("recovery")
+            workflow.input_bam.unlink()
+            with self.assertRaises(FileNotFoundError):
+                workflow.run_leviosam2()
+            self.assertEqual(workflow._fn_committed.read_text(), "recovery")
+
+    def test_missing_reconcile_intermediate_requires_rerun(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workflow = self.failure_workflow(directory)
+            workflow.forcerun = False
+            workflow._fn_deferred_realigned_pe.touch()
+            workflow._fn_deferred_pe.touch()
+            outputs = [workflow._fn_deferred_realigned_pe_sortn,
+                       workflow._fn_deferred_pe_sortn, workflow._fn_deferred_reconciled]
+            def produce(cmd, stage):
+                for path in outputs:
+                    path.touch()
+            with mock.patch.object(workflow, "_run_command", side_effect=produce) as run:
+                workflow.run_refflow_merge_pe()
+                self.assertEqual(workflow.run_refflow_merge_pe(), leviosam2.SKIP_MSG)
+                outputs[0].unlink()
+                workflow.run_refflow_merge_pe()
+                self.assertEqual(run.call_count, 2)
+
+    def test_restart_checks_all_collate_and_final_outputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workflow = self.failure_workflow(directory)
+            workflow.forcerun = False
+            for path in [workflow._fn_committed_sorted, workflow._fn_deferred]:
+                path.touch()
+            outputs = [workflow._fn_committed_pe, workflow._fn_deferred_pe,
+                       workflow._fn_deferred_pe_fq1, workflow._fn_deferred_pe_fq2]
+            def produce(cmd, stage):
+                for path in outputs:
+                    path.touch()
+            with mock.patch.object(workflow, "_run_command", side_effect=produce) as run:
+                workflow.run_collate_pe()
+                self.assertEqual(workflow.run_collate_pe(), leviosam2.SKIP_MSG)
+                workflow._fn_committed_pe.unlink()
+                workflow.run_collate_pe()
+                self.assertEqual(run.call_count, 2)
+
+            workflow._fn_deferred_reconciled.touch()
+            outputs = [workflow._fn_final, pathlib.Path(str(workflow._fn_final) + ".bai")]
+            with mock.patch.object(workflow, "_run_command", side_effect=produce) as run:
+                workflow.run_merge_and_index()
+                self.assertEqual(workflow.run_merge_and_index(), leviosam2.SKIP_MSG)
+                outputs[1].unlink()
+                workflow.run_merge_and_index()
+                self.assertEqual(run.call_count, 2)
+
     def test_failed_lift_stops_workflow(self):
         with tempfile.TemporaryDirectory() as directory:
             workflow = self.failure_workflow(directory)
