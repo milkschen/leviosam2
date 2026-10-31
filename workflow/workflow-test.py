@@ -84,6 +84,48 @@ class Workflow(unittest.TestCase):
         workflow._set_filenames()
         return workflow
 
+    def test_sam_conversion_publishes_only_on_success(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workflow = self.failure_workflow(directory)
+            workflow.out_format = "sam"
+            workflow._fn_final.write_text("recovery BAM")
+            sam = workflow._fn_final.with_suffix(".sam")
+            sam.write_text("previous SAM")
+            temp = sam.with_name(sam.name + ".tmp")
+
+            def fail(cmd, stage):
+                temp.write_text("partial")
+                raise subprocess.CalledProcessError(1, cmd)
+
+            with mock.patch.object(workflow, "_run_command", side_effect=fail):
+                with self.assertRaises(subprocess.CalledProcessError):
+                    workflow.run_bam_to_sam()
+            self.assertEqual(sam.read_text(), "previous SAM")
+            self.assertEqual(workflow._fn_final.read_text(), "recovery BAM")
+            self.assertFalse(temp.exists())
+
+            def succeed(cmd, stage):
+                self.assertIn("view -h -O sam", cmd)
+                temp.write_text("@HD\tVN:1.6\n")
+
+            with mock.patch.object(workflow, "_run_command", side_effect=succeed):
+                workflow.run_bam_to_sam()
+            self.assertEqual(sam.read_text(), "@HD\tVN:1.6\n")
+            self.assertTrue(workflow._sam_completed)
+
+    def test_workflow_dispatches_sam_conversion(self):
+        workflow = self.workflow
+        workflow.out_format = "sam"
+        with mock.patch.object(workflow, "run_leviosam2"), \
+                mock.patch.object(workflow, "run_sort_committed"), \
+                mock.patch.object(workflow, "run_collate_pe"), \
+                mock.patch.object(workflow, "run_realign_deferred"), \
+                mock.patch.object(workflow, "run_refflow_merge_pe"), \
+                mock.patch.object(workflow, "run_merge_and_index"), \
+                mock.patch.object(workflow, "run_bam_to_sam") as convert:
+            workflow.run_workflow()
+        convert.assert_called_once_with()
+
     def test_failed_lift_stops_workflow(self):
         with tempfile.TemporaryDirectory() as directory:
             workflow = self.failure_workflow(directory)
