@@ -7,6 +7,7 @@ Tests of the workflow/leviosam2.py workflow.
 """
 import argparse
 import copy
+import json
 import pathlib
 import sys
 import subprocess
@@ -112,6 +113,31 @@ class Workflow(unittest.TestCase):
                 workflow.run_bam_to_sam()
             self.assertEqual(sam.read_text(), "@HD\tVN:1.6\n")
             self.assertTrue(workflow._sam_completed)
+
+    def test_sam_conversion_quotes_executable_and_paths(self):
+        with tempfile.TemporaryDirectory(prefix="sam space ; ") as directory:
+            root = pathlib.Path(directory)
+            workflow = self.failure_workflow(directory)
+            workflow.out_prefix = root / "result ; $(touch INJECTED)"
+            workflow._set_filenames()
+            workflow._fn_final.write_text("BAM")
+            log = root / "argument log"
+            tool = root / "samtools ; fake"
+            tool.write_text(
+                "#!/usr/bin/env python3\n"
+                "import json, pathlib, sys\n"
+                f"pathlib.Path({str(log)!r}).write_text(json.dumps(sys.argv[1:]))\n"
+                "pathlib.Path(sys.argv[sys.argv.index('-o') + 1]).write_text('@HD\\tVN:1.6\\n')\n"
+            )
+            tool.chmod(0o755)
+            workflow.samtools = str(tool)
+            workflow.run_bam_to_sam()
+            sam = workflow._fn_final.with_suffix(".sam")
+            self.assertEqual(json.loads(log.read_text()),
+                             ["view", "-h", "-O", "sam", "-o", str(sam) + ".tmp",
+                              str(workflow._fn_final)])
+            self.assertTrue(sam.is_file())
+            self.assertFalse((pathlib.Path.cwd() / "INJECTED").exists())
 
     def test_workflow_dispatches_sam_conversion(self):
         workflow = self.workflow

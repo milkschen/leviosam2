@@ -7,6 +7,7 @@ Johns Hopkins University
 import argparse
 import logging
 import pathlib
+import shlex
 import subprocess
 from typing import Union
 
@@ -814,8 +815,8 @@ class Leviosam2Workflow:
         fn_final_sam = self._fn_final.with_suffix(".sam")
         fn_tmp = fn_final_sam.with_name(fn_final_sam.name + ".tmp")
         cmd = (
-            f"{self.time_cmd}{self.samtools} view -h -O sam "
-            f"-o {fn_tmp} {self._fn_final}"
+            f"{self.time_cmd}{shlex.quote(str(self.samtools))} view -h -O sam "
+            f"-o {shlex.quote(str(fn_tmp))} {shlex.quote(str(self._fn_final))}"
         )
         if self.dryrun:
             return cmd
