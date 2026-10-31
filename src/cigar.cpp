@@ -39,16 +39,18 @@ void push_cigar(CigarVector& cigar_vec, uint32_t len, uint16_t op,
     // We don't merge N-D, H-P because they might mean differently
     if (back_op == op || (back_type == 1 && op_type == 1)) {
         len += back_len;
+        // A terminal insertion next to soft clipping belongs to the clipped
+        // query, regardless of which operation was appended first.
+        if (back_op == BAM_CSOFT_CLIP || op == BAM_CSOFT_CLIP)
+            back_op = BAM_CSOFT_CLIP;
         cigar_vec.back() = bam_cigar_gen(len, back_op);
         // Cancel out complementary operators
-    } else if ((back_type == 2 && op_type == 1) ||
-               (back_type == 1 && op_type == 2)) {
-        // For cases S-D, we ignore Ds, since deletions don't
-        // contribute to either the alignment or the position
-        // in soft-clipped regions.
-        if (back_op == BAM_CSOFT_CLIP) {
-            return;
-        }
+    } else if (((back_type == 2 && op_type == 1) ||
+                (back_type == 1 && op_type == 2)) &&
+               back_op != BAM_CSOFT_CLIP && op != BAM_CSOFT_CLIP) {
+        // S is unaligned query sequence, so it cannot cancel a reference
+        // deletion or skip. Such cancellation would manufacture aligned bases
+        // and shift the neighboring query-to-reference correspondence.
         if (len == back_len) {
             cigar_vec.pop_back();
             push_cigar(cigar_vec, len, BAM_CMATCH, false);

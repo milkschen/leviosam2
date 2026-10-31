@@ -84,11 +84,16 @@ class SyntheticChainMatrixTest : public testing::Test {
             "\n"
             "chain 1 revsrc 100 + 0 100 revdst 120 - 10 108 2\n"
             "40 2 0\n"
-            "58\n";
+            "58\n\n"
+            "chain 1 multisrc 46 + 0 46 multidst 60 + 10 53 3\n"
+            "10 2 0\n10 2 3\n10 2 0\n10\n\n"
+            "chain 1 revmultisrc 46 + 0 46 revmultidst 60 - 7 50 4\n"
+            "10 2 0\n10 2 3\n10 2 0\n10\n";
         chain_path = write_temporary_file(chains);
         ASSERT_FALSE(chain_path.empty());
 
-        chain::LengthMap lengths{{"dst", 120}, {"revdst", 120}};
+        chain::LengthMap lengths{{"dst", 120}, {"revdst", 120},
+                                 {"multidst", 60}, {"revmultidst", 60}};
         parsed.reset(new chain::ChainMap(chain_path, 0, 10, lengths));
 
         index_path = write_temporary_file("");
@@ -106,7 +111,9 @@ class SyntheticChainMatrixTest : public testing::Test {
         const std::string header_text =
             "@HD\tVN:1.6\tSO:unsorted\n"
             "@SQ\tSN:src\tLN:100\n"
-            "@SQ\tSN:revsrc\tLN:100\n";
+            "@SQ\tSN:revsrc\tLN:100\n"
+            "@SQ\tSN:multisrc\tLN:46\n"
+            "@SQ\tSN:revmultisrc\tLN:46\n";
         header = sam_hdr_parse(header_text.size(), header_text.c_str());
         ASSERT_NE(header, nullptr);
     }
@@ -351,6 +358,44 @@ TEST_F(SyntheticChainMatrixTest, PreservesAndNormalizesCigarOperations) {
                  "2S4M2I4M2D3N1H");
     expect_cigar("revsrc", 20, "2S3=1X2I4M2D3N1H",
                  "1H3N2D4M2I4M2S");
+}
+
+TEST_F(SyntheticChainMatrixTest, ClipsSourceReferenceWithoutLosingQueryOrHardClips) {
+    // The source gap is [40,42), so source position 41 clips one reference
+    // base. Existing S/I do not consume that base, while D/N do.
+    expect_cigar("src", 41, "3S6M", "4S5M");
+    expect_cigar("src", 41, "5H6M", "5H1S5M");
+    expect_cigar("src", 41, "5H3S2I6M", "5H6S5M");
+    expect_cigar("src", 41, "1D5M", "5M");
+    expect_cigar("src", 41, "1N5M", "5M");
+    expect_cigar("src", 41, "2D5M", "1D5M");
+    expect_cigar("src", 41, "3S2D5M", "3S1D5M");
+    expect_cigar("src", 41, "5H3S2D5M", "5H3S1D5M");
+
+    // The same source-reference rules apply to the right end, and H must
+    // remain outside the combined soft clipping.
+    expect_cigar("src", 35, "6M3S", "5M4S");
+    expect_cigar("src", 35, "6M5H", "5M1S5H");
+    expect_cigar("src", 35, "6M2I3S5H", "5M6S5H");
+    expect_cigar("src", 35, "5M1D", "5M");
+    expect_cigar("src", 35, "5M1N", "5M");
+    expect_cigar("src", 35, "4M2D", "4M1D");
+    expect_cigar("src", 35, "4M2D3S", "4M1D3S");
+    expect_cigar("src", 35, "4M2D3S5H", "4M1D3S5H");
+
+    // Compose on the source strand first, then reverse the complete CIGAR.
+    expect_cigar("revsrc", 41, "3S6M", "5M4S");
+    expect_cigar("revsrc", 41, "5H3S2I6M", "5M6S5H");
+    expect_cigar("revsrc", 41, "1D5M", "5M");
+    expect_cigar("revsrc", 35, "6M3S", "4S5M");
+    expect_cigar("revsrc", 35, "6M2I3S5H", "5H6S5M");
+    expect_cigar("revsrc", 35, "5M1D", "5M");
+
+    // Both ends lie in different source gaps, with another chain gap between
+    // them. Only the interior breakpoint belongs to the retained alignment.
+    expect_cigar("multisrc", 11, "24M", "1S10M1D12M1S");
+    expect_cigar("multisrc", 11, "5H3S24M4S6H", "5H4S10M1D12M5S6H");
+    expect_cigar("revmultisrc", 11, "5H3S24M4S6H", "6H5S12M1D10M4S5H");
 }
 
 TEST_F(SyntheticChainMatrixTest, PlacesGapsByReferenceConsumption) {

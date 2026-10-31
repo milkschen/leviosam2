@@ -46,6 +46,30 @@ TEST(CigarTest, SClipCigarFront1) {
     EXPECT_EQ(q, 3);
 }
 
+TEST(CigarTest, SoftClipsCannotCancelReferenceOperations) {
+    for (auto reference_op : {BAM_CDEL, BAM_CREF_SKIP}) {
+        Cigar::CigarVector front;
+        Cigar::push_cigar(front, 3, BAM_CSOFT_CLIP, false);
+        Cigar::push_cigar(front, 2, reference_op, false);
+        ASSERT_EQ(front.size(), 2);
+        EXPECT_EQ(front[0], bam_cigar_gen(3, BAM_CSOFT_CLIP));
+        EXPECT_EQ(front[1], bam_cigar_gen(2, reference_op));
+
+        Cigar::CigarVector back;
+        Cigar::push_cigar(back, 2, reference_op, false);
+        Cigar::push_cigar(back, 3, BAM_CSOFT_CLIP, false);
+        ASSERT_EQ(back.size(), 2);
+        EXPECT_EQ(back[0], bam_cigar_gen(2, reference_op));
+        EXPECT_EQ(back[1], bam_cigar_gen(3, BAM_CSOFT_CLIP));
+    }
+
+    Cigar::CigarVector insertion;
+    Cigar::push_cigar(insertion, 2, BAM_CINS, false);
+    Cigar::push_cigar(insertion, 3, BAM_CSOFT_CLIP, false);
+    ASSERT_EQ(insertion.size(), 1);
+    EXPECT_EQ(insertion[0], bam_cigar_gen(5, BAM_CSOFT_CLIP));
+}
+
 TEST(CigarTest, SClipCigarFront2) {
     // 4S2M -> 5S1M
     Cigar::CigarVector cigar;
