@@ -9,6 +9,7 @@ import logging
 import pathlib
 import shlex
 import subprocess
+import sys
 from typing import Union
 
 logging.basicConfig(
@@ -110,8 +111,10 @@ def parse_args() -> argparse.Namespace:
         help="Label of the target reference",
     )
     parser.add_argument(
-        "--read_group", type=str, default="", help=("Read group string; for bowtie2, pass options such as "
-        "--rg-id ID --rg SM:sample, quoting values containing spaces")
+        "--read_group", type=str, default="",
+        help=("Aligner read-group fallback for realigned reads without an original RG; "
+              "original groups are preserved. For bowtie2, pass --rg-id/--rg options, "
+              "quoting values containing spaces")
     )
     parser.add_argument(
         "-g",
@@ -321,6 +324,20 @@ class Leviosam2Workflow:
             self.aligner_exe = "bwa-mem2"
         else:
             raise KeyError(f"Unsupported aligner: {self.aligner}")
+
+    def _read_group_command(self, source=None, paired=False, header_from=(),
+                           check_headers=()):
+        helper = pathlib.Path(__file__).resolve().with_name("restore_read_groups.py")
+        arguments = [sys.executable, str(helper), "--samtools", self.samtools]
+        if source is not None:
+            arguments.extend(["--source", str(source)])
+        if paired:
+            arguments.append("--paired")
+        for path in header_from:
+            arguments.extend(["--header-from", str(path)])
+        if check_headers:
+            arguments.extend(["--check-headers", *map(str, check_headers)])
+        return " ".join(shlex.quote(argument) for argument in arguments)
 
     def validate_executables(self) -> None:
         validate_executable(cmd=[self.samtools, "--version"])
@@ -597,6 +614,7 @@ class Leviosam2Workflow:
                 reads = f"{shlex.quote(str(self._fn_deferred_fq_se))}"
 
             cmd_samtools = (
+                f"{self._read_group_command(source=self._fn_deferred)} | "
                 f"{self.time_cmd}"
                 f"{shlex.quote(str(self.samtools))} sort -@ {num_threads_samtools} -o {shlex.quote(str(fn_out))}"
             )
@@ -709,6 +727,8 @@ class Leviosam2Workflow:
             f"-s {shlex.quote(str(self.source_label) + ':' + str(self._fn_deferred_pe_sortn))} "
             f"-s {shlex.quote(str(self.target_label) + ':' + str(self._fn_deferred_realigned_pe_sortn))} "
             f"-m -o - | "
+            f"{shlex.quote(str(self.samtools))} view -h | "
+            f"{self._read_group_command(source=self._fn_deferred_pe, paired=True, header_from=(self._fn_deferred_realigned_pe,))} | "
             f"{self.time_cmd}"
             f"{shlex.quote(str(self.samtools))} sort -@ {self.num_threads} "
             f"-o {shlex.quote(str(self._fn_deferred_reconciled))}"
@@ -740,10 +760,13 @@ class Leviosam2Workflow:
             fn_committed_sorted = self._fn_committed_sorted
             fn_in_deferred = self._fn_deferred_realigned_se
 
-        cmd = ""
+        # Identical source @RG IDs must remain identical across committed and
+        # realigned records. Validate full definitions before merge's -c option.
+        cmd = self._read_group_command(
+            check_headers=(fn_committed_sorted, fn_in_deferred)) + " && "
         cmd += (
             f"{self.time_cmd}"
-            f"{shlex.quote(str(self.samtools))} merge -f -@ {self.num_threads} "
+            f"{shlex.quote(str(self.samtools))} merge -c -f -@ {self.num_threads} "
             f"-o {shlex.quote(str(self._fn_final))} {shlex.quote(str(fn_committed_sorted))} {shlex.quote(str(fn_in_deferred))} && "
         )
         cmd += f"{self.time_cmd}" f"{shlex.quote(str(self.samtools))} index {shlex.quote(str(self._fn_final))}"

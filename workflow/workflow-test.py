@@ -9,8 +9,9 @@ import argparse
 import copy
 import json
 import os
-import shlex
+import io
 import pathlib
+import shlex
 import sys
 import subprocess
 import tempfile
@@ -18,6 +19,7 @@ from unittest import mock
 import unittest
 
 import leviosam2
+import restore_read_groups
 
 TIME_CMDS = ["", "time -v -ao test.time_log"]
 
@@ -224,7 +226,10 @@ class Workflow(unittest.TestCase):
             workflow._set_filenames()
             for name in ("_fn_committed", "_fn_committed_sorted", "_fn_deferred", "_fn_deferred_pe_fq1", "_fn_deferred_pe_fq2", "_fn_deferred_realigned_pe", "_fn_deferred_pe", "_fn_committed_pe", "_fn_deferred_reconciled", "_fn_final"):
                 getattr(workflow, name).touch()
-            with mock.patch.dict(os.environ, {"WORKFLOW_ARG_LOG": str(log)}):
+            # Dedicated RG tests exercise restoration; these fake tools only log argv.
+            with mock.patch.dict(os.environ, {"WORKFLOW_ARG_LOG": str(log)}), \
+                    mock.patch.object(workflow, "_read_group_command",
+                                      side_effect=lambda **kw: "true" if kw.get("check_headers") else "cat"):
                 workflow.validate_executables()
                 workflow.run_leviosam2()
                 workflow.run_sort_committed()
@@ -441,6 +446,7 @@ class Workflow(unittest.TestCase):
         expected = (
             f"bowtie2 rg -p 3 -x target.idx "
             f"-U {self.args.out_prefix}-deferred.fq.gz | "
+            f"{self.workflow._read_group_command(source=self.workflow._fn_deferred)} | "
             f"samtools sort -@ 1 -o {self.args.out_prefix}-realigned.bam"
         )
         self.assertEqual(result, expected)
@@ -467,6 +473,7 @@ class Workflow(unittest.TestCase):
         expected = (
             f"bwa mem -R rg -t 3 target.idx "
             f"{self.args.out_prefix}-deferred.fq.gz | "
+            f"{self.workflow._read_group_command(source=self.workflow._fn_deferred)} | "
             f"samtools sort -@ 1 -o {self.args.out_prefix}-realigned.bam"
         )
         self.assertEqual(result, expected)
@@ -489,6 +496,121 @@ class Workflow(unittest.TestCase):
             f"bgzip > {self.args.out_prefix}-deferred.fq.gz"
         )
         self.assertEqual(result, expected)
+
+    def test_read_group_argument_is_quoted_and_idempotent(self):
+        workflow = copy.deepcopy(self.workflow)
+        workflow.aligner = "bwamem"
+        workflow.aligner_exe = "bwa"
+        workflow.read_group = r"@RG\tID:fallback\tSM:sample name"
+        first = workflow.run_realign_deferred()
+        self.assertEqual(first, workflow.run_realign_deferred())
+        self.assertIn("-R " + shlex.quote(workflow.read_group), first)
+
+
+class ReadGroupRestoration(unittest.TestCase):
+    header = ("@HD\tVN:1.6\n@SQ\tSN:chr1\tLN:1000\n"
+              "@RG\tID:one\tSM:sample\tLB:first\tPL:ILLUMINA\n"
+              "@RG\tID:two\tSM:sample\tLB:second\tPL:ILLUMINA\n")
+
+    @staticmethod
+    def record(name, flag=0, group=None):
+        return (f"{name}\t{flag}\tchr1\t11\t60\t4M\t*\t0\t0\tAAAA\tIIII"
+                + (f"\tRG:Z:{group}" if group else "") + "\n")
+
+    def restore(self, original, aligned, paired=False, extra_header=None):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            source = root / "source.sam"
+            source.write_text(original)
+            tool = root / "samtools.py"
+            tool.write_text("import pathlib, sys\n"
+                            "lines = pathlib.Path(sys.argv[-1]).read_text().splitlines(True)\n"
+                            "sys.stdout.writelines(line for line in lines if '-H' not in sys.argv or line.startswith('@'))\n")
+            extra = []
+            if extra_header is not None:
+                target = root / "target.sam"
+                target.write_text(extra_header)
+                extra = [target]
+            output = io.StringIO()
+            restore_read_groups.restore([sys.executable, str(tool)], source, paired,
+                                        io.StringIO(aligned), output, extra)
+            return output.getvalue()
+
+    def test_original_groups_override_aligner_group_on_all_alignment_types(self):
+        original = self.header + self.record("a", group="one") + self.record("b", group="two")
+        aligned = (self.header + "@RG\tID:fallback\tSM:sample\n"
+                   + self.record("a", group="fallback")
+                   + self.record("b", group="fallback")
+                   + self.record("a", 256, "fallback") + self.record("b", 2048, "fallback"))
+        restored = self.restore(original, aligned)
+        lines = [line for line in restored.splitlines() if not line.startswith('@')]
+        self.assertEqual([line.split('RG:Z:')[1] for line in lines], ['one', 'two', 'one', 'two'])
+        self.assertIn("LB:first", restored)
+        self.assertIn("LB:second", restored)
+
+    def test_paired_read_ends_are_distinct_and_selected_source_or_target_is_restored(self):
+        original = self.header + self.record("pair", 65, "one") + self.record("pair", 129, "two")
+        # Mimic reconcile output: one source-selected end and one target-selected end.
+        aligned = self.header + self.record("pair", 65, "one") + self.record("pair", 129, "fallback")
+        restored = self.restore(original, aligned, paired=True,
+                                extra_header="@RG\tID:fallback\tSM:sample\n")
+        self.assertIn(self.record("pair", 65, "one"), restored)
+        self.assertIn(self.record("pair", 129, "two"), restored)
+
+    def test_ungrouped_reads_keep_optional_fallback_and_header(self):
+        original = self.header + self.record("a") + self.record("b")
+        aligned = self.header + self.record("a", group="fallback") + self.record("b")
+        restored = self.restore(original, aligned,
+                                extra_header="@RG\tID:fallback\tSM:sample\tLB:new\n")
+        self.assertIn(self.record("a", group="fallback"), restored)
+        self.assertIn(self.record("b"), restored)
+        self.assertIn("@RG\tID:fallback\tSM:sample\tLB:new\n", restored)
+
+    def test_invalid_and_ambiguous_metadata_fail_clearly(self):
+        cases = [
+            (self.header + self.record("a", group="missing"), self.header + self.record("a"), "Undefined original"),
+            (self.header + self.record("a", group="one") + self.record("a", group="two"),
+             self.header + self.record("a"), "Ambiguous original"),
+            (self.header + self.record("a", group="one"), self.header + self.record("other"), "no source record"),
+            (self.header + self.record("a"), self.header + self.record("a", group="missing"), "Undefined realigned"),
+            (self.header + self.record("a", group="one"),
+             self.header.replace("LB:first", "LB:different") + self.record("a"), "Conflicting definitions"),
+        ]
+        for original, aligned, message in cases:
+            with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
+                self.restore(original, aligned)
+
+    def test_final_merge_header_check_rejects_same_id_with_different_library(self):
+        first = restore_read_groups.read_groups(self.header.splitlines())
+        other = restore_read_groups.read_groups(self.header.replace('LB:first', 'LB:changed').splitlines())
+        with self.assertRaisesRegex(ValueError, 'Conflicting definitions'):
+            restore_read_groups.merge_groups(first, other)
+
+    def test_global_fallback_collision_is_rejected_but_field_order_is_irrelevant(self):
+        original = self.header + self.record("a", group="one")
+        # An explicit aligner fallback must not redefine an original library ID.
+        fallback = "@SQ\tSN:chr1\tLN:1000\n@RG\tID:one\tSM:sample\tLB:replacement\tPL:ILLUMINA\n"
+        with self.assertRaisesRegex(ValueError, "Conflicting definitions"):
+            self.restore(original, fallback + self.record("a", group="one"))
+        reordered = "@SQ\tSN:chr1\tLN:1000\n@RG\tLB:first\tPL:ILLUMINA\tSM:sample\tID:one\n"
+        restored = self.restore(original, reordered + self.record("a", group="one"))
+        self.assertIn(self.record("a", group="one"), restored)
+        self.assertEqual(sum(line.startswith('@RG') and 'ID:one' in line
+                             for line in restored.splitlines()), 1)
+
+    def test_helper_accepts_executable_and_source_paths_with_spaces(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            source = root / "source reads.sam"
+            source.write_text(self.header + self.record("a", group="one"))
+            tool = root / "samtools executable"
+            tool.write_text(f"#!{sys.executable}\nimport pathlib, sys\n"
+                            "sys.stdout.write(pathlib.Path(sys.argv[-1]).read_text())\n")
+            tool.chmod(0o755)
+            result = subprocess.run([sys.executable, restore_read_groups.__file__,
+                '--samtools', str(tool), '--source', str(source)],
+                input=self.header + self.record("a"), capture_output=True, text=True, check=True)
+            self.assertIn(self.record("a", group="one"), result.stdout)
 
 
 if __name__ == "__main__":

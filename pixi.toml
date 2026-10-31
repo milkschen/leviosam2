@@ -32,7 +32,7 @@ setup = { depends-on = ["install"], description = "Build and install a local dev
 check = { depends-on = ["test"], description = "Build and run the unit tests" }
 
 [feature.integration.tasks]
-test-integration = { cmd = "python leviosam-test.py build/leviosam2", depends-on = ["build"], description = "Run the extended pysam and Picard integration tests" }
+test-integration = { cmd = "python leviosam-test.py build/leviosam2 && python workflow/read-groups-integration-test.py", depends-on = ["build"], description = "Run the extended pysam, Picard, and read-group workflow integration tests" }
 
 [environments]
 integration = ["integration"]
