@@ -110,7 +110,8 @@ def parse_args() -> argparse.Namespace:
         help="Label of the target reference",
     )
     parser.add_argument(
-        "--read_group", type=str, default="", help="Read group string"
+        "--read_group", type=str, default="", help=("Read group string; for bowtie2, pass options such as "
+        "--rg-id ID --rg SM:sample, quoting values containing spaces")
     )
     parser.add_argument(
         "-g",
@@ -258,7 +259,8 @@ def validate_executable(cmd: Union[str, list], lenient: bool = False) -> None:
     """Validates if an executable is valid.
 
     Args:
-        cmd: command to run
+        cmd: executable path/name as a string, or an argument list beginning
+            with the executable path/name. Shell syntax is not interpreted.
         lenient: lenient mode.
             If False, return True a returncode of 0. If True, return True
             when either stdout/stderr has >1 lines of output.
@@ -395,7 +397,7 @@ class Leviosam2Workflow:
             check_file_exists(self.input_bam)
             if (not self.forcerun) and self._fn_committed.is_file():
                 logger.info(
-                    f"Skip run_leviosam2 -- {shlex.quote(str(self._fn_committed))} exists"
+                    f"Skip run_leviosam2 -- {self._fn_committed} exists"
                 )
                 return SKIP_MSG
             logger.info(cmd)
@@ -422,7 +424,7 @@ class Leviosam2Workflow:
             check_file_exists(self._fn_committed)
             if (not self.forcerun) and self._fn_committed_sorted.is_file():
                 logger.info(
-                    f"Skip run_sort_committed -- {shlex.quote(str(self._fn_committed_sorted))} exists"
+                    f"Skip run_sort_committed -- {self._fn_committed_sorted} exists"
                 )
                 return SKIP_MSG
             logger.info(cmd)
@@ -458,7 +460,7 @@ class Leviosam2Workflow:
                 and self._fn_deferred_pe_fq2.is_file()
             ):
                 logger.info(
-                    f"Skip run_collate_pe -- both {shlex.quote(str(self._fn_deferred_pe_fq1))} and "
+                    f"Skip run_collate_pe -- both {self._fn_deferred_pe_fq1} and "
                     f"{shlex.quote(str(self._fn_deferred_pe_fq2))} exist"
                 )
                 return SKIP_MSG
@@ -619,10 +621,10 @@ class Leviosam2Workflow:
             cmd_samtools = f"{self.time_cmd} {shlex.quote(str(self.samtools))} view -hbo {shlex.quote(str(fn_out))}"
 
         if self.aligner == "bowtie2":
-            read_group_arg = f"--rg {shlex.quote(self.read_group)}" if self.read_group else ""
+            read_group_arg = shlex.join(shlex.split(self.read_group))
             if not self.target_aligner_index:
                 raise ValueError(
-                    f"`{shlex.quote(str(self.target_aligner_index))}` is not a valid bowtie2 index path"
+                    f"`{self.target_aligner_index}` is not a valid bowtie2 index path"
                 )
             cmd = (
                 f"{self.time_cmd}"
@@ -671,7 +673,7 @@ class Leviosam2Workflow:
                 check_file_exists(self._fn_deferred_pe_fq2)
 
             if (not self.forcerun) and fn_out.is_file():
-                logger.info(f"Skip run_realign_deferred -- {shlex.quote(str(fn_out))} exists")
+                logger.info(f"Skip run_realign_deferred -- {fn_out} exists")
                 return SKIP_MSG
             logger.info(cmd)
             return self._run_command(cmd, "run_realign_deferred")
@@ -721,7 +723,7 @@ class Leviosam2Workflow:
             if (not self.forcerun) and self._fn_deferred_reconciled.is_file():
                 logger.info(
                     "Skip run_refflow_merge_pe -- "
-                    f"{shlex.quote(str(self._fn_deferred_reconciled))} exists"
+                    f"{self._fn_deferred_reconciled} exists"
                 )
                 return SKIP_MSG
             logger.info(cmd)
@@ -754,7 +756,7 @@ class Leviosam2Workflow:
 
             if (not self.forcerun) and self._fn_final.is_file():
                 logger.info(
-                    f"Skip run_merge_and_index -- {shlex.quote(str(self._fn_final))} exists"
+                    f"Skip run_merge_and_index -- {self._fn_final} exists"
                 )
                 return SKIP_MSG
             logger.info(cmd)
@@ -776,7 +778,7 @@ class Leviosam2Workflow:
 
             if (not self.forcerun) and self._fn_deferred_fq_se.is_file():
                 logger.info(
-                    f"Skip run_bam_to_fastq_se -- {shlex.quote(str(self._fn_deferred_fq_se))} exists"
+                    f"Skip run_bam_to_fastq_se -- {self._fn_deferred_fq_se} exists"
                 )
                 return SKIP_MSG
             logger.info(cmd)

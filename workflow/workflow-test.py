@@ -218,17 +218,26 @@ class Workflow(unittest.TestCase):
                 workflow.run_collate_pe()
                 for aligner, flag in (("bowtie2", "--rg"), ("bwamem", "-R"), ("bwamem2", "-R"), ("strobealign", "--rg"), ("minimap2", "-R"), ("winnowmap2", "-R")):
                     workflow.aligner = aligner
+                    workflow.read_group = ("--rg-id foo --rg 'SM:sample name' ; $(touch INJECTED)"
+                                           if aligner == "bowtie2" else
+                                           "ID:foo SM:bar ; $(touch INJECTED)")
+                    read_group = workflow.read_group
                     workflow.is_single_end = aligner in ("minimap2", "winnowmap2")
                     workflow._fn_deferred_fq_se.touch()
                     workflow.dryrun = True
                     first = workflow.run_realign_deferred()
                     self.assertEqual(first, workflow.run_realign_deferred())
-                    self.assertEqual(workflow.read_group, "ID:foo SM:bar ; $(touch INJECTED)")
+                    self.assertEqual(workflow.read_group, read_group)
                     workflow.dryrun = False
                     workflow.run_realign_deferred()
                     calls = [json.loads(line) for line in log.read_text().splitlines()]
                     align_call = next(call for call in reversed(calls) if flag in call)
-                    self.assertEqual(align_call[align_call.index(flag) + 1], workflow.read_group)
+                    if aligner == "bowtie2":
+                        self.assertEqual(align_call[align_call.index("--rg-id") + 1], "foo")
+                        self.assertEqual(align_call[align_call.index("--rg") + 1], "SM:sample name")
+                        self.assertIn(";", align_call)
+                    else:
+                        self.assertEqual(align_call[align_call.index(flag) + 1], read_group)
                 workflow.is_single_end = False
                 workflow.run_refflow_merge_pe()
                 workflow.run_merge_and_index()
@@ -344,7 +353,7 @@ class Workflow(unittest.TestCase):
         """Tests realign deferred (bt2, paired-end)"""
         result = self.workflow.run_realign_deferred()
         expected = (
-            f"bowtie2 --rg rg -p 3 -x target.idx "
+            f"bowtie2 rg -p 3 -x target.idx "
             f"-1 {self.args.out_prefix}-paired-deferred-R1.fq.gz "
             f"-2 {self.args.out_prefix}-paired-deferred-R2.fq.gz |  "
             f"samtools view -hbo {self.args.out_prefix}-paired-realigned.bam"
@@ -356,7 +365,7 @@ class Workflow(unittest.TestCase):
         self.workflow.is_single_end = True
         result = self.workflow.run_realign_deferred()
         expected = (
-            f"bowtie2 --rg rg -p 3 -x target.idx "
+            f"bowtie2 rg -p 3 -x target.idx "
             f"-U {self.args.out_prefix}-deferred.fq.gz | "
             f"samtools sort -@ 1 -o {self.args.out_prefix}-realigned.bam"
         )
