@@ -1039,20 +1039,23 @@ class Leviosam2WorkflowOntPreset(Leviosam2Workflow):
 
 def run_workflow(args: argparse.Namespace):
     if args.use_preset:
-        if args.sequence_type in ["ilmn_se", "ilmn_pe"]:
-            if args.aligner in ["bowtie2", "bwamem", "bwamem2"]:
-                workflow = Leviosam2WorkflowIlmnPreset(args)
-        elif args.sequence_type == "pb_hifi":
-            if args.aligner in ["minimap2", "winnowmap2"]:
-                workflow = Leviosam2WorkflowPacbioHifiPreset(args)
-        elif args.sequence_type == "ont":
-            if args.aligner in ["minimap2", "winnowmap2"]:
-                workflow = Leviosam2WorkflowOntPreset(args)
-        else:
+        presets = {
+            **{(sequence, aligner): Leviosam2WorkflowIlmnPreset
+               for sequence in ("ilmn_se", "ilmn_pe")
+               for aligner in ("bowtie2", "bwamem", "bwamem2")},
+            **{("pb_hifi", aligner): Leviosam2WorkflowPacbioHifiPreset
+               for aligner in ("minimap2", "winnowmap2")},
+            **{("ont", aligner): Leviosam2WorkflowOntPreset
+               for aligner in ("minimap2", "winnowmap2")},
+        }
+        try:
+            preset = presets[(args.sequence_type, args.aligner)]
+        except KeyError:
             raise ValueError(
                 "There is no preset for the sequence_type and aligner combination of "
                 f"{args.sequence_type} and {args.aligner}"
-            )
+            ) from None
+        workflow = preset(args)
     else:
         workflow = Leviosam2Workflow(args)
     workflow.check_inputs()
