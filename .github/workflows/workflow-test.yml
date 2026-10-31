@@ -7,6 +7,7 @@ on:
       - '.github/**'
       - 'workflow/leviosam2.py'
       - 'workflow/workflow-test.py'
+      - 'workflow/restore_read_groups.py'
   pull_request:
     branches:
       - 'main'
@@ -14,6 +15,7 @@ on:
       - '.github/**'
       - 'workflow/leviosam2.py'
       - 'workflow/workflow-test.py'
+      - 'workflow/restore_read_groups.py'
 
 env:
   # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
