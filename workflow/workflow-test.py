@@ -175,6 +175,34 @@ class Workflow(unittest.TestCase):
     # def test_set_filenames_paired_end(self):
     #     pass
 
+    def test_preset_combination_matrix(self):
+        supported = {
+            **{(sequence, aligner): leviosam2.Leviosam2WorkflowIlmnPreset
+               for sequence in ("ilmn_se", "ilmn_pe")
+               for aligner in ("bowtie2", "bwamem", "bwamem2")},
+            **{("pb_hifi", aligner): leviosam2.Leviosam2WorkflowPacbioHifiPreset
+               for aligner in ("minimap2", "winnowmap2")},
+            **{("ont", aligner): leviosam2.Leviosam2WorkflowOntPreset
+               for aligner in ("minimap2", "winnowmap2")},
+        }
+        self.args.use_preset = True
+        for sequence in ("ilmn_pe", "ilmn_se", "pb_hifi", "ont"):
+            for aligner in ("bowtie2", "bwamem", "bwamem2", "minimap2", "winnowmap2", "strobealign"):
+                with self.subTest(sequence=sequence, aligner=aligner):
+                    self.args.sequence_type, self.args.aligner = sequence, aligner
+                    with mock.patch.object(leviosam2.Leviosam2Workflow, "check_inputs") as check, \
+                         mock.patch.object(leviosam2.Leviosam2Workflow, "validate_executables"), \
+                         mock.patch.object(leviosam2.Leviosam2Workflow, "run_workflow"):
+                        if (sequence, aligner) in supported:
+                            with mock.patch.object(supported[(sequence, aligner)], "__init__", return_value=None) as init:
+                                leviosam2.run_workflow(self.args)
+                                init.assert_called_once_with(self.args)
+                            check.assert_called_once()
+                        else:
+                            with self.assertRaisesRegex(ValueError, f"{sequence} and {aligner}"):
+                                leviosam2.run_workflow(self.args)
+                            check.assert_not_called()
+
     def test_infer_aligner_exe(self):
         for aln in ["bowtie2", "minimap2", "winnowmap2", "strobealign"]:
             self.workflow.aligner = aln
