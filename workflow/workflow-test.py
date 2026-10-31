@@ -7,6 +7,9 @@ Tests of the workflow/leviosam2.py workflow.
 """
 import argparse
 import copy
+import json
+import os
+import shlex
 import pathlib
 import sys
 import subprocess
@@ -156,10 +159,12 @@ class Workflow(unittest.TestCase):
                 marker = pathlib.Path(directory) / "index-ran"
                 tool = pathlib.Path(directory) / "samtools.sh"
                 tool.write_text(
+                    '#!/bin/sh\n'
                     'if [ "$1" = "index" ]; then touch ' + str(marker) + '; fi\n'
                     'if [ "$1" = "' + failed_stage + '" ]; then exit 23; fi\n'
                 )
-                workflow.samtools = "bash " + str(tool)
+                tool.chmod(0o755)
+                workflow.samtools = str(tool)
                 # Isolate the finalization path; all preceding stages succeeded.
                 stages = ["run_leviosam2", "run_sort_committed", "run_collate_pe",
                           "run_realign_deferred", "run_refflow_merge_pe",
@@ -187,6 +192,77 @@ class Workflow(unittest.TestCase):
     # TODO
     # def test_set_filenames_paired_end(self):
     #     pass
+
+    def test_shell_arguments_with_metacharacters(self):
+        with tempfile.TemporaryDirectory(prefix="workflow space ; ") as directory:
+            root = pathlib.Path(directory)
+            log = root / "argv log"
+            tool = root / "fake tool ; name"
+            tool.write_text(
+                "#!/usr/bin/env python3\n"
+                "import json, os, sys\n"
+                "with open(os.environ['WORKFLOW_ARG_LOG'], 'a') as f: f.write(json.dumps(sys.argv[1:]) + '\\n')\n"
+                "print('first line\\nsecond line')\n"
+            )
+            tool.chmod(0o755)
+            self.args.measure_time = True
+            self.args.gnu_time_exe = str(tool)
+            self.args.out_prefix = str(root / "timed ; result")
+            timed = leviosam2.Leviosam2Workflow(self.args)
+            self.assertEqual(shlex.split(timed.time_cmd), [str(tool), "-v", "-ao", self.args.out_prefix + ".time_log"])
+            self.args.measure_time = False
+            workflow = self.failure_workflow(directory)
+            workflow.out_prefix = root / "result ; $(touch INJECTED)"
+            workflow.target_fasta = root / "target ; ref"
+            workflow.leviosam2_index = root / "index ; file"
+            workflow.target_aligner_index = root / "aligner index ; file"
+            workflow.lift_bed_commit_source = str(root / "bed ; file")
+            workflow.source_label = "source ; label"
+            workflow.target_label = "target ; label"
+            workflow.read_group = "ID:foo SM:bar ; $(touch INJECTED)"
+            workflow.leviosam2 = workflow.samtools = workflow.bgzip = workflow.aligner_exe = str(tool)
+            workflow._set_filenames()
+            for name in ("_fn_committed", "_fn_committed_sorted", "_fn_deferred", "_fn_deferred_pe_fq1", "_fn_deferred_pe_fq2", "_fn_deferred_realigned_pe", "_fn_deferred_pe", "_fn_committed_pe", "_fn_deferred_reconciled", "_fn_final"):
+                getattr(workflow, name).touch()
+            with mock.patch.dict(os.environ, {"WORKFLOW_ARG_LOG": str(log)}):
+                workflow.validate_executables()
+                workflow.run_leviosam2()
+                workflow.run_sort_committed()
+                workflow.run_collate_pe()
+                for aligner, flag in (("bowtie2", "--rg"), ("bwamem", "-R"), ("bwamem2", "-R"), ("strobealign", "--rg"), ("minimap2", "-R"), ("winnowmap2", "-R")):
+                    workflow.aligner = aligner
+                    workflow.read_group = ("--rg-id foo --rg 'SM:sample name' ; $(touch INJECTED)"
+                                           if aligner == "bowtie2" else
+                                           "ID:foo SM:bar ; $(touch INJECTED)")
+                    read_group = workflow.read_group
+                    workflow.is_single_end = aligner in ("minimap2", "winnowmap2")
+                    workflow._fn_deferred_fq_se.touch()
+                    workflow.dryrun = True
+                    first = workflow.run_realign_deferred()
+                    self.assertEqual(first, workflow.run_realign_deferred())
+                    self.assertEqual(workflow.read_group, read_group)
+                    workflow.dryrun = False
+                    workflow.run_realign_deferred()
+                    calls = [json.loads(line) for line in log.read_text().splitlines()]
+                    align_call = next(call for call in reversed(calls) if flag in call)
+                    if aligner == "bowtie2":
+                        self.assertEqual(align_call[align_call.index("--rg-id") + 1], "foo")
+                        self.assertEqual(align_call[align_call.index("--rg") + 1], "SM:sample name")
+                        self.assertIn(";", align_call)
+                    else:
+                        self.assertEqual(align_call[align_call.index(flag) + 1], read_group)
+                workflow.is_single_end = False
+                workflow.run_refflow_merge_pe()
+                workflow.run_merge_and_index()
+                workflow.run_bam_to_fastq_se()
+                workflow.run_bam_to_cram()
+            calls = [json.loads(line) for line in log.read_text().splitlines()]
+            lift = next(call for call in calls if call and call[0] == "lift")
+            self.assertEqual(lift[lift.index("-p") + 1], str(workflow.out_prefix))
+            self.assertEqual(lift[lift.index("-r") + 1], workflow.lift_bed_commit_source)
+            reconcile = next(call for call in calls if call and call[0] == "reconcile")
+            self.assertIn(workflow.source_label + ":" + str(workflow._fn_deferred_pe_sortn), reconcile)
+            self.assertFalse((pathlib.Path.cwd() / "INJECTED").exists())
 
     def test_preset_combination_matrix(self):
         supported = {

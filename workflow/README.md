@@ -223,3 +223,10 @@ bash ../leviosam2.sh \
 ```
 
 The output is `ilmn-pe-chm13v2_grch38-final.bam`.
+
+### Read groups
+
+For Bowtie2, pass its read-group options together in `--read_group`, for example
+`--read_group "--rg-id foo --rg 'SM:sample name'"`. Quote any option value
+containing spaces within that string. For BWA, minimap2, winnowmap2, and
+strobealign, pass the read-group value as a single string.
