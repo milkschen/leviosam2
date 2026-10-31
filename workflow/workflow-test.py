@@ -126,6 +126,25 @@ class Workflow(unittest.TestCase):
                 workflow.run_leviosam2()
             self.assertEqual(len(calls), 4)
 
+    def test_restart_tracks_literal_glob_metacharacters_in_index(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workflow = self.failure_workflow(directory)
+            workflow.forcerun = False
+            workflow.is_single_end = True
+            workflow._fn_deferred_fq_se.touch()
+            workflow.target_aligner_index = pathlib.Path(directory) / "ref[1].mmi"
+            workflow.target_aligner_index.write_text("index")
+
+            def produce(cmd, stage):
+                workflow._fn_deferred_realigned_se.write_text("aligned")
+
+            with mock.patch.object(workflow, "_run_command", side_effect=produce) as run:
+                workflow.run_realign_deferred()
+                self.assertEqual(workflow.run_realign_deferred(), leviosam2.SKIP_MSG)
+                workflow.target_aligner_index.write_text("changed index")
+                workflow.run_realign_deferred()
+                self.assertEqual(run.call_count, 2)
+
     def test_missing_input_preserves_previous_lift_outputs(self):
         with tempfile.TemporaryDirectory() as directory:
             workflow = self.failure_workflow(directory)

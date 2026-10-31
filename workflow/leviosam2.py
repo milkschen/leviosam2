@@ -359,7 +359,7 @@ class Leviosam2Workflow:
     def _reference_inputs(self):
         # Aligner indexes may consist of multiple files with a shared prefix.
         paths = [self.leviosam2_index, self.target_fasta]
-        paths.extend(pathlib.Path(p) for p in sorted(glob.glob(str(self.target_aligner_index) + "*")))
+        paths.extend(pathlib.Path(p) for p in sorted(glob.glob(glob.escape(str(self.target_aligner_index)) + "*")))
         paths.extend(pathlib.Path(p) for p in (self.lift_bed_commit_source,
                      self.lift_bed_defer_target, self.lift_realign_config) if p)
         return paths
