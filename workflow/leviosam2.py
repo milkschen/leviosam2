@@ -193,7 +193,7 @@ def parse_args() -> argparse.Namespace:
         "--out_format",
         type=str,
         default="bam",
-        choices=["bam", "sam", "cram"],
+        choices=["bam", "cram"],
         help="Output file format.",
     )
     parser.add_argument(

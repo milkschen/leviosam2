@@ -73,6 +73,19 @@ class Workflow(unittest.TestCase):
         self.workflow = leviosam2.Leviosam2Workflow(args)
         self.workflow._set_filenames()
 
+    def test_workflow_output_format_choices(self):
+        argv = ["leviosam2.py", "-s", "ilmn_se", "-a", "bowtie2",
+                "-i", "input.bam", "-o", "result", "-C", "index.clft",
+                "-f", "target.fa"]
+        for output_format in ("bam", "cram"):
+            with self.subTest(output_format=output_format), mock.patch.object(
+                    sys, "argv", argv + ["-O", output_format]):
+                self.assertEqual(leviosam2.parse_args().out_format, output_format)
+        with mock.patch.object(sys, "argv", argv + ["-O", "sam"]), \
+                mock.patch("sys.stderr"), self.assertRaises(SystemExit) as error:
+            leviosam2.parse_args()
+        self.assertEqual(error.exception.code, 2)
+
     def failure_workflow(self, directory):
         workflow = copy.deepcopy(self.workflow)
         workflow.dryrun = False
