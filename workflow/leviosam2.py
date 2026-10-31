@@ -195,7 +195,7 @@ def parse_args() -> argparse.Namespace:
         "--out_format",
         type=str,
         default="bam",
-        choices=["bam", "sam", "cram"],
+        choices=["bam", "cram"],
         help="Output file format.",
     )
     parser.add_argument(
@@ -334,31 +334,31 @@ class Leviosam2Workflow:
         """Run leviosam2."""
         lift_commit_min_mapq_arg = (
             f"-S mapq:{self.lift_commit_min_mapq} "
-            if self.lift_commit_min_mapq
+            if self.lift_commit_min_mapq is not None
             else ""
         )
         lift_commit_min_score_arg = (
             f"-S aln_score:{self.lift_commit_min_score} "
-            if self.lift_commit_min_score
+            if self.lift_commit_min_score is not None
             else ""
         )
         lift_commit_max_frac_clipped_arg = (
             f"-S clipped_frac:{self.lift_commit_max_frac_clipped} "
-            if self.lift_commit_max_frac_clipped
+            if self.lift_commit_max_frac_clipped is not None
             else ""
         )
         lift_commit_max_isize_arg = (
             f"-S isize:{self.lift_commit_max_isize} "
-            if self.lift_commit_max_isize
+            if self.lift_commit_max_isize is not None
             else ""
         )
         lift_commit_max_hdist_arg = (
             f"-S hdist:{self.lift_commit_max_hdist} "
-            if self.lift_commit_max_hdist
+            if self.lift_commit_max_hdist is not None
             else ""
         )
         lift_max_gap_arg = (
-            f"-G {self.lift_max_gap} " if self.lift_max_gap else ""
+            f"-G {self.lift_max_gap} " if self.lift_max_gap is not None else ""
         )
         lift_bed_commit_source_arg = (
             f"-r {shlex.quote(str(self.lift_bed_commit_source))} "
@@ -539,7 +539,7 @@ class Leviosam2Workflow:
     #     elif self.aligner in ["minimap2", "winnowmap2"]:
     #         # Do not use a prefix other than 'map-hifi' and 'map-ont' modes.
     #         preset = ""
-    #         if self.sequence_type == "pb-hifi":
+    #         if self.sequence_type == "pb_hifi":
     #             preset = "-x map-hifi"
     #         elif self.sequence_type == "ont":
     #             preset = "-x map-ont"
@@ -651,7 +651,7 @@ class Leviosam2Workflow:
         elif self.aligner in ["minimap2", "winnowmap2"]:
             # Do not use a prefix other than 'map-hifi' and 'map-ont' modes.
             preset = ""
-            if self.sequence_type == "pb-hifi":
+            if self.sequence_type == "pb_hifi":
                 preset = "-x map-hifi"
             elif self.sequence_type == "ont":
                 preset = "-x map-ont"
@@ -940,6 +940,8 @@ class Leviosam2Workflow:
         self.gtime = args.gnu_time_exe
         self.leviosam2 = args.leviosam2_exe
 
+        self.out_prefix = pathlib.Path(args.out_prefix)
+
         # Computational performance measurement related
         self.measure_time = args.measure_time
         self.time_cmd = ""
@@ -953,7 +955,6 @@ class Leviosam2Workflow:
         # Converts file name strings to pathlib.Path()
         self.target_fasta = pathlib.Path(args.target_fasta)
         self.input_bam = pathlib.Path(args.input_bam)
-        self.out_prefix = pathlib.Path(args.out_prefix)
         self.leviosam2_index = pathlib.Path(args.leviosam2_index)
         self.out_format = args.out_format
         if args.target_aligner_index:
@@ -1042,20 +1043,23 @@ class Leviosam2WorkflowOntPreset(Leviosam2Workflow):
 
 def run_workflow(args: argparse.Namespace):
     if args.use_preset:
-        if args.sequence_type in ["ilmn_se", "ilmn_pe"]:
-            if args.aligner in ["bowtie2", "bwamem", "bwamem2"]:
-                workflow = Leviosam2WorkflowIlmnPreset(args)
-        elif args.sequence_type == "pb_hifi":
-            if args.aligner in ["minimap2", "winnowmap2"]:
-                workflow = Leviosam2WorkflowPacbioHifiPreset(args)
-        elif args.sequence_type == "ont":
-            if args.aligner in ["minimap2", "winnowmap2"]:
-                workflow = Leviosam2WorkflowOntPreset(args)
-        else:
+        presets = {
+            **{(sequence, aligner): Leviosam2WorkflowIlmnPreset
+               for sequence in ("ilmn_se", "ilmn_pe")
+               for aligner in ("bowtie2", "bwamem", "bwamem2")},
+            **{("pb_hifi", aligner): Leviosam2WorkflowPacbioHifiPreset
+               for aligner in ("minimap2", "winnowmap2")},
+            **{("ont", aligner): Leviosam2WorkflowOntPreset
+               for aligner in ("minimap2", "winnowmap2")},
+        }
+        try:
+            preset = presets[(args.sequence_type, args.aligner)]
+        except KeyError:
             raise ValueError(
                 "There is no preset for the sequence_type and aligner combination of "
                 f"{args.sequence_type} and {args.aligner}"
-            )
+            ) from None
+        workflow = preset(args)
     else:
         workflow = Leviosam2Workflow(args)
     workflow.check_inputs()

@@ -76,6 +76,19 @@ class Workflow(unittest.TestCase):
         self.workflow = leviosam2.Leviosam2Workflow(args)
         self.workflow._set_filenames()
 
+    def test_workflow_output_format_choices(self):
+        argv = ["leviosam2.py", "-s", "ilmn_se", "-a", "bowtie2",
+                "-i", "input.bam", "-o", "result", "-C", "index.clft",
+                "-f", "target.fa"]
+        for output_format in ("bam", "cram"):
+            with self.subTest(output_format=output_format), mock.patch.object(
+                    sys, "argv", argv + ["-O", output_format]):
+                self.assertEqual(leviosam2.parse_args().out_format, output_format)
+        with mock.patch.object(sys, "argv", argv + ["-O", "sam"]), \
+                mock.patch("sys.stderr"), self.assertRaises(SystemExit) as error:
+            leviosam2.parse_args()
+        self.assertEqual(error.exception.code, 2)
+
     def failure_workflow(self, directory):
         workflow = copy.deepcopy(self.workflow)
         workflow.dryrun = False
@@ -251,6 +264,34 @@ class Workflow(unittest.TestCase):
             self.assertIn(workflow.source_label + ":" + str(workflow._fn_deferred_pe_sortn), reconcile)
             self.assertFalse((pathlib.Path.cwd() / "INJECTED").exists())
 
+    def test_preset_combination_matrix(self):
+        supported = {
+            **{(sequence, aligner): leviosam2.Leviosam2WorkflowIlmnPreset
+               for sequence in ("ilmn_se", "ilmn_pe")
+               for aligner in ("bowtie2", "bwamem", "bwamem2")},
+            **{("pb_hifi", aligner): leviosam2.Leviosam2WorkflowPacbioHifiPreset
+               for aligner in ("minimap2", "winnowmap2")},
+            **{("ont", aligner): leviosam2.Leviosam2WorkflowOntPreset
+               for aligner in ("minimap2", "winnowmap2")},
+        }
+        self.args.use_preset = True
+        for sequence in ("ilmn_pe", "ilmn_se", "pb_hifi", "ont"):
+            for aligner in ("bowtie2", "bwamem", "bwamem2", "minimap2", "winnowmap2", "strobealign"):
+                with self.subTest(sequence=sequence, aligner=aligner):
+                    self.args.sequence_type, self.args.aligner = sequence, aligner
+                    with mock.patch.object(leviosam2.Leviosam2Workflow, "check_inputs") as check, \
+                         mock.patch.object(leviosam2.Leviosam2Workflow, "validate_executables"), \
+                         mock.patch.object(leviosam2.Leviosam2Workflow, "run_workflow"):
+                        if (sequence, aligner) in supported:
+                            with mock.patch.object(supported[(sequence, aligner)], "__init__", return_value=None) as init:
+                                leviosam2.run_workflow(self.args)
+                                init.assert_called_once_with(self.args)
+                            check.assert_called_once()
+                        else:
+                            with self.assertRaisesRegex(ValueError, f"{sequence} and {aligner}"):
+                                leviosam2.run_workflow(self.args)
+                            check.assert_not_called()
+
     def test_infer_aligner_exe(self):
         for aln in ["bowtie2", "minimap2", "winnowmap2", "strobealign"]:
             self.workflow.aligner = aln
@@ -328,6 +369,39 @@ class Workflow(unittest.TestCase):
         )
         self.assertEqual(result, expected)
 
+    def test_zero_lift_options_from_cli(self):
+        argv = ["leviosam2.py", "-s", "ilmn_se", "-a", "bowtie2",
+                "-i", "input.bam", "-o", "result", "-C", "index.clft",
+                "-f", "target.fa", "--dryrun", "-g", "0",
+                "--lift_commit_min_mapq", "0", "--lift_commit_min_score", "0",
+                "--lift_commit_max_frac_clipped", "0",
+                "--lift_commit_max_isize", "0", "--lift_commit_max_hdist", "0"]
+        with mock.patch.object(sys, "argv", argv):
+            workflow = leviosam2.Leviosam2Workflow(leviosam2.parse_args())
+        command = workflow.run_leviosam2()
+        for option in ("-S mapq:0", "-S aln_score:0", "-S clipped_frac:0.0",
+                       "-S isize:0", "-S hdist:0", "-G 0"):
+            with self.subTest(option=option):
+                self.assertIn(option + " ", command)
+
+    def test_illumina_preset_forwards_zero_gap(self):
+        args = copy.copy(self.args)
+        args.use_preset = True
+        workflow = leviosam2.Leviosam2WorkflowIlmnPreset(args)
+        self.assertIn("-G 0 ", workflow.run_leviosam2())
+
+    def test_measure_time_initializes_with_output_prefix(self):
+        argv = ["leviosam2.py", "-s", "ilmn_se", "-a", "bowtie2",
+                "-i", "input.bam", "-o", "out/result", "-C", "index.clft",
+                "-f", "target.fa", "--dryrun", "--measure_time",
+                "--gnu_time_exe", "my-time"]
+        with mock.patch.object(sys, "argv", argv):
+            workflow = leviosam2.Leviosam2Workflow(leviosam2.parse_args())
+        workflow._set_filenames()
+        self.assertEqual(workflow.time_cmd, "my-time -v -ao out/result.time_log ")
+        self.assertTrue(workflow.run_leviosam2().startswith(workflow.time_cmd))
+        self.assertTrue(workflow.run_sort_committed().startswith(workflow.time_cmd))
+
     def test_run_sort_committed(self):
         self.workflow.time_cmd = "gtime -v -ao test.time_log "
 
@@ -396,6 +470,17 @@ class Workflow(unittest.TestCase):
             f"samtools sort -@ 1 -o {self.args.out_prefix}-realigned.bam"
         )
         self.assertEqual(result, expected)
+
+    def test_long_read_realign_uses_sequence_preset(self):
+        for aligner in ("minimap2", "winnowmap2"):
+            for sequence_type, preset in (("pb_hifi", "map-hifi"), ("ont", "map-ont")):
+                with self.subTest(aligner=aligner, sequence_type=sequence_type):
+                    workflow = copy.deepcopy(self.workflow)
+                    workflow.aligner = aligner
+                    workflow.aligner_exe = aligner
+                    workflow.sequence_type = sequence_type
+                    workflow.is_single_end = True
+                    self.assertIn(f"-a -x {preset} --MD", workflow.run_realign_deferred())
 
     def test_run_bam_to_fastq_se(self):
         result = self.workflow.run_bam_to_fastq_se()
