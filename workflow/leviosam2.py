@@ -536,7 +536,7 @@ class Leviosam2Workflow:
     #     elif self.aligner in ["minimap2", "winnowmap2"]:
     #         # Do not use a prefix other than 'map-hifi' and 'map-ont' modes.
     #         preset = ""
-    #         if self.sequence_type == "pb-hifi":
+    #         if self.sequence_type == "pb_hifi":
     #             preset = "-x map-hifi"
     #         elif self.sequence_type == "ont":
     #             preset = "-x map-ont"
@@ -649,7 +649,7 @@ class Leviosam2Workflow:
         elif self.aligner in ["minimap2", "winnowmap2"]:
             # Do not use a prefix other than 'map-hifi' and 'map-ont' modes.
             preset = ""
-            if self.sequence_type == "pb-hifi":
+            if self.sequence_type == "pb_hifi":
                 preset = "-x map-hifi"
             elif self.sequence_type == "ont":
                 preset = "-x map-ont"

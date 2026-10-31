@@ -321,6 +321,17 @@ class Workflow(unittest.TestCase):
         )
         self.assertEqual(result, expected)
 
+    def test_long_read_realign_uses_sequence_preset(self):
+        for aligner in ("minimap2", "winnowmap2"):
+            for sequence_type, preset in (("pb_hifi", "map-hifi"), ("ont", "map-ont")):
+                with self.subTest(aligner=aligner, sequence_type=sequence_type):
+                    workflow = copy.deepcopy(self.workflow)
+                    workflow.aligner = aligner
+                    workflow.aligner_exe = aligner
+                    workflow.sequence_type = sequence_type
+                    workflow.is_single_end = True
+                    self.assertIn(f"-a -x {preset} --MD", workflow.run_realign_deferred())
+
     def test_run_bam_to_fastq_se(self):
         result = self.workflow.run_bam_to_fastq_se()
         expected = (
