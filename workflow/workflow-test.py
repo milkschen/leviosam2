@@ -252,6 +252,27 @@ class Workflow(unittest.TestCase):
         )
         self.assertEqual(result, expected)
 
+    def test_zero_lift_options_from_cli(self):
+        argv = ["leviosam2.py", "-s", "ilmn_se", "-a", "bowtie2",
+                "-i", "input.bam", "-o", "result", "-C", "index.clft",
+                "-f", "target.fa", "--dryrun", "-g", "0",
+                "--lift_commit_min_mapq", "0", "--lift_commit_min_score", "0",
+                "--lift_commit_max_frac_clipped", "0",
+                "--lift_commit_max_isize", "0", "--lift_commit_max_hdist", "0"]
+        with mock.patch.object(sys, "argv", argv):
+            workflow = leviosam2.Leviosam2Workflow(leviosam2.parse_args())
+        command = workflow.run_leviosam2()
+        for option in ("-S mapq:0", "-S aln_score:0", "-S clipped_frac:0.0",
+                       "-S isize:0", "-S hdist:0", "-G 0"):
+            with self.subTest(option=option):
+                self.assertIn(option + " ", command)
+
+    def test_illumina_preset_forwards_zero_gap(self):
+        args = copy.copy(self.args)
+        args.use_preset = True
+        workflow = leviosam2.Leviosam2WorkflowIlmnPreset(args)
+        self.assertIn("-G 0 ", workflow.run_leviosam2())
+
     def test_run_sort_committed(self):
         self.workflow.time_cmd = "gtime -v -ao test.time_log "
 
