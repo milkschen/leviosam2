@@ -7,7 +7,6 @@ Johns Hopkins University
 import argparse
 import logging
 import pathlib
-import shlex
 import subprocess
 from typing import Union
 
@@ -194,7 +193,7 @@ def parse_args() -> argparse.Namespace:
         "--out_format",
         type=str,
         default="bam",
-        choices=["bam", "sam", "cram"],
+        choices=["bam", "cram"],
         help="Output file format.",
     )
     parser.add_argument(
@@ -808,27 +807,6 @@ class Leviosam2Workflow:
             self._cram_completed = True
             return result
 
-    def run_bam_to_sam(
-        self,
-    ) -> Union[str, "subprocess.CompletedProcess[bytes]"]:
-        """Convert the final BAM to SAM, retaining the BAM on failure."""
-        fn_final_sam = self._fn_final.with_suffix(".sam")
-        fn_tmp = fn_final_sam.with_name(fn_final_sam.name + ".tmp")
-        cmd = (
-            f"{self.time_cmd}{shlex.quote(str(self.samtools))} view -h -O sam "
-            f"-o {shlex.quote(str(fn_tmp))} {shlex.quote(str(self._fn_final))}"
-        )
-        if self.dryrun:
-            return cmd
-        self._sam_completed = False
-        try:
-            result = self._run_command(cmd, "run_bam_to_sam")
-            fn_tmp.replace(fn_final_sam)
-        finally:
-            fn_tmp.unlink(missing_ok=True)
-        self._sam_completed = True
-        return result
-
     def run_clean(self) -> Union[str, "subprocess.CompletedProcess[bytes]"]:
         logger.info(f"Unlink {self._fn_committed}")
         logger.info(f"Unlink {self._fn_committed_sorted}")
@@ -859,9 +837,9 @@ class Leviosam2Workflow:
                 self._fn_deferred_realigned_pe.unlink()
                 self._fn_deferred_realigned_pe_sortn.unlink()
                 self._fn_deferred_reconciled.unlink()
-            if ((self.out_format == "cram" and self._cram_completed)
-                    or (self.out_format == "sam" and self._sam_completed)):
-                # Remove the intermediate BAM after successful conversion.
+            if self.out_format == "cram" and self._cram_completed:
+                # Removes the final BAM file if the output format is set to
+                # CRAM.
                 self._fn_final.unlink()
                 (self._fn_final.with_suffix(".bam.bai")).unlink()
 
@@ -928,8 +906,6 @@ class Leviosam2Workflow:
 
         if self.out_format == "cram":
             self.run_bam_to_cram()
-        elif self.out_format == "sam":
-            self.run_bam_to_sam()
 
         if not self.keep_tmp_files:
             self.run_clean()
@@ -941,7 +917,6 @@ class Leviosam2Workflow:
 
     def __init__(self, args: argparse.Namespace) -> None:
         self._cram_completed = False
-        self._sam_completed = False
         self.aligner = args.aligner
         self.aligner_exe = args.aligner_exe
         if self.aligner_exe == "auto":

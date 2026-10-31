@@ -7,7 +7,6 @@ Tests of the workflow/leviosam2.py workflow.
 """
 import argparse
 import copy
-import json
 import pathlib
 import sys
 import subprocess
@@ -74,6 +73,19 @@ class Workflow(unittest.TestCase):
         self.workflow = leviosam2.Leviosam2Workflow(args)
         self.workflow._set_filenames()
 
+    def test_workflow_output_format_choices(self):
+        argv = ["leviosam2.py", "-s", "ilmn_se", "-a", "bowtie2",
+                "-i", "input.bam", "-o", "result", "-C", "index.clft",
+                "-f", "target.fa"]
+        for output_format in ("bam", "cram"):
+            with self.subTest(output_format=output_format), mock.patch.object(
+                    sys, "argv", argv + ["-O", output_format]):
+                self.assertEqual(leviosam2.parse_args().out_format, output_format)
+        with mock.patch.object(sys, "argv", argv + ["-O", "sam"]), \
+                mock.patch("sys.stderr"), self.assertRaises(SystemExit) as error:
+            leviosam2.parse_args()
+        self.assertEqual(error.exception.code, 2)
+
     def failure_workflow(self, directory):
         workflow = copy.deepcopy(self.workflow)
         workflow.dryrun = False
@@ -84,73 +96,6 @@ class Workflow(unittest.TestCase):
         workflow.input_bam.touch()
         workflow._set_filenames()
         return workflow
-
-    def test_sam_conversion_publishes_only_on_success(self):
-        with tempfile.TemporaryDirectory() as directory:
-            workflow = self.failure_workflow(directory)
-            workflow.out_format = "sam"
-            workflow._fn_final.write_text("recovery BAM")
-            sam = workflow._fn_final.with_suffix(".sam")
-            sam.write_text("previous SAM")
-            temp = sam.with_name(sam.name + ".tmp")
-
-            def fail(cmd, stage):
-                temp.write_text("partial")
-                raise subprocess.CalledProcessError(1, cmd)
-
-            with mock.patch.object(workflow, "_run_command", side_effect=fail):
-                with self.assertRaises(subprocess.CalledProcessError):
-                    workflow.run_bam_to_sam()
-            self.assertEqual(sam.read_text(), "previous SAM")
-            self.assertEqual(workflow._fn_final.read_text(), "recovery BAM")
-            self.assertFalse(temp.exists())
-
-            def succeed(cmd, stage):
-                self.assertIn("view -h -O sam", cmd)
-                temp.write_text("@HD\tVN:1.6\n")
-
-            with mock.patch.object(workflow, "_run_command", side_effect=succeed):
-                workflow.run_bam_to_sam()
-            self.assertEqual(sam.read_text(), "@HD\tVN:1.6\n")
-            self.assertTrue(workflow._sam_completed)
-
-    def test_sam_conversion_quotes_executable_and_paths(self):
-        with tempfile.TemporaryDirectory(prefix="sam space ; ") as directory:
-            root = pathlib.Path(directory)
-            workflow = self.failure_workflow(directory)
-            workflow.out_prefix = root / "result ; $(touch INJECTED)"
-            workflow._set_filenames()
-            workflow._fn_final.write_text("BAM")
-            log = root / "argument log"
-            tool = root / "samtools ; fake"
-            tool.write_text(
-                "#!/usr/bin/env python3\n"
-                "import json, pathlib, sys\n"
-                f"pathlib.Path({str(log)!r}).write_text(json.dumps(sys.argv[1:]))\n"
-                "pathlib.Path(sys.argv[sys.argv.index('-o') + 1]).write_text('@HD\\tVN:1.6\\n')\n"
-            )
-            tool.chmod(0o755)
-            workflow.samtools = str(tool)
-            workflow.run_bam_to_sam()
-            sam = workflow._fn_final.with_suffix(".sam")
-            self.assertEqual(json.loads(log.read_text()),
-                             ["view", "-h", "-O", "sam", "-o", str(sam) + ".tmp",
-                              str(workflow._fn_final)])
-            self.assertTrue(sam.is_file())
-            self.assertFalse((pathlib.Path.cwd() / "INJECTED").exists())
-
-    def test_workflow_dispatches_sam_conversion(self):
-        workflow = self.workflow
-        workflow.out_format = "sam"
-        with mock.patch.object(workflow, "run_leviosam2"), \
-                mock.patch.object(workflow, "run_sort_committed"), \
-                mock.patch.object(workflow, "run_collate_pe"), \
-                mock.patch.object(workflow, "run_realign_deferred"), \
-                mock.patch.object(workflow, "run_refflow_merge_pe"), \
-                mock.patch.object(workflow, "run_merge_and_index"), \
-                mock.patch.object(workflow, "run_bam_to_sam") as convert:
-            workflow.run_workflow()
-        convert.assert_called_once_with()
 
     def test_failed_lift_stops_workflow(self):
         with tempfile.TemporaryDirectory() as directory:
