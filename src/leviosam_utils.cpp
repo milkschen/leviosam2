@@ -324,10 +324,21 @@ hts_pos_t get_mate_query_len_on_ref(const bam1_t* aln) {
     uint8_t* mc = bam_aux_get(aln, "MC");
     if (mc) {
         char* mate_cigar = bam_aux2Z(mc);
+        if (!mate_cigar)
+            throw std::runtime_error("MC tag must be a CIGAR string for " +
+                                     std::string(bam_get_qname(aln)));
         uint32_t* a_cigar = NULL;
-        size_t n_cigar = 0;
-        sam_parse_cigar(mate_cigar, NULL, &a_cigar, &n_cigar);
-        return bam_cigar2rlen(n_cigar, a_cigar);
+        size_t capacity = 0;
+        char* end = nullptr;
+        ssize_t n_cigar = sam_parse_cigar(mate_cigar, &end, &a_cigar, &capacity);
+        if (n_cigar <= 0 || !end || *end) {
+            free(a_cigar);
+            throw std::runtime_error("Invalid MC CIGAR for " +
+                                     std::string(bam_get_qname(aln)));
+        }
+        hts_pos_t length = bam_cigar2rlen(n_cigar, a_cigar);
+        free(a_cigar);
+        return length;
     } else {
         return c->l_qseq;
     }

@@ -69,6 +69,31 @@ also to secondary, supplementary, and unmapped records. `MD` and `NM` are
 removed by default; `-m -f target.fa` recomputes them against the target reference.
 Other auxiliary tags are retained.
 
+Paired-read lifting reconciles mate flags, positions, and template lengths from
+the final primary alignments, including pairs separated by chromosomes, worker
+chunks, or threads. Read identity includes both QNAME and RG. Ambiguous duplicate
+primary records for the same QNAME, RG, and read end are rejected. Secondary and
+supplementary records reference the opposite primary and retain an inherited
+proper-pair flag only when the actual primary pair remains proper.
+An existing `MQ` tag is updated from that primary mate, or removed when the
+mate's target alignment is unknown.
+
+This reconciliation uses private temporary files in `TMPDIR` (or `/tmp` when
+unset): two compressed BAM streams containing paired source and lifted records,
+plus a growing disk-backed primary-outcome index. Temporary storage scales with
+the paired input and can be substantial for whole-genome BAMs; allow space for
+both paired alignment streams and the per-primary index. Memory does not grow
+with the number of pairs, but the additional compression, disk writes, and index
+lookups add runtime. Single-end records retain the streaming path. Temporary
+files are unlinked immediately and removed when their handles close.
+
+For a partial BAM that omits a primary mate, an input `MC` tag permits a virtual
+mate lift. Without that CIGAR, source-known mate mappedness is retained, unknown
+target mate coordinates, strand and TLEN are cleared, and a summary warning is printed.
+Virtual MC reconstruction does not perform sequence-based optional realignment
+for an absent mate.
+Provide both primary mates when complete target mate metadata is needed.
+
 ### Full levioSAM2 workflow with selective re-mapping
 
 The levioSAM2 workflow includes lift-over using the `leviosam2-lift` kernel and a selective re-mapping strategy. This approach can improve accuracy.

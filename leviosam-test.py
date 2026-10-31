@@ -198,6 +198,18 @@ class IntegrationTestCase(unittest.TestCase):
                 self.assertEqual(read1.next_reference_start, read2.reference_start)
                 self.assertEqual(read2.next_reference_start, read1.reference_start)
                 self.assertEqual(read1.template_length, -read2.template_length)
+                if (not read1.is_unmapped and not read2.is_unmapped and
+                        read1.reference_id == read2.reference_id):
+                    span = max(read1.reference_end, read2.reference_end) - min(
+                        read1.reference_start, read2.reference_start)
+                    self.assertEqual(abs(read1.template_length), span)
+                    self.assertEqual(abs(read2.template_length), span)
+                    if read1.reference_start != read2.reference_start:
+                        self.assertEqual(read1.template_length > 0,
+                                         read1.reference_start < read2.reference_start)
+                else:
+                    self.assertEqual(read1.template_length, 0)
+                    self.assertEqual(read2.template_length, 0)
 
     def validate_with_picard(self, bam_path, output_directory):
         read_group_bam = output_directory / f"{bam_path.stem}-rg.bam"
@@ -278,7 +290,11 @@ class LegacyLiftIntegrationTest(IntegrationTestCase):
                     self.assertEqual(
                         result.next_reference_start, expected.next_reference_start
                     )
-                    self.assertEqual(result.template_length, expected.template_length)
+                    # Some historical gold BAMs carry reciprocal but incorrect
+                    # TLEN values (e.g. 110 for a 404-base outer span). Validate
+                    # TLEN from the actual primary pair below instead.
+                    if not result.is_paired:
+                        self.assertEqual(result.template_length, 0)
                     self.assertEqual(result.query_sequence, expected.query_sequence)
                     self.assertEqual(result.query_qualities, expected.query_qualities)
                     self.assertEqual(stable_tags(result), stable_tags(original))
