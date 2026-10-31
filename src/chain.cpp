@@ -519,11 +519,12 @@ int ChainMap::lift_cigar(const std::string &contig, bam1_t *aln) {
     bam1_core_t *c = &(aln->core);
     auto pos_end = c->pos + bam_cigar2rlen(c->n_cigar, bam_get_cigar(aln));
 
-    // Note that intvl_idx = rank - 1
-    auto start_sidx = get_start_rank(contig, c->pos) - 1;
-    auto start_eidx = get_end_rank(contig, c->pos) - 1;
-    auto end_sidx = get_start_rank(contig, pos_end) - 1;
-    auto end_eidx = get_end_rank(contig, pos_end) - 1;
+    // Use the same first-interval and boundary handling as lift_segment().
+    // Raw end rank - 1 is negative inside the first interval.
+    int start_sidx = 0, start_eidx = 0, end_sidx = 0, end_eidx = 0;
+    if (!update_interval_indexes(contig, c->pos, start_sidx, start_eidx) ||
+        !update_interval_indexes(contig, pos_end, end_sidx, end_eidx))
+        return -1;
 
     int32_t num_sclip_start =
         get_num_clipped(c->pos, true, contig, start_sidx, start_eidx);
@@ -547,8 +548,12 @@ int ChainMap::lift_cigar(const std::string &contig, bam1_t *aln) {
 int ChainMap::lift_cigar(const std::string &contig, bam1_t *aln,
                          const int &start_sidx, const int &end_sidx,
                          int num_sclip_start, int num_sclip_end) {
-    if (aln->core.l_qseq > 0 &&
-        aln->core.l_qseq < (num_sclip_start + num_sclip_end)) {
+    // Clipping distances are measured on the source reference, not the query.
+    // A read deletion can make the reference span longer than its sequence.
+    auto source_length = bam_cigar2rlen(aln->core.n_cigar,
+                                       bam_get_cigar(aln));
+    if (num_sclip_start < 0 || num_sclip_end < 0 ||
+        source_length <= num_sclip_start + num_sclip_end) {
         return -1;
     }
     uint32_t *cigar = bam_get_cigar(aln);
@@ -658,6 +663,9 @@ std::vector<uint32_t> ChainMap::lift_cigar_core(
     std::vector<uint32_t> new_cigar;
     int32_t source_offset = 0;
     int32_t removed_source_bases = 0;
+    const hts_pos_t retained_start = num_sclip_start;
+    const hts_pos_t retained_end =
+        bam_cigar2rlen(c->n_cigar, cigar) - num_sclip_end;
 
     auto apply_breakpoint = [&]() {
         int32_t diff = std::get<1>(break_points.front());
@@ -694,7 +702,16 @@ std::vector<uint32_t> ChainMap::lift_cigar_core(
         }
 
         if (!(bam_cigar_type(cigar_op) & 2)) {
-            Cigar::push_cigar(new_cigar, cigar_op_len, cigar_op, false);
+            // Existing S/H do not consume source-reference clipping distance.
+            // An insertion outside the retained source span is clipped along
+            // with its neighboring query bases, rather than using up that
+            // reference distance.
+            unsigned int op = cigar_op;
+            if (op == BAM_CINS &&
+                ((num_sclip_start > 0 && source_offset <= retained_start) ||
+                 (num_sclip_end > 0 && source_offset >= retained_end)))
+                op = BAM_CSOFT_CLIP;
+            Cigar::push_cigar(new_cigar, cigar_op_len, op, false);
             continue;
         }
 
@@ -717,29 +734,27 @@ std::vector<uint32_t> ChainMap::lift_cigar_core(
                         chunk, next_breakpoint - source_offset);
                 }
             }
-            append_reference_chunk(chunk, cigar_op);
+            // Split at source clipping boundaries before composing chain gaps.
+            // Post-composition query clipping loses existing S/H, counts I as
+            // reference bases, and misses D/N that consume reference only.
+            if (source_offset < retained_start) {
+                chunk = std::min<hts_pos_t>(chunk,
+                                            retained_start - source_offset);
+                if (bam_cigar_type(cigar_op) & 1)
+                    Cigar::push_cigar(new_cigar, chunk, BAM_CSOFT_CLIP,
+                                      false);
+            } else if (source_offset >= retained_end) {
+                if (bam_cigar_type(cigar_op) & 1)
+                    Cigar::push_cigar(new_cigar, chunk, BAM_CSOFT_CLIP,
+                                      false);
+            } else {
+                chunk = std::min<hts_pos_t>(chunk,
+                                            retained_end - source_offset);
+                append_reference_chunk(chunk, cigar_op);
+            }
             source_offset += chunk;
             remaining -= chunk;
         }
-    }
-
-    if (num_sclip_start > 0 && !new_cigar.empty()) {
-        std::vector<uint32_t> clipped_cigar;
-        int idx = 0;
-        int query_offset = 0;
-        Cigar::sclip_cigar_front(new_cigar.data(), new_cigar.size(),
-                                 num_sclip_start, clipped_cigar, idx,
-                                 query_offset);
-        for (; idx < static_cast<int>(new_cigar.size()); ++idx) {
-            Cigar::push_cigar(clipped_cigar,
-                              bam_cigar_oplen(new_cigar[idx]),
-                              bam_cigar_op(new_cigar[idx]), false);
-        }
-        new_cigar.swap(clipped_cigar);
-    }
-
-    if (num_sclip_end > 0 && !new_cigar.empty()) {
-        Cigar::sclip_cigar_back(new_cigar, num_sclip_end);
     }
 
     if (new_cigar.empty()) return new_cigar;
