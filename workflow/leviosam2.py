@@ -331,31 +331,31 @@ class Leviosam2Workflow:
         """Run leviosam2."""
         lift_commit_min_mapq_arg = (
             f"-S mapq:{self.lift_commit_min_mapq} "
-            if self.lift_commit_min_mapq
+            if self.lift_commit_min_mapq is not None
             else ""
         )
         lift_commit_min_score_arg = (
             f"-S aln_score:{self.lift_commit_min_score} "
-            if self.lift_commit_min_score
+            if self.lift_commit_min_score is not None
             else ""
         )
         lift_commit_max_frac_clipped_arg = (
             f"-S clipped_frac:{self.lift_commit_max_frac_clipped} "
-            if self.lift_commit_max_frac_clipped
+            if self.lift_commit_max_frac_clipped is not None
             else ""
         )
         lift_commit_max_isize_arg = (
             f"-S isize:{self.lift_commit_max_isize} "
-            if self.lift_commit_max_isize
+            if self.lift_commit_max_isize is not None
             else ""
         )
         lift_commit_max_hdist_arg = (
             f"-S hdist:{self.lift_commit_max_hdist} "
-            if self.lift_commit_max_hdist
+            if self.lift_commit_max_hdist is not None
             else ""
         )
         lift_max_gap_arg = (
-            f"-G {self.lift_max_gap} " if self.lift_max_gap else ""
+            f"-G {self.lift_max_gap} " if self.lift_max_gap is not None else ""
         )
         lift_bed_commit_source_arg = (
             f"-r {self.lift_bed_commit_source} "
