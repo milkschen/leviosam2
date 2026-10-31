@@ -273,6 +273,18 @@ class Workflow(unittest.TestCase):
         workflow = leviosam2.Leviosam2WorkflowIlmnPreset(args)
         self.assertIn("-G 0 ", workflow.run_leviosam2())
 
+    def test_measure_time_initializes_with_output_prefix(self):
+        argv = ["leviosam2.py", "-s", "ilmn_se", "-a", "bowtie2",
+                "-i", "input.bam", "-o", "out/result", "-C", "index.clft",
+                "-f", "target.fa", "--dryrun", "--measure_time",
+                "--gnu_time_exe", "my-time"]
+        with mock.patch.object(sys, "argv", argv):
+            workflow = leviosam2.Leviosam2Workflow(leviosam2.parse_args())
+        workflow._set_filenames()
+        self.assertEqual(workflow.time_cmd, "my-time -v -ao out/result.time_log ")
+        self.assertTrue(workflow.run_leviosam2().startswith(workflow.time_cmd))
+        self.assertTrue(workflow.run_sort_committed().startswith(workflow.time_cmd))
+
     def test_run_sort_committed(self):
         self.workflow.time_cmd = "gtime -v -ao test.time_log "
 

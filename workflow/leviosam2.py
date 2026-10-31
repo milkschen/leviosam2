@@ -939,6 +939,8 @@ class Leviosam2Workflow:
         self.gtime = args.gnu_time_exe
         self.leviosam2 = args.leviosam2_exe
 
+        self.out_prefix = pathlib.Path(args.out_prefix)
+
         # Computational performance measurement related
         self.measure_time = args.measure_time
         self.time_cmd = ""
@@ -950,7 +952,6 @@ class Leviosam2Workflow:
         # Converts file name strings to pathlib.Path()
         self.target_fasta = pathlib.Path(args.target_fasta)
         self.input_bam = pathlib.Path(args.input_bam)
-        self.out_prefix = pathlib.Path(args.out_prefix)
         self.leviosam2_index = pathlib.Path(args.leviosam2_index)
         self.out_format = args.out_format
         if args.target_aligner_index:
