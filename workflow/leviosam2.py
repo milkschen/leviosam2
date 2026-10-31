@@ -7,6 +7,7 @@ Johns Hopkins University
 import argparse
 import logging
 import pathlib
+import shlex
 import subprocess
 from typing import Union
 
@@ -253,7 +254,7 @@ def check_file_exists(fn: pathlib.Path) -> None:
         raise FileNotFoundError(f"{fn} is not a file")
 
 
-def validate_executable(cmd: str, lenient: bool = False) -> None:
+def validate_executable(cmd: Union[str, list], lenient: bool = False) -> None:
     """Validates if an executable is valid.
 
     Args:
@@ -267,7 +268,7 @@ def validate_executable(cmd: str, lenient: bool = False) -> None:
     Returns:
         bool: True if a binary is valid
     """
-    subprocess_out = subprocess.run([cmd], shell=True, capture_output=True)
+    subprocess_out = subprocess.run(cmd if isinstance(cmd, list) else [cmd], capture_output=True)
     if not lenient and subprocess_out.returncode != 0:
         raise ValueError(
             f"`{cmd}` has a non-zero return code `{subprocess_out.returncode}`"
@@ -320,10 +321,10 @@ class Leviosam2Workflow:
             raise KeyError(f"Unsupported aligner: {self.aligner}")
 
     def validate_executables(self) -> None:
-        validate_executable(cmd=f"{self.samtools} --version")
-        validate_executable(cmd=f"{self.bgzip} --version")
+        validate_executable(cmd=[self.samtools, "--version"])
+        validate_executable(cmd=[self.bgzip, "--version"])
         if self.measure_time:
-            validate_executable(cmd=f"{self.gtime} --version")
+            validate_executable(cmd=[self.gtime, "--version"])
         validate_executable(cmd=f"{self.leviosam2}", lenient=True)
         validate_executable(cmd=f"{self.aligner_exe}", lenient=True)
 
@@ -358,26 +359,26 @@ class Leviosam2Workflow:
             f"-G {self.lift_max_gap} " if self.lift_max_gap else ""
         )
         lift_bed_commit_source_arg = (
-            f"-r {self.lift_bed_commit_source} "
+            f"-r {shlex.quote(str(self.lift_bed_commit_source))} "
             if self.lift_bed_commit_source
             else ""
         )
         lift_bed_defer_target_arg = (
-            f"-D {self.lift_bed_defer_target} "
+            f"-D {shlex.quote(str(self.lift_bed_defer_target))} "
             if self.lift_bed_defer_target
             else ""
         )
         lift_realign_config_arg = (
-            f"-x {self.lift_realign_config} "
+            f"-x {shlex.quote(str(self.lift_realign_config))} "
             if self.lift_realign_config
             else ""
         )
 
         cmd = (
             f"{self.time_cmd}"
-            f"{self.leviosam2} lift -C {self.leviosam2_index} -O bam "
-            f"-a {self.input_bam} -p {self.out_prefix} "
-            f"-t {self.num_threads} -m -f {self.target_fasta} "
+            f"{shlex.quote(str(self.leviosam2))} lift -C {shlex.quote(str(self.leviosam2_index))} -O bam "
+            f"-a {shlex.quote(str(self.input_bam))} -p {shlex.quote(str(self.out_prefix))} "
+            f"-t {self.num_threads} -m -f {shlex.quote(str(self.target_fasta))} "
             f"{lift_commit_min_mapq_arg}"
             f"{lift_commit_min_score_arg}"
             f"{lift_commit_max_frac_clipped_arg}"
@@ -394,7 +395,7 @@ class Leviosam2Workflow:
             check_file_exists(self.input_bam)
             if (not self.forcerun) and self._fn_committed.is_file():
                 logger.info(
-                    f"Skip run_leviosam2 -- {self._fn_committed} exists"
+                    f"Skip run_leviosam2 -- {shlex.quote(str(self._fn_committed))} exists"
                 )
                 return SKIP_MSG
             logger.info(cmd)
@@ -412,8 +413,8 @@ class Leviosam2Workflow:
         """
         cmd = (
             f"{self.time_cmd}"
-            f"{self.samtools} sort -@ {self.num_threads} "
-            f"-o {self._fn_committed_sorted} {self._fn_committed}"
+            f"{shlex.quote(str(self.samtools))} sort -@ {self.num_threads} "
+            f"-o {shlex.quote(str(self._fn_committed_sorted))} {shlex.quote(str(self._fn_committed))}"
         )
         if self.dryrun:
             return cmd
@@ -421,7 +422,7 @@ class Leviosam2Workflow:
             check_file_exists(self._fn_committed)
             if (not self.forcerun) and self._fn_committed_sorted.is_file():
                 logger.info(
-                    f"Skip run_sort_committed -- {self._fn_committed_sorted} exists"
+                    f"Skip run_sort_committed -- {shlex.quote(str(self._fn_committed_sorted))} exists"
                 )
                 return SKIP_MSG
             logger.info(cmd)
@@ -441,9 +442,9 @@ class Leviosam2Workflow:
         """
         cmd = (
             f"{self.time_cmd}"
-            f"{self.leviosam2} collate "
-            f"-a {self._fn_committed_sorted} -b {self._fn_deferred} "
-            f"-p {self._prefix_deferred_pe}"
+            f"{shlex.quote(str(self.leviosam2))} collate "
+            f"-a {shlex.quote(str(self._fn_committed_sorted))} -b {shlex.quote(str(self._fn_deferred))} "
+            f"-p {shlex.quote(str(self._prefix_deferred_pe))}"
         )
         if self.dryrun:
             return cmd
@@ -457,8 +458,8 @@ class Leviosam2Workflow:
                 and self._fn_deferred_pe_fq2.is_file()
             ):
                 logger.info(
-                    f"Skip run_collate_pe -- both {self._fn_deferred_pe_fq1} and "
-                    f"{self._fn_deferred_pe_fq2} exist"
+                    f"Skip run_collate_pe -- both {shlex.quote(str(self._fn_deferred_pe_fq1))} and "
+                    f"{shlex.quote(str(self._fn_deferred_pe_fq2))} exist"
                 )
                 return SKIP_MSG
             logger.info(cmd)
@@ -589,13 +590,13 @@ class Leviosam2Workflow:
             fn_out = self._fn_deferred_realigned_se
 
             if self.aligner == "bowtie2":
-                reads = f"-U {self._fn_deferred_fq_se}"
+                reads = f"-U {shlex.quote(str(self._fn_deferred_fq_se))}"
             else:
-                reads = f"{self._fn_deferred_fq_se}"
+                reads = f"{shlex.quote(str(self._fn_deferred_fq_se))}"
 
             cmd_samtools = (
                 f"{self.time_cmd}"
-                f"{self.samtools} sort -@ {num_threads_samtools} -o {fn_out}"
+                f"{shlex.quote(str(self.samtools))} sort -@ {num_threads_samtools} -o {shlex.quote(str(fn_out))}"
             )
         else:
             if self.aligner not in [
@@ -611,39 +612,38 @@ class Leviosam2Workflow:
             fn_out = self._fn_deferred_realigned_pe
 
             if self.aligner == "bowtie2":
-                reads = f"-1 {self._fn_deferred_pe_fq1} -2 {self._fn_deferred_pe_fq2}"
+                reads = f"-1 {shlex.quote(str(self._fn_deferred_pe_fq1))} -2 {shlex.quote(str(self._fn_deferred_pe_fq2))}"
             else:
-                reads = f"{self._fn_deferred_pe_fq1} {self._fn_deferred_pe_fq2}"
+                reads = f"{shlex.quote(str(self._fn_deferred_pe_fq1))} {shlex.quote(str(self._fn_deferred_pe_fq2))}"
 
-            cmd_samtools = f"{self.time_cmd} {self.samtools} view -hbo {fn_out}"
+            cmd_samtools = f"{self.time_cmd} {shlex.quote(str(self.samtools))} view -hbo {shlex.quote(str(fn_out))}"
 
         if self.aligner == "bowtie2":
+            read_group_arg = f"--rg {shlex.quote(self.read_group)}" if self.read_group else ""
             if not self.target_aligner_index:
                 raise ValueError(
-                    f"`{self.target_aligner_index}` is not a valid bowtie2 index path"
+                    f"`{shlex.quote(str(self.target_aligner_index))}` is not a valid bowtie2 index path"
                 )
             cmd = (
                 f"{self.time_cmd}"
-                f"{self.aligner_exe} {self.read_group} "
-                f"-p {num_threads_aln} -x {self.target_aligner_index} {reads} | "
+                f"{shlex.quote(str(self.aligner_exe))} {read_group_arg} "
+                f"-p {num_threads_aln} -x {shlex.quote(str(self.target_aligner_index))} {reads} | "
                 f"{cmd_samtools}"
             )
         elif self.aligner in ["bwamem", "bwamem2"]:
-            if self.read_group != "":
-                self.read_group = f"-R {self.read_group}"
+            read_group_arg = f"-R {shlex.quote(self.read_group)}" if self.read_group else ""
             cmd = (
                 f"{self.time_cmd}"
-                f"{self.aligner_exe} mem {self.read_group} "
-                f"-t {num_threads_aln} {self.target_aligner_index} {reads} | "
+                f"{shlex.quote(str(self.aligner_exe))} mem {read_group_arg} "
+                f"-t {num_threads_aln} {shlex.quote(str(self.target_aligner_index))} {reads} | "
                 f"{cmd_samtools}"
             )
         elif self.aligner == "strobealign":
-            if self.read_group != "":
-                self.read_group = f"--rg {self.read_group}"
+            read_group_arg = f"--rg {shlex.quote(self.read_group)}" if self.read_group else ""
             cmd = (
                 f"{self.time_cmd}"
-                f"{self.aligner_exe} {self.read_group} "
-                f"-t {num_threads_aln} {self.target_aligner_index} {reads} | "
+                f"{shlex.quote(str(self.aligner_exe))} {read_group_arg} "
+                f"-t {num_threads_aln} {shlex.quote(str(self.target_aligner_index))} {reads} | "
                 f"{cmd_samtools}"
             )
         elif self.aligner in ["minimap2", "winnowmap2"]:
@@ -653,12 +653,11 @@ class Leviosam2Workflow:
                 preset = "-x map-hifi"
             elif self.sequence_type == "ont":
                 preset = "-x map-ont"
-            if self.read_group != "":
-                self.read_group = f"-R {self.read_group}"
+            read_group_arg = f"-R {shlex.quote(self.read_group)}" if self.read_group else ""
             cmd = (
                 f"{self.time_cmd}"
-                f"{self.aligner_exe} {self.read_group} -a {preset} --MD "
-                f"-t {num_threads_aln} {self.target_aligner_index} {reads} | "
+                f"{shlex.quote(str(self.aligner_exe))} {read_group_arg} -a {preset} --MD "
+                f"-t {num_threads_aln} {shlex.quote(str(self.target_aligner_index))} {reads} | "
                 f"{cmd_samtools}"
             )
 
@@ -672,7 +671,7 @@ class Leviosam2Workflow:
                 check_file_exists(self._fn_deferred_pe_fq2)
 
             if (not self.forcerun) and fn_out.is_file():
-                logger.info(f"Skip run_realign_deferred -- {fn_out} exists")
+                logger.info(f"Skip run_realign_deferred -- {shlex.quote(str(fn_out))} exists")
                 return SKIP_MSG
             logger.info(cmd)
             return self._run_command(cmd, "run_realign_deferred")
@@ -693,24 +692,24 @@ class Leviosam2Workflow:
         cmd = ""
         cmd += (
             f"{self.time_cmd}"
-            f"{self.samtools} sort -@ {self.num_threads} -n "
-            f"-o {self._fn_deferred_realigned_pe_sortn} "
-            f"{self._fn_deferred_realigned_pe} && "
+            f"{shlex.quote(str(self.samtools))} sort -@ {self.num_threads} -n "
+            f"-o {shlex.quote(str(self._fn_deferred_realigned_pe_sortn))} "
+            f"{shlex.quote(str(self._fn_deferred_realigned_pe))} && "
         )
         cmd += (
             f"{self.time_cmd}"
-            f"{self.samtools} sort -@ {self.num_threads} -n "
-            f"-o {self._fn_deferred_pe_sortn} {self._fn_deferred_pe} && "
+            f"{shlex.quote(str(self.samtools))} sort -@ {self.num_threads} -n "
+            f"-o {shlex.quote(str(self._fn_deferred_pe_sortn))} {shlex.quote(str(self._fn_deferred_pe))} && "
         )
         cmd += (
             f"{self.time_cmd}"
-            f"{self.leviosam2} reconcile "
-            f"-s {self.source_label}:{self._fn_deferred_pe_sortn} "
-            f"-s {self.target_label}:{self._fn_deferred_realigned_pe_sortn} "
+            f"{shlex.quote(str(self.leviosam2))} reconcile "
+            f"-s {shlex.quote(str(self.source_label) + ':' + str(self._fn_deferred_pe_sortn))} "
+            f"-s {shlex.quote(str(self.target_label) + ':' + str(self._fn_deferred_realigned_pe_sortn))} "
             f"-m -o - | "
             f"{self.time_cmd}"
-            f"{self.samtools} sort -@ {self.num_threads} "
-            f"-o {self._fn_deferred_reconciled}"
+            f"{shlex.quote(str(self.samtools))} sort -@ {self.num_threads} "
+            f"-o {shlex.quote(str(self._fn_deferred_reconciled))}"
         )
 
         if self.dryrun:
@@ -722,7 +721,7 @@ class Leviosam2Workflow:
             if (not self.forcerun) and self._fn_deferred_reconciled.is_file():
                 logger.info(
                     "Skip run_refflow_merge_pe -- "
-                    f"{self._fn_deferred_reconciled} exists"
+                    f"{shlex.quote(str(self._fn_deferred_reconciled))} exists"
                 )
                 return SKIP_MSG
             logger.info(cmd)
@@ -742,10 +741,10 @@ class Leviosam2Workflow:
         cmd = ""
         cmd += (
             f"{self.time_cmd}"
-            f"{self.samtools} merge -f -@ {self.num_threads} "
-            f"-o {self._fn_final} {fn_committed_sorted} {fn_in_deferred} && "
+            f"{shlex.quote(str(self.samtools))} merge -f -@ {self.num_threads} "
+            f"-o {shlex.quote(str(self._fn_final))} {shlex.quote(str(fn_committed_sorted))} {shlex.quote(str(fn_in_deferred))} && "
         )
-        cmd += f"{self.time_cmd}" f"{self.samtools} index {self._fn_final}"
+        cmd += f"{self.time_cmd}" f"{shlex.quote(str(self.samtools))} index {shlex.quote(str(self._fn_final))}"
 
         if self.dryrun:
             return cmd
@@ -755,7 +754,7 @@ class Leviosam2Workflow:
 
             if (not self.forcerun) and self._fn_final.is_file():
                 logger.info(
-                    f"Skip run_merge_and_index -- {self._fn_final} exists"
+                    f"Skip run_merge_and_index -- {shlex.quote(str(self._fn_final))} exists"
                 )
                 return SKIP_MSG
             logger.info(cmd)
@@ -766,8 +765,8 @@ class Leviosam2Workflow:
     ) -> Union[str, "subprocess.CompletedProcess[bytes]"]:
         """(Single-end) Convert deferred BAM to FASTQ."""
         cmd = (
-            f"{self.time_cmd}{self.samtools} fastq {self._fn_deferred} | "
-            f"{self.time_cmd}{self.bgzip} > {self._fn_deferred_fq_se}"
+            f"{self.time_cmd}{shlex.quote(str(self.samtools))} fastq {shlex.quote(str(self._fn_deferred))} | "
+            f"{self.time_cmd}{shlex.quote(str(self.bgzip))} > {shlex.quote(str(self._fn_deferred_fq_se))}"
         )
 
         if self.dryrun:
@@ -777,7 +776,7 @@ class Leviosam2Workflow:
 
             if (not self.forcerun) and self._fn_deferred_fq_se.is_file():
                 logger.info(
-                    f"Skip run_bam_to_fastq_se -- {self._fn_deferred_fq_se} exists"
+                    f"Skip run_bam_to_fastq_se -- {shlex.quote(str(self._fn_deferred_fq_se))} exists"
                 )
                 return SKIP_MSG
             logger.info(cmd)
@@ -794,10 +793,10 @@ class Leviosam2Workflow:
         self._cram_completed = False
         fn_final_cram = self._fn_final.with_suffix(".cram")
         cmd = (
-            f"{self.time_cmd}{self.samtools} view -T {self.target_fasta} "
-            f"-O cram -o {fn_final_cram} {self._fn_final} && "
+            f"{self.time_cmd}{shlex.quote(str(self.samtools))} view -T {shlex.quote(str(self.target_fasta))} "
+            f"-O cram -o {shlex.quote(str(fn_final_cram))} {shlex.quote(str(self._fn_final))} && "
         )
-        cmd += f"{self.time_cmd}" f"{self.samtools} index {fn_final_cram}"
+        cmd += f"{self.time_cmd}" f"{shlex.quote(str(self.samtools))} index {shlex.quote(str(fn_final_cram))}"
 
         if self.dryrun:
             return cmd
@@ -943,8 +942,10 @@ class Leviosam2Workflow:
         self.measure_time = args.measure_time
         self.time_cmd = ""
         if args.measure_time:
+            time_log = str(args.out_prefix) + ".time_log"
             self.time_cmd = (
-                f"{self.gtime} -v " f"-ao {self.out_prefix}.time_log "
+                f"{shlex.quote(str(self.gtime))} -v "
+                f"-ao {shlex.quote(time_log)} "
             )
 
         # Converts file name strings to pathlib.Path()
