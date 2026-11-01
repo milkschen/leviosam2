@@ -206,7 +206,8 @@ class Workflow(unittest.TestCase):
                 "args = sys.argv[1:]\n"
                 # Simulate stream consumers; early exit would SIGPIPE producers.
                 "consume = (args[:1] == ['sort'] and args[-2:-1] == ['-o']) or "
-                "(args[:1] == ['view'] and ('-hbo' in args or args == ['view', '-h'])) or not args\n"
+                "(args[:1] == ['view'] and ('-hbo' in args or args == ['view', '-h'])) or "
+                "(not args and os.environ.get('WORKFLOW_FAKE_BGZIP') == '1')\n"
                 "if consume and not sys.stdin.isatty(): sys.stdin.buffer.read()\n"
                 "with open(os.environ['WORKFLOW_ARG_LOG'], 'a') as f: f.write(json.dumps(args) + '\\n')\n"
                 # Exceed pipe capacity so missing consumer reads fail reliably.
@@ -266,7 +267,8 @@ class Workflow(unittest.TestCase):
                 workflow.is_single_end = False
                 workflow.run_refflow_merge_pe()
                 workflow.run_merge_and_index()
-                workflow.run_bam_to_fastq_se()
+                with mock.patch.dict(os.environ, {"WORKFLOW_FAKE_BGZIP": "1"}):
+                    workflow.run_bam_to_fastq_se()
                 workflow.run_bam_to_cram()
             calls = [json.loads(line) for line in log.read_text().splitlines()]
             lift = next(call for call in calls if call and call[0] == "lift")
