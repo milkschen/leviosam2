@@ -69,6 +69,28 @@ also to secondary, supplementary, and unmapped records. `MD` and `NM` are
 removed by default; `-m -f target.fa` recomputes them against the target reference.
 Other auxiliary tags are retained.
 
+### BED interval lifting
+
+```shell
+leviosam2 bed -C source_to_target.clft -b source.bed -p target -G 500
+```
+
+The command writes mapped intervals to `target.bed` and rejected records with
+reasons to `target-unmapped.bed`. BED3–6 and BED12 with optional extra columns
+are supported. BED7–11 records are rejected explicitly. Reverse mappings flip
+the strand and reorder endpoints; BED12 coding bounds and exon block positions
+are transformed and validated. A BED12 record is rejected if its blocks cannot
+all be mapped consistently. Blank lines, comments, and track/browser directives
+are skipped. Zero-length insertion points map only inside an aligned block.
+
+`-G` is an inclusive maximum for each endpoint clip, each source/target gap, and
+the absolute net length change across the retained source span. `-G 0` permits
+gapless mappings. This absolute tolerance differs from UCSC liftOver's mapped
+fraction threshold. Intervals crossing incompatible target contigs, strands,
+or target order are rejected. Existing CLFT indexes do not retain original
+chain IDs: compatible, monotonic blocks can be joined within `-G` even if they
+originated in different chains. The index format has not changed.
+
 ### Full levioSAM2 workflow with selective re-mapping
 
 The levioSAM2 workflow includes lift-over using the `leviosam2-lift` kernel and a selective re-mapping strategy. This approach can improve accuracy.

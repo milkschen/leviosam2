@@ -333,6 +333,35 @@ TEST_F(SyntheticChainMatrixTest, PositionBoundariesMatchAfterSerialization) {
     EXPECT_EQ(restored->lift_contig("src", 100), "*");
 }
 
+TEST(ChainTest, InvalidClippingDoesNotProduceLiftedPositionOrCigar) {
+    const std::string path = write_temporary_file(
+        "chain 1 src 100 + 10 20 dst 100 + 30 40 1\n10\n\n");
+    ASSERT_FALSE(path.empty());
+    chain::LengthMap lengths{{"dst", 100}};
+    chain::ChainMap parsed(path, 0, 10, lengths);
+    const std::string index_path = write_temporary_file("");
+    ASSERT_FALSE(index_path.empty());
+    {
+        std::ofstream out(index_path, std::ios::binary | std::ios::trunc);
+        parsed.serialize(out);
+    }
+    std::ifstream in(index_path, std::ios::binary);
+    chain::ChainMap restored(in, 0, 10);
+    const std::string header_text = "@SQ\tSN:src\tLN:100\n";
+    sam_hdr_t *header = sam_hdr_parse(header_text.size(), header_text.c_str());
+    ASSERT_NE(header, nullptr);
+    for (auto *map : {&parsed, &restored}) {
+        // After the last block there is no right-hand block to clip to.
+        EXPECT_EQ(map->lift_pos("src", 25, 10, true), -1);
+        BamPtr alignment = parse_alignment(header, "src", 25, "1M");
+        ASSERT_NE(alignment, nullptr);
+        EXPECT_EQ(map->lift_cigar("src", alignment.get()), -1);
+    }
+    sam_hdr_destroy(header);
+    unlink(path.c_str());
+    unlink(index_path.c_str());
+}
+
 TEST_F(SyntheticChainMatrixTest, CigarBoundaryAndGapMatrix) {
     // Exact interval ends and starts do not acquire a chain-gap operation.
     expect_cigar("src", 15, "5M", "5M");

@@ -116,6 +116,12 @@ class ChainMap {
     
     void add_interval(const std::string& contig, const Interval& interval);
 
+    // Read-only access for interval-aware BED projection.
+    const std::vector<Interval>* intervals_for(const std::string& contig) const {
+        auto it = interval_map.find(contig);
+        return it == interval_map.end() ? nullptr : &it->second;
+    }
+
    private:
     void init_rs();
 

@@ -535,6 +535,8 @@ int ChainMap::lift_cigar(const std::string &contig, bam1_t *aln) {
     int32_t num_sclip_end =
         get_num_clipped(pos_end, false, contig, end_sidx, end_eidx);
 
+    if (num_sclip_start < 0 || num_sclip_end < 0) return -1;
+
     return lift_cigar(contig, aln, start_sidx, end_sidx, num_sclip_start,
                       num_sclip_end);
 }
@@ -1415,14 +1417,14 @@ hts_pos_t ChainMap::lift_pos(const std::string &contig, const hts_pos_t &pos,
     if (left) {
         int32_t num_sclip_start =
             get_num_clipped(pos, true, contig, sidx, eidx);
-        if (num_sclip_start > allowed_gaps) {
+        if (num_sclip_start < 0 || num_sclip_start > allowed_gaps) {
             return -1;
         }
         chain::Interval intvl = this->interval_map[contig][sidx];
         return lift_pos(pos, intvl) + num_sclip_start;
     } else {
         int32_t num_sclip_end = get_num_clipped(pos, false, contig, sidx, eidx);
-        if (num_sclip_end > allowed_gaps) {
+        if (num_sclip_end < 0 || num_sclip_end > allowed_gaps) {
             return -1;
         }
         chain::Interval intvl = this->interval_map[contig][sidx];

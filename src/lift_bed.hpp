@@ -27,7 +27,7 @@ struct lift_bed_opts {
 
 void print_lift_bed_help_msg();
 
-int lift_bed_record(chain::ChainMap& cmap, const std::string& line,
+int lift_bed_record(chain::ChainMap& cmap, std::string& line,
                     const int& allowed_gaps);
 void lift_bed(lift_bed_opts& args);
 int lift_bed_run(int argc, char** argv);
