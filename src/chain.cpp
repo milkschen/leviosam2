@@ -165,8 +165,8 @@ ChainMap::ChainMap(std::string fname, int verbose, int allowed_intvl_gaps,
     bool current_ss = true;
     while (getline(chain_f, line)) {
         parse_chain_line(line, source, target, source_len, source_offset,
-                         target_offset, current_ss, start_bv_map,
-                         end_bv_map, lm);
+                         target_offset, current_ss, start_bv_map, end_bv_map,
+                         lm);
     }
     chain_f.close();
     if (interval_map.empty()) {
@@ -262,7 +262,8 @@ void ChainMap::debug_print_intervals(std::string contig, const int n) {
  * @param contig The contig/chromosome name to add the interval to
  * @param interval The interval to add
  */
-void ChainMap::add_interval(const std::string& contig, const Interval& interval) {
+void ChainMap::add_interval(const std::string &contig,
+                            const Interval &interval) {
     interval_map[contig].push_back(interval);
 }
 
@@ -279,15 +280,16 @@ bool ChainMap::validate_intervals() {
         std::vector<chain::Interval> v = interval_map[itr.first];
         for (int i = 0; i < v.size() - 1; i++) {
             if (v[i].source_end > v[i + 1].source_start) {
-                std::cerr << "[E::chain::validate_intervals]  "
-                          << itr.first << "\n";
+                std::cerr << "[E::chain::validate_intervals]  " << itr.first
+                          << "\n";
                 v[i].debug_print_interval();
                 v[i + 1].debug_print_interval();
                 return false;
             }
         }
     }
-    std::cerr << "[I::chain::validate_intervals] Interval validation: passed (no overlaps)\n";
+    std::cerr << "[I::chain::validate_intervals] Interval validation: passed "
+                 "(no overlaps)\n";
     return true;
 }
 
@@ -710,11 +712,10 @@ std::vector<uint32_t> ChainMap::lift_cigar_core(
 
             uint32_t chunk = remaining;
             if (!break_points.empty()) {
-                int32_t next_breakpoint =
-                    std::get<0>(break_points.front());
+                int32_t next_breakpoint = std::get<0>(break_points.front());
                 if (next_breakpoint > source_offset) {
-                    chunk = std::min<uint32_t>(
-                        chunk, next_breakpoint - source_offset);
+                    chunk = std::min<uint32_t>(chunk,
+                                               next_breakpoint - source_offset);
                 }
             }
             append_reference_chunk(chunk, cigar_op);
@@ -731,8 +732,7 @@ std::vector<uint32_t> ChainMap::lift_cigar_core(
                                  num_sclip_start, clipped_cigar, idx,
                                  query_offset);
         for (; idx < static_cast<int>(new_cigar.size()); ++idx) {
-            Cigar::push_cigar(clipped_cigar,
-                              bam_cigar_oplen(new_cigar[idx]),
+            Cigar::push_cigar(clipped_cigar, bam_cigar_oplen(new_cigar[idx]),
                               bam_cigar_op(new_cigar[idx]), false);
         }
         new_cigar.swap(clipped_cigar);
@@ -849,11 +849,10 @@ int32_t ChainMap::get_num_clipped(const int32_t pos, const bool leftmost,
         // there is no preceding end marker. Distinguish an in-interval query
         // from a query in the following gap using the actual half-open source
         // coordinates.
-        bool within_interval =
-            leftmost ? (pos >= curr_intvl.source_start &&
-                        pos < curr_intvl.source_end)
-                     : (pos > curr_intvl.source_start &&
-                        pos <= curr_intvl.source_end);
+        bool within_interval = leftmost ? (pos >= curr_intvl.source_start &&
+                                           pos < curr_intvl.source_end)
+                                        : (pos > curr_intvl.source_start &&
+                                           pos <= curr_intvl.source_end);
         if (within_interval) return 0;
         // Advance sidx if we are checking the starting pos of a query
         // Keep sidx unchanged if we are checking the ending pos
@@ -1499,9 +1498,8 @@ bool ChainMap::check_multi_intvl_legality(const std::string &source_contig,
     };
     // Check the gap size between the intervals. Reverse intervals need the
     // full coordinate transform rather than their raw stored offset.
-    int64_t chain_gap =
-        std::abs(transform_offset(next_sintvl) -
-                 transform_offset(start_sintvl));
+    int64_t chain_gap = std::abs(transform_offset(next_sintvl) -
+                                 transform_offset(start_sintvl));
     if (chain_gap > allowed_intvl_gaps) {
         if (verbose >= VERBOSE_INFO) {
             std::cerr

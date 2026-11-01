@@ -82,7 +82,7 @@ class FastqRecord {
 
 class WriteDeferred {
    public:
-    WriteDeferred() : write_deferred(false){};
+    WriteDeferred() : write_deferred(false) {};
 
     void init(const SplitRules& split_rules, sam_hdr_t* ihdr, sam_hdr_t* ohdr,
               const BedUtils::Bed& b_defer_source,

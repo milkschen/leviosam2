@@ -152,8 +152,7 @@ TEST(CigarTest, UpdateCigar) {
     EXPECT_EQ(cigar[2], expanded_cigar[2]);
     std::string expected_seq = "ACGTACGTAC";
     for (int i = 0; i < aln->core.l_qseq; ++i) {
-        EXPECT_EQ(seq_nt16_str[bam_seqi(bam_get_seq(aln), i)],
-                  expected_seq[i]);
+        EXPECT_EQ(seq_nt16_str[bam_seqi(bam_get_seq(aln), i)], expected_seq[i]);
         EXPECT_EQ(bam_get_qual(aln)[i], 40);
     }
     uint8_t* mc = bam_aux_get(aln, "MC");

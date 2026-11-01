@@ -65,4 +65,3 @@ TEST(ReconcileTest, SelectBestAlnFourBest) {
     EXPECT_TRUE(rank == 0 || rank == 1 || rank == 2);
     EXPECT_EQ(ntb, 4);
 }
-

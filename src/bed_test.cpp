@@ -67,7 +67,7 @@ TEST(BedTest, AddBedRecord) {
     int idx_contig_cnt = b.index();
     int contig_cnt = 0;
     // Index the interval trees for each contig
-    for (auto& itr: b.get_intervals()) {
+    for (auto& itr : b.get_intervals()) {
         contig_cnt += 1;
     }
     EXPECT_EQ(contig_cnt, 2);
@@ -86,4 +86,3 @@ TEST(BedTest, AddBedRecord) {
     EXPECT_EQ(b.intersect("chr1", 1500), 0);
     EXPECT_EQ(b.intersect("chr15", 1000), 0);
 }
-

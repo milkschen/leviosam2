@@ -93,9 +93,7 @@ def parse_args() -> argparse.Namespace:
         "--aligner_exe",
         type=str,
         default="auto",
-        help=(
-            "Path to the aligner executable. If empty, inferred using `--aligner`"
-        ),
+        help=("Path to the aligner executable. If empty, inferred using `--aligner`"),
     )
     parser.add_argument(
         "--source_label",
@@ -110,8 +108,13 @@ def parse_args() -> argparse.Namespace:
         help="Label of the target reference",
     )
     parser.add_argument(
-        "--read_group", type=str, default="", help=("Read group string; for bowtie2, pass options such as "
-        "--rg-id ID --rg SM:sample, quoting values containing spaces")
+        "--read_group",
+        type=str,
+        default="",
+        help=(
+            "Read group string; for bowtie2, pass options such as "
+            "--rg-id ID --rg SM:sample, quoting values containing spaces"
+        ),
     )
     parser.add_argument(
         "-g",
@@ -270,7 +273,9 @@ def validate_executable(cmd: Union[str, list], lenient: bool = False) -> None:
     Returns:
         bool: True if a binary is valid
     """
-    subprocess_out = subprocess.run(cmd if isinstance(cmd, list) else [cmd], capture_output=True)
+    subprocess_out = subprocess.run(
+        cmd if isinstance(cmd, list) else [cmd], capture_output=True
+    )
     if not lenient and subprocess_out.returncode != 0:
         raise ValueError(
             f"`{cmd}` has a non-zero return code `{subprocess_out.returncode}`"
@@ -306,9 +311,7 @@ class Leviosam2Workflow:
         try:
             return subprocess.run(["bash", "-o", "pipefail", "-c", cmd], check=True)
         except subprocess.CalledProcessError as error:
-            logger.error(
-                "%s failed (exit %s): %s", stage, error.returncode, cmd
-            )
+            logger.error("%s failed (exit %s): %s", stage, error.returncode, cmd)
             raise
 
     def _infer_aligner_exe(self):
@@ -396,9 +399,7 @@ class Leviosam2Workflow:
         else:
             check_file_exists(self.input_bam)
             if (not self.forcerun) and self._fn_committed.is_file():
-                logger.info(
-                    f"Skip run_leviosam2 -- {self._fn_committed} exists"
-                )
+                logger.info(f"Skip run_leviosam2 -- {self._fn_committed} exists")
                 return SKIP_MSG
             logger.info(cmd)
             return self._run_command(cmd, "run_leviosam2")
@@ -633,7 +634,9 @@ class Leviosam2Workflow:
                 f"{cmd_samtools}"
             )
         elif self.aligner in ["bwamem", "bwamem2"]:
-            read_group_arg = f"-R {shlex.quote(self.read_group)}" if self.read_group else ""
+            read_group_arg = (
+                f"-R {shlex.quote(self.read_group)}" if self.read_group else ""
+            )
             cmd = (
                 f"{self.time_cmd}"
                 f"{shlex.quote(str(self.aligner_exe))} mem {read_group_arg} "
@@ -641,7 +644,9 @@ class Leviosam2Workflow:
                 f"{cmd_samtools}"
             )
         elif self.aligner == "strobealign":
-            read_group_arg = f"--rg {shlex.quote(self.read_group)}" if self.read_group else ""
+            read_group_arg = (
+                f"--rg {shlex.quote(self.read_group)}" if self.read_group else ""
+            )
             cmd = (
                 f"{self.time_cmd}"
                 f"{shlex.quote(str(self.aligner_exe))} {read_group_arg} "
@@ -655,7 +660,9 @@ class Leviosam2Workflow:
                 preset = "-x map-hifi"
             elif self.sequence_type == "ont":
                 preset = "-x map-ont"
-            read_group_arg = f"-R {shlex.quote(self.read_group)}" if self.read_group else ""
+            read_group_arg = (
+                f"-R {shlex.quote(self.read_group)}" if self.read_group else ""
+            )
             cmd = (
                 f"{self.time_cmd}"
                 f"{shlex.quote(str(self.aligner_exe))} {read_group_arg} -a {preset} --MD "
@@ -746,7 +753,10 @@ class Leviosam2Workflow:
             f"{shlex.quote(str(self.samtools))} merge -f -@ {self.num_threads} "
             f"-o {shlex.quote(str(self._fn_final))} {shlex.quote(str(fn_committed_sorted))} {shlex.quote(str(fn_in_deferred))} && "
         )
-        cmd += f"{self.time_cmd}" f"{shlex.quote(str(self.samtools))} index {shlex.quote(str(self._fn_final))}"
+        cmd += (
+            f"{self.time_cmd}"
+            f"{shlex.quote(str(self.samtools))} index {shlex.quote(str(self._fn_final))}"
+        )
 
         if self.dryrun:
             return cmd
@@ -755,9 +765,7 @@ class Leviosam2Workflow:
             check_file_exists(fn_in_deferred)
 
             if (not self.forcerun) and self._fn_final.is_file():
-                logger.info(
-                    f"Skip run_merge_and_index -- {self._fn_final} exists"
-                )
+                logger.info(f"Skip run_merge_and_index -- {self._fn_final} exists")
                 return SKIP_MSG
             logger.info(cmd)
             return self._run_command(cmd, "run_merge_and_index")
@@ -798,7 +806,10 @@ class Leviosam2Workflow:
             f"{self.time_cmd}{shlex.quote(str(self.samtools))} view -T {shlex.quote(str(self.target_fasta))} "
             f"-O cram -o {shlex.quote(str(fn_final_cram))} {shlex.quote(str(self._fn_final))} && "
         )
-        cmd += f"{self.time_cmd}" f"{shlex.quote(str(self.samtools))} index {shlex.quote(str(fn_final_cram))}"
+        cmd += (
+            f"{self.time_cmd}"
+            f"{shlex.quote(str(self.samtools))} index {shlex.quote(str(fn_final_cram))}"
+        )
 
         if self.dryrun:
             return cmd
@@ -852,28 +863,20 @@ class Leviosam2Workflow:
         o_fmt = "bam"
 
         self._fn_committed = o_dir / f"{o_prefix}-committed.{o_fmt}"
-        self._fn_committed_sorted = (
-            o_dir / f"{o_prefix}-committed-sorted.{o_fmt}"
-        )
+        self._fn_committed_sorted = o_dir / f"{o_prefix}-committed-sorted.{o_fmt}"
         self._fn_deferred = o_dir / f"{o_prefix}-deferred.{o_fmt}"
         self._fn_final = o_dir / f"{o_prefix}-final.{o_fmt}"
 
         # paired-end
         self._prefix_deferred_pe = o_dir / f"{o_prefix}-paired"
-        self._fn_deferred_pe_fq1 = (
-            o_dir / f"{o_prefix}-paired-deferred-R1.fq.gz"
-        )
-        self._fn_deferred_pe_fq2 = (
-            o_dir / f"{o_prefix}-paired-deferred-R2.fq.gz"
-        )
+        self._fn_deferred_pe_fq1 = o_dir / f"{o_prefix}-paired-deferred-R1.fq.gz"
+        self._fn_deferred_pe_fq2 = o_dir / f"{o_prefix}-paired-deferred-R2.fq.gz"
         self._fn_committed_pe = o_dir / f"{o_prefix}-paired-committed.{o_fmt}"
         self._fn_deferred_pe = o_dir / f"{o_prefix}-paired-deferred.{o_fmt}"
         self._fn_deferred_pe_sortn = (
             o_dir / f"{o_prefix}-paired-deferred-sorted_n.{o_fmt}"
         )
-        self._fn_deferred_realigned_pe = (
-            o_dir / f"{o_prefix}-paired-realigned.{o_fmt}"
-        )
+        self._fn_deferred_realigned_pe = o_dir / f"{o_prefix}-paired-realigned.{o_fmt}"
         self._fn_deferred_realigned_pe_sortn = (
             o_dir / f"{o_prefix}-paired-realigned-sorted_n.{o_fmt}"
         )
@@ -948,8 +951,7 @@ class Leviosam2Workflow:
         if args.measure_time:
             time_log = str(args.out_prefix) + ".time_log"
             self.time_cmd = (
-                f"{shlex.quote(str(self.gtime))} -v "
-                f"-ao {shlex.quote(time_log)} "
+                f"{shlex.quote(str(self.gtime))} -v " f"-ao {shlex.quote(time_log)} "
             )
 
         # Converts file name strings to pathlib.Path()
@@ -1033,8 +1035,7 @@ class Leviosam2WorkflowOntPreset(Leviosam2Workflow):
             )
         if self.aligner not in ["minimap2", "winnowmap2"]:
             raise ValueError(
-                "Invalid aligner for Leviosam2WorkflowOntPreset: "
-                f"`{self.aligner}`"
+                "Invalid aligner for Leviosam2WorkflowOntPreset: " f"`{self.aligner}`"
             )
         if args.use_preset:
             self.lift_max_gap = 1500
@@ -1044,13 +1045,19 @@ class Leviosam2WorkflowOntPreset(Leviosam2Workflow):
 def run_workflow(args: argparse.Namespace):
     if args.use_preset:
         presets = {
-            **{(sequence, aligner): Leviosam2WorkflowIlmnPreset
-               for sequence in ("ilmn_se", "ilmn_pe")
-               for aligner in ("bowtie2", "bwamem", "bwamem2")},
-            **{("pb_hifi", aligner): Leviosam2WorkflowPacbioHifiPreset
-               for aligner in ("minimap2", "winnowmap2")},
-            **{("ont", aligner): Leviosam2WorkflowOntPreset
-               for aligner in ("minimap2", "winnowmap2")},
+            **{
+                (sequence, aligner): Leviosam2WorkflowIlmnPreset
+                for sequence in ("ilmn_se", "ilmn_pe")
+                for aligner in ("bowtie2", "bwamem", "bwamem2")
+            },
+            **{
+                ("pb_hifi", aligner): Leviosam2WorkflowPacbioHifiPreset
+                for aligner in ("minimap2", "winnowmap2")
+            },
+            **{
+                ("ont", aligner): Leviosam2WorkflowOntPreset
+                for aligner in ("minimap2", "winnowmap2")
+            },
         }
         try:
             preset = presets[(args.sequence_type, args.aligner)]
