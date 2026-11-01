@@ -513,9 +513,11 @@ void ChainMap::parse_chain_line(std::string line, std::string &source,
 /**
  * Lift the CIGAR in place, looking up source intervals from POS and the CIGAR's
  * reference span, then delegating to the indexed overload. SEQ may be absent.
- * Returns 0 on success or -1 for a failed lookup/transformation. On failure the
- * CIGAR may already be modified. Coordinates, flags and sequence orientation
- * are handled by the alignment-lifting caller.
+ * Coordinates, flags and sequence orientation are handled by the caller.
+ *
+ * @param contig Read-only source contig name for interval lookup.
+ * @param aln Source-positioned alignment; its CIGAR may change even on failure.
+ * @return 0 on success, or -1 if interval lookup or CIGAR transformation fails.
  */
 int ChainMap::lift_cigar(const std::string &contig, bam1_t *aln) {
     bam1_core_t *c = &(aln->core);
@@ -538,17 +540,21 @@ int ChainMap::lift_cigar(const std::string &contig, bam1_t *aln) {
 }
 
 /**
- * Lift the CIGAR in place using the first/last retained source interval indexes.
- * Callers must ensure interval compatibility. num_sclip_start/num_sclip_end are
- * nonnegative source-reference distances: M/=/X/D/N consume them, I/S/H do not.
+ * Lift the CIGAR in place using compatible retained source interval indexes.
+ * Clipping distances count source-reference bases: M/=/X/D/N consume them,
+ * I/S/H do not. Clipped query becomes S; hard clips and total query consumption
+ * are preserved even when SEQ is absent. Chain gaps are composed into the
+ * alignment, =/X become M, and operation order reverses for a reverse mapping.
+ * Coordinates, flags and SEQ are not lifted here.
  *
- * Query bases outside the retained span become S; existing hard clips and total
- * CIGAR query consumption are preserved even when SEQ is absent. Chain gaps are
- * composed into the alignment, =/X are normalized to M, and operation order is
- * reversed for a reverse mapping. Coordinates, flags and SEQ are not lifted here.
- *
- * Returns 0 on success or -1 for invalid clipping, an entirely clipped source
- * span, or a result with no M/I/D/N operation. Failure may leave the CIGAR changed.
+ * @param contig Read-only source contig name for chain intervals.
+ * @param aln Source-positioned alignment; its CIGAR may change even on failure.
+ * @param start_sidx First retained source interval index after endpoint clipping.
+ * @param end_sidx Last retained source interval index after endpoint clipping.
+ * @param num_sclip_start Nonnegative source-reference bases clipped at the start.
+ * @param num_sclip_end Nonnegative source-reference bases clipped at the end.
+ * @return 0 on success, or -1 for invalid clipping, an entirely clipped source
+ * span, or a result with no M/I/D/N operation.
  */
 int ChainMap::lift_cigar(const std::string &contig, bam1_t *aln,
                          const int &start_sidx, const int &end_sidx,
@@ -640,18 +646,22 @@ int ChainMap::lift_cigar(const std::string &contig, bam1_t *aln,
 }
 
 /**
- * Build a vector of HTSlib-encoded CIGAR operations without modifying aln.
- * Expects source POS, =/X already normalized to M, compatible interval indexes,
- * and validated source-reference clipping distances.
+ * Build a CIGAR vector by source-reference consumption, splitting at clipping
+ * boundaries and chain breakpoints. Clipped query becomes S and clipped D/N
+ * disappear; existing S/H do not consume clipping distance. Compose gaps as D/I
+ * while preserving query consumption and hard clips and combining soft clips.
+ * Convert I at either vector end to S, then reverse for a reverse mapping.
+ * The wrapper applies the result and checks it; this helper does not modify aln.
  *
- * Traverse source-reference consumption, splitting at clipping boundaries and
- * chain breakpoints. Clipped query becomes S, while clipped D/N disappear;
- * existing S/H do not consume clipping distance. Compose chain gaps as D/I,
- * preserving query consumption and hard clips and combining soft clips. Convert
- * I at either vector end to S, then reverse the vector for a reverse mapping.
- *
- * May return an empty vector. The wrapper checks for a retained M/I/D/N and
- * applies the result to the record; this helper returns no status code.
+ * @param contig Read-only source contig name for chain intervals.
+ * @param aln Read-only source-positioned alignment with =/X normalized to M.
+ * @param start_sidx First retained source interval index; must be compatible
+ * with end_sidx.
+ * @param end_sidx Last retained source interval index.
+ * @param num_sclip_start Validated source-reference bases clipped at the start.
+ * @param num_sclip_end Validated source-reference bases clipped at the end.
+ * @return Vector of HTSlib-encoded CIGAR operations, possibly empty;
+ * no status code.
  */
 std::vector<uint32_t> ChainMap::lift_cigar_core(
     const std::string &contig, bam1_t *aln, const int &start_sidx,
