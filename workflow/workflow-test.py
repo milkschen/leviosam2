@@ -203,7 +203,14 @@ class Workflow(unittest.TestCase):
             tool.write_text(
                 "#!/usr/bin/env python3\n"
                 "import json, os, sys\n"
-                "with open(os.environ['WORKFLOW_ARG_LOG'], 'a') as f: f.write(json.dumps(sys.argv[1:]) + '\\n')\n"
+                "args = sys.argv[1:]\n"
+                # Simulate stream consumers; early exit would SIGPIPE producers.
+                "consume = (args[:1] == ['sort'] and args[-2:-1] == ['-o']) or "
+                "(args[:1] == ['view'] and ('-hbo' in args or args == ['view', '-h'])) or not args\n"
+                "if consume and not sys.stdin.isatty(): sys.stdin.buffer.read()\n"
+                "with open(os.environ['WORKFLOW_ARG_LOG'], 'a') as f: f.write(json.dumps(args) + '\\n')\n"
+                # Exceed pipe capacity so missing consumer reads fail reliably.
+                "if args[:1] == ['reconcile']: sys.stdout.write('x' * (128 * 1024))\n"
                 "print('first line\\nsecond line')\n"
             )
             tool.chmod(0o755)
