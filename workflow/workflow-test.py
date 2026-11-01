@@ -7,6 +7,9 @@ Tests of the workflow/leviosam2.py workflow.
 """
 import argparse
 import copy
+import json
+import os
+import shlex
 import pathlib
 import sys
 import subprocess
@@ -72,6 +75,19 @@ class Workflow(unittest.TestCase):
         self.args = args
         self.workflow = leviosam2.Leviosam2Workflow(args)
         self.workflow._set_filenames()
+
+    def test_workflow_output_format_choices(self):
+        argv = ["leviosam2.py", "-s", "ilmn_se", "-a", "bowtie2",
+                "-i", "input.bam", "-o", "result", "-C", "index.clft",
+                "-f", "target.fa"]
+        for output_format in ("bam", "cram"):
+            with self.subTest(output_format=output_format), mock.patch.object(
+                    sys, "argv", argv + ["-O", output_format]):
+                self.assertEqual(leviosam2.parse_args().out_format, output_format)
+        with mock.patch.object(sys, "argv", argv + ["-O", "sam"]), \
+                mock.patch("sys.stderr"), self.assertRaises(SystemExit) as error:
+            leviosam2.parse_args()
+        self.assertEqual(error.exception.code, 2)
 
     def failure_workflow(self, directory):
         workflow = copy.deepcopy(self.workflow)
@@ -258,10 +274,12 @@ class Workflow(unittest.TestCase):
                 marker = pathlib.Path(directory) / "index-ran"
                 tool = pathlib.Path(directory) / "samtools.sh"
                 tool.write_text(
+                    '#!/bin/sh\n'
                     'if [ "$1" = "index" ]; then touch ' + str(marker) + '; fi\n'
                     'if [ "$1" = "' + failed_stage + '" ]; then exit 23; fi\n'
                 )
-                workflow.samtools = "bash " + str(tool)
+                tool.chmod(0o755)
+                workflow.samtools = str(tool)
                 # Isolate the finalization path; all preceding stages succeeded.
                 stages = ["run_leviosam2", "run_sort_committed", "run_collate_pe",
                           "run_realign_deferred", "run_refflow_merge_pe",
@@ -289,6 +307,126 @@ class Workflow(unittest.TestCase):
     # TODO
     # def test_set_filenames_paired_end(self):
     #     pass
+
+    def test_shell_arguments_with_metacharacters(self):
+        with tempfile.TemporaryDirectory(prefix="workflow space ; ") as directory:
+            root = pathlib.Path(directory)
+            log = root / "argv log"
+            tool = root / "fake tool ; name"
+            tool.write_text(
+                "#!/usr/bin/env python3\n"
+                "import json, os, pathlib, sys\n"
+                "args = sys.argv[1:]\n"
+                # Fake stream consumers must read input before exiting (pipefail).
+                "consume = (args[:1] == ['sort'] and args[-2:-1] == ['-o']) or "
+                "(args[:1] == ['view'] and ('-hbo' in args or args == ['view', '-h'])) or "
+                "(not args and os.environ.get('WORKFLOW_FAKE_BGZIP') == '1')\n"
+                "if consume and not sys.stdin.isatty(): sys.stdin.buffer.read()\n"
+                "with open(os.environ['WORKFLOW_ARG_LOG'], 'a') as f: f.write(json.dumps(args) + '\\n')\n"
+                # Completion markers require actual outputs from successful tools.
+                "def output(name): pathlib.Path(name).write_text('complete')\n"
+                "if '-o' in args and args[args.index('-o') + 1] != '-': output(args[args.index('-o') + 1])\n"
+                "if '-hbo' in args: output(args[args.index('-hbo') + 1])\n"
+                "if args[:1] == ['lift']:\n"
+                "    prefix = args[args.index('-p') + 1]\n"
+                "    for suffix in ('-committed.bam', '-deferred.bam', '-unliftable.bam'): output(prefix + suffix)\n"
+                "if args[:1] == ['collate']:\n"
+                "    prefix = args[args.index('-p') + 1]\n"
+                "    for suffix in ('-committed.bam', '-deferred.bam', '-deferred-R1.fq.gz', '-deferred-R2.fq.gz'): output(prefix + suffix)\n"
+                "if args[:1] == ['index']: output(args[-1] + ('.crai' if args[-1].endswith('.cram') else '.bai'))\n"
+                "if args[:1] == ['reconcile']: sys.stdout.write('x' * (128 * 1024))\n"
+                "print('first line\\nsecond line')\n"
+            )
+            tool.chmod(0o755)
+            self.args.measure_time = True
+            self.args.gnu_time_exe = str(tool)
+            self.args.out_prefix = str(root / "timed ; result")
+            timed = leviosam2.Leviosam2Workflow(self.args)
+            self.assertEqual(shlex.split(timed.time_cmd), [str(tool), "-v", "-ao", self.args.out_prefix + ".time_log"])
+            self.args.measure_time = False
+            workflow = self.failure_workflow(directory)
+            workflow.out_prefix = root / "result ; $(touch INJECTED)"
+            workflow.target_fasta = root / "target ; ref"
+            workflow.leviosam2_index = root / "index ; file"
+            workflow.target_aligner_index = root / "aligner index ; file"
+            workflow.lift_bed_commit_source = str(root / "bed ; file")
+            workflow.source_label = "source ; label"
+            workflow.target_label = "target ; label"
+            workflow.read_group = "ID:foo SM:bar ; $(touch INJECTED)"
+            workflow.leviosam2 = workflow.samtools = workflow.bgzip = workflow.aligner_exe = str(tool)
+            workflow._set_filenames()
+            for name in ("_fn_committed", "_fn_committed_sorted", "_fn_deferred", "_fn_deferred_pe_fq1", "_fn_deferred_pe_fq2", "_fn_deferred_realigned_pe", "_fn_deferred_pe", "_fn_committed_pe", "_fn_deferred_reconciled", "_fn_final"):
+                getattr(workflow, name).touch()
+            with mock.patch.dict(os.environ, {"WORKFLOW_ARG_LOG": str(log)}):
+                workflow.validate_executables()
+                workflow.run_leviosam2()
+                workflow.run_sort_committed()
+                workflow.run_collate_pe()
+                for aligner, flag in (("bowtie2", "--rg"), ("bwamem", "-R"), ("bwamem2", "-R"), ("strobealign", "--rg"), ("minimap2", "-R"), ("winnowmap2", "-R")):
+                    workflow.aligner = aligner
+                    workflow.read_group = ("--rg-id foo --rg 'SM:sample name' ; $(touch INJECTED)"
+                                           if aligner == "bowtie2" else
+                                           "ID:foo SM:bar ; $(touch INJECTED)")
+                    read_group = workflow.read_group
+                    workflow.is_single_end = aligner in ("minimap2", "winnowmap2")
+                    workflow._fn_deferred_fq_se.touch()
+                    workflow.dryrun = True
+                    first = workflow.run_realign_deferred()
+                    self.assertEqual(first, workflow.run_realign_deferred())
+                    self.assertEqual(workflow.read_group, read_group)
+                    workflow.dryrun = False
+                    workflow.run_realign_deferred()
+                    calls = [json.loads(line) for line in log.read_text().splitlines()]
+                    align_call = next(call for call in reversed(calls) if flag in call)
+                    if aligner == "bowtie2":
+                        self.assertEqual(align_call[align_call.index("--rg-id") + 1], "foo")
+                        self.assertEqual(align_call[align_call.index("--rg") + 1], "SM:sample name")
+                        self.assertIn(";", align_call)
+                    else:
+                        self.assertEqual(align_call[align_call.index(flag) + 1], read_group)
+                workflow.is_single_end = False
+                workflow.run_refflow_merge_pe()
+                workflow.run_merge_and_index()
+                with mock.patch.dict(os.environ, {"WORKFLOW_FAKE_BGZIP": "1"}):
+                    workflow.run_bam_to_fastq_se()
+                workflow.run_bam_to_cram()
+                workflow.forcerun = False
+                self.assertEqual(workflow.run_leviosam2(), leviosam2.SKIP_MSG)
+            calls = [json.loads(line) for line in log.read_text().splitlines()]
+            lift = next(call for call in calls if call and call[0] == "lift")
+            self.assertEqual(lift[lift.index("-p") + 1], str(workflow.out_prefix))
+            self.assertEqual(lift[lift.index("-r") + 1], workflow.lift_bed_commit_source)
+            reconcile = next(call for call in calls if call and call[0] == "reconcile")
+            self.assertIn(workflow.source_label + ":" + str(workflow._fn_deferred_pe_sortn), reconcile)
+            self.assertFalse((pathlib.Path.cwd() / "INJECTED").exists())
+
+    def test_preset_combination_matrix(self):
+        supported = {
+            **{(sequence, aligner): leviosam2.Leviosam2WorkflowIlmnPreset
+               for sequence in ("ilmn_se", "ilmn_pe")
+               for aligner in ("bowtie2", "bwamem", "bwamem2")},
+            **{("pb_hifi", aligner): leviosam2.Leviosam2WorkflowPacbioHifiPreset
+               for aligner in ("minimap2", "winnowmap2")},
+            **{("ont", aligner): leviosam2.Leviosam2WorkflowOntPreset
+               for aligner in ("minimap2", "winnowmap2")},
+        }
+        self.args.use_preset = True
+        for sequence in ("ilmn_pe", "ilmn_se", "pb_hifi", "ont"):
+            for aligner in ("bowtie2", "bwamem", "bwamem2", "minimap2", "winnowmap2", "strobealign"):
+                with self.subTest(sequence=sequence, aligner=aligner):
+                    self.args.sequence_type, self.args.aligner = sequence, aligner
+                    with mock.patch.object(leviosam2.Leviosam2Workflow, "check_inputs") as check, \
+                         mock.patch.object(leviosam2.Leviosam2Workflow, "validate_executables"), \
+                         mock.patch.object(leviosam2.Leviosam2Workflow, "run_workflow"):
+                        if (sequence, aligner) in supported:
+                            with mock.patch.object(supported[(sequence, aligner)], "__init__", return_value=None) as init:
+                                leviosam2.run_workflow(self.args)
+                                init.assert_called_once_with(self.args)
+                            check.assert_called_once()
+                        else:
+                            with self.assertRaisesRegex(ValueError, f"{sequence} and {aligner}"):
+                                leviosam2.run_workflow(self.args)
+                            check.assert_not_called()
 
     def test_infer_aligner_exe(self):
         for aln in ["bowtie2", "minimap2", "winnowmap2", "strobealign"]:
@@ -367,6 +505,39 @@ class Workflow(unittest.TestCase):
         )
         self.assertEqual(result, expected)
 
+    def test_zero_lift_options_from_cli(self):
+        argv = ["leviosam2.py", "-s", "ilmn_se", "-a", "bowtie2",
+                "-i", "input.bam", "-o", "result", "-C", "index.clft",
+                "-f", "target.fa", "--dryrun", "-g", "0",
+                "--lift_commit_min_mapq", "0", "--lift_commit_min_score", "0",
+                "--lift_commit_max_frac_clipped", "0",
+                "--lift_commit_max_isize", "0", "--lift_commit_max_hdist", "0"]
+        with mock.patch.object(sys, "argv", argv):
+            workflow = leviosam2.Leviosam2Workflow(leviosam2.parse_args())
+        command = workflow.run_leviosam2()
+        for option in ("-S mapq:0", "-S aln_score:0", "-S clipped_frac:0.0",
+                       "-S isize:0", "-S hdist:0", "-G 0"):
+            with self.subTest(option=option):
+                self.assertIn(option + " ", command)
+
+    def test_illumina_preset_forwards_zero_gap(self):
+        args = copy.copy(self.args)
+        args.use_preset = True
+        workflow = leviosam2.Leviosam2WorkflowIlmnPreset(args)
+        self.assertIn("-G 0 ", workflow.run_leviosam2())
+
+    def test_measure_time_initializes_with_output_prefix(self):
+        argv = ["leviosam2.py", "-s", "ilmn_se", "-a", "bowtie2",
+                "-i", "input.bam", "-o", "out/result", "-C", "index.clft",
+                "-f", "target.fa", "--dryrun", "--measure_time",
+                "--gnu_time_exe", "my-time"]
+        with mock.patch.object(sys, "argv", argv):
+            workflow = leviosam2.Leviosam2Workflow(leviosam2.parse_args())
+        workflow._set_filenames()
+        self.assertEqual(workflow.time_cmd, "my-time -v -ao out/result.time_log ")
+        self.assertTrue(workflow.run_leviosam2().startswith(workflow.time_cmd))
+        self.assertTrue(workflow.run_sort_committed().startswith(workflow.time_cmd))
+
     def test_run_sort_committed(self):
         self.workflow.time_cmd = "gtime -v -ao test.time_log "
 
@@ -435,6 +606,17 @@ class Workflow(unittest.TestCase):
             f"samtools sort -@ 1 -o {self.args.out_prefix}-realigned.bam"
         )
         self.assertEqual(result, expected)
+
+    def test_long_read_realign_uses_sequence_preset(self):
+        for aligner in ("minimap2", "winnowmap2"):
+            for sequence_type, preset in (("pb_hifi", "map-hifi"), ("ont", "map-ont")):
+                with self.subTest(aligner=aligner, sequence_type=sequence_type):
+                    workflow = copy.deepcopy(self.workflow)
+                    workflow.aligner = aligner
+                    workflow.aligner_exe = aligner
+                    workflow.sequence_type = sequence_type
+                    workflow.is_single_end = True
+                    self.assertIn(f"-a -x {preset} --MD", workflow.run_realign_deferred())
 
     def test_run_bam_to_fastq_se(self):
         result = self.workflow.run_bam_to_fastq_se()

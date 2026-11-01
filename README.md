@@ -63,6 +63,12 @@ __We highly recommend to sort the input BAM by position prior to running levioSA
 leviosam2 lift -C source_to_target.clft -a aligned_to_source.bam -p lifted_from_source -O bam
 ```
 
+Lifting removes `SA`, `XA`, and `MC` tags from output records because their
+embedded alignments or mate CIGAR describe the source reference. This applies
+also to secondary, supplementary, and unmapped records. `MD` and `NM` are
+removed by default; `-m -f target.fa` recomputes them against the target reference.
+Other auxiliary tags are retained.
+
 ### Full levioSAM2 workflow with selective re-mapping
 
 The levioSAM2 workflow includes lift-over using the `leviosam2-lift` kernel and a selective re-mapping strategy. This approach can improve accuracy.

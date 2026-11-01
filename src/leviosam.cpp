@@ -251,6 +251,10 @@ void read_and_lift(T *lift_map, std::mutex *mutex_fread,
             // record cannot reliably update that CIGAR without its mate, so
             // do not emit a stale tag.
             LevioSamUtils::remove_aux_tag(aln_vec[i], "MC");
+            // SA and XA embed source-reference alternative alignments.
+            // They cannot be retained without lifting every embedded entry.
+            LevioSamUtils::remove_aux_tag(aln_vec[i], "SA");
+            LevioSamUtils::remove_aux_tag(aln_vec[i], "XA");
             // Skip update MD, NM tags and realignment if `md_flag` is not
             // set
             if (!args.md_flag) {
@@ -259,9 +263,9 @@ void read_and_lift(T *lift_map, std::mutex *mutex_fread,
                 LevioSamUtils::remove_nm_md_tag(aln_vec[i]);
                 continue;
             }
-            // if cannot find a chromosome id, remove tags and skip
+            // Unmapped records have no target alignment for edit tags.
             int32_t tid = aln_vec[i]->core.tid;
-            if (tid == -1) {
+            if (tid == -1 || (aln_vec[i]->core.flag & BAM_FUNMAP)) {
                 LevioSamUtils::remove_nm_md_tag(aln_vec[i]);
                 continue;
             }

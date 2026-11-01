@@ -9,6 +9,7 @@ import glob
 import json
 import logging
 import pathlib
+import shlex
 import subprocess
 from typing import Union
 
@@ -111,7 +112,8 @@ def parse_args() -> argparse.Namespace:
         help="Label of the target reference",
     )
     parser.add_argument(
-        "--read_group", type=str, default="", help="Read group string"
+        "--read_group", type=str, default="", help=("Read group string; for bowtie2, pass options such as "
+        "--rg-id ID --rg SM:sample, quoting values containing spaces")
     )
     parser.add_argument(
         "-g",
@@ -195,7 +197,7 @@ def parse_args() -> argparse.Namespace:
         "--out_format",
         type=str,
         default="bam",
-        choices=["bam", "sam", "cram"],
+        choices=["bam", "cram"],
         help="Output file format.",
     )
     parser.add_argument(
@@ -255,11 +257,12 @@ def check_file_exists(fn: pathlib.Path) -> None:
         raise FileNotFoundError(f"{fn} is not a file")
 
 
-def validate_executable(cmd: str, lenient: bool = False) -> None:
+def validate_executable(cmd: Union[str, list], lenient: bool = False) -> None:
     """Validates if an executable is valid.
 
     Args:
-        cmd: command to run
+        cmd: executable path/name as a string, or an argument list beginning
+            with the executable path/name. Shell syntax is not interpreted.
         lenient: lenient mode.
             If False, return True a returncode of 0. If True, return True
             when either stdout/stderr has >1 lines of output.
@@ -269,7 +272,7 @@ def validate_executable(cmd: str, lenient: bool = False) -> None:
     Returns:
         bool: True if a binary is valid
     """
-    subprocess_out = subprocess.run([cmd], shell=True, capture_output=True)
+    subprocess_out = subprocess.run(cmd if isinstance(cmd, list) else [cmd], capture_output=True)
     if not lenient and subprocess_out.returncode != 0:
         raise ValueError(
             f"`{cmd}` has a non-zero return code `{subprocess_out.returncode}`"
@@ -376,10 +379,10 @@ class Leviosam2Workflow:
             raise KeyError(f"Unsupported aligner: {self.aligner}")
 
     def validate_executables(self) -> None:
-        validate_executable(cmd=f"{self.samtools} --version")
-        validate_executable(cmd=f"{self.bgzip} --version")
+        validate_executable(cmd=[self.samtools, "--version"])
+        validate_executable(cmd=[self.bgzip, "--version"])
         if self.measure_time:
-            validate_executable(cmd=f"{self.gtime} --version")
+            validate_executable(cmd=[self.gtime, "--version"])
         validate_executable(cmd=f"{self.leviosam2}", lenient=True)
         validate_executable(cmd=f"{self.aligner_exe}", lenient=True)
 
@@ -387,53 +390,53 @@ class Leviosam2Workflow:
         """Run leviosam2."""
         lift_commit_min_mapq_arg = (
             f"-S mapq:{self.lift_commit_min_mapq} "
-            if self.lift_commit_min_mapq
+            if self.lift_commit_min_mapq is not None
             else ""
         )
         lift_commit_min_score_arg = (
             f"-S aln_score:{self.lift_commit_min_score} "
-            if self.lift_commit_min_score
+            if self.lift_commit_min_score is not None
             else ""
         )
         lift_commit_max_frac_clipped_arg = (
             f"-S clipped_frac:{self.lift_commit_max_frac_clipped} "
-            if self.lift_commit_max_frac_clipped
+            if self.lift_commit_max_frac_clipped is not None
             else ""
         )
         lift_commit_max_isize_arg = (
             f"-S isize:{self.lift_commit_max_isize} "
-            if self.lift_commit_max_isize
+            if self.lift_commit_max_isize is not None
             else ""
         )
         lift_commit_max_hdist_arg = (
             f"-S hdist:{self.lift_commit_max_hdist} "
-            if self.lift_commit_max_hdist
+            if self.lift_commit_max_hdist is not None
             else ""
         )
         lift_max_gap_arg = (
-            f"-G {self.lift_max_gap} " if self.lift_max_gap else ""
+            f"-G {self.lift_max_gap} " if self.lift_max_gap is not None else ""
         )
         lift_bed_commit_source_arg = (
-            f"-r {self.lift_bed_commit_source} "
+            f"-r {shlex.quote(str(self.lift_bed_commit_source))} "
             if self.lift_bed_commit_source
             else ""
         )
         lift_bed_defer_target_arg = (
-            f"-D {self.lift_bed_defer_target} "
+            f"-D {shlex.quote(str(self.lift_bed_defer_target))} "
             if self.lift_bed_defer_target
             else ""
         )
         lift_realign_config_arg = (
-            f"-x {self.lift_realign_config} "
+            f"-x {shlex.quote(str(self.lift_realign_config))} "
             if self.lift_realign_config
             else ""
         )
 
         cmd = (
             f"{self.time_cmd}"
-            f"{self.leviosam2} lift -C {self.leviosam2_index} -O bam "
-            f"-a {self.input_bam} -p {self.out_prefix} "
-            f"-t {self.num_threads} -m -f {self.target_fasta} "
+            f"{shlex.quote(str(self.leviosam2))} lift -C {shlex.quote(str(self.leviosam2_index))} -O bam "
+            f"-a {shlex.quote(str(self.input_bam))} -p {shlex.quote(str(self.out_prefix))} "
+            f"-t {self.num_threads} -m -f {shlex.quote(str(self.target_fasta))} "
             f"{lift_commit_min_mapq_arg}"
             f"{lift_commit_min_score_arg}"
             f"{lift_commit_max_frac_clipped_arg}"
@@ -465,8 +468,8 @@ class Leviosam2Workflow:
         """
         cmd = (
             f"{self.time_cmd}"
-            f"{self.samtools} sort -@ {self.num_threads} "
-            f"-o {self._fn_committed_sorted} {self._fn_committed}"
+            f"{shlex.quote(str(self.samtools))} sort -@ {self.num_threads} "
+            f"-o {shlex.quote(str(self._fn_committed_sorted))} {shlex.quote(str(self._fn_committed))}"
         )
         if self.dryrun:
             return cmd
@@ -489,9 +492,9 @@ class Leviosam2Workflow:
         """
         cmd = (
             f"{self.time_cmd}"
-            f"{self.leviosam2} collate "
-            f"-a {self._fn_committed_sorted} -b {self._fn_deferred} "
-            f"-p {self._prefix_deferred_pe}"
+            f"{shlex.quote(str(self.leviosam2))} collate "
+            f"-a {shlex.quote(str(self._fn_committed_sorted))} -b {shlex.quote(str(self._fn_deferred))} "
+            f"-p {shlex.quote(str(self._prefix_deferred_pe))}"
         )
         if self.dryrun:
             return cmd
@@ -575,7 +578,7 @@ class Leviosam2Workflow:
     #     elif self.aligner in ["minimap2", "winnowmap2"]:
     #         # Do not use a prefix other than 'map-hifi' and 'map-ont' modes.
     #         preset = ""
-    #         if self.sequence_type == "pb-hifi":
+    #         if self.sequence_type == "pb_hifi":
     #             preset = "-x map-hifi"
     #         elif self.sequence_type == "ont":
     #             preset = "-x map-ont"
@@ -628,13 +631,13 @@ class Leviosam2Workflow:
             fn_out = self._fn_deferred_realigned_se
 
             if self.aligner == "bowtie2":
-                reads = f"-U {self._fn_deferred_fq_se}"
+                reads = f"-U {shlex.quote(str(self._fn_deferred_fq_se))}"
             else:
-                reads = f"{self._fn_deferred_fq_se}"
+                reads = f"{shlex.quote(str(self._fn_deferred_fq_se))}"
 
             cmd_samtools = (
                 f"{self.time_cmd}"
-                f"{self.samtools} sort -@ {num_threads_samtools} -o {fn_out}"
+                f"{shlex.quote(str(self.samtools))} sort -@ {num_threads_samtools} -o {shlex.quote(str(fn_out))}"
             )
         else:
             if self.aligner not in [
@@ -650,55 +653,52 @@ class Leviosam2Workflow:
             fn_out = self._fn_deferred_realigned_pe
 
             if self.aligner == "bowtie2":
-                reads = f"-1 {self._fn_deferred_pe_fq1} -2 {self._fn_deferred_pe_fq2}"
+                reads = f"-1 {shlex.quote(str(self._fn_deferred_pe_fq1))} -2 {shlex.quote(str(self._fn_deferred_pe_fq2))}"
             else:
-                reads = f"{self._fn_deferred_pe_fq1} {self._fn_deferred_pe_fq2}"
+                reads = f"{shlex.quote(str(self._fn_deferred_pe_fq1))} {shlex.quote(str(self._fn_deferred_pe_fq2))}"
 
-            cmd_samtools = f"{self.time_cmd} {self.samtools} view -hbo {fn_out}"
+            cmd_samtools = f"{self.time_cmd} {shlex.quote(str(self.samtools))} view -hbo {shlex.quote(str(fn_out))}"
 
-        read_group = self.read_group
         if self.aligner == "bowtie2":
+            read_group_arg = shlex.join(shlex.split(self.read_group))
             if not self.target_aligner_index:
                 raise ValueError(
                     f"`{self.target_aligner_index}` is not a valid bowtie2 index path"
                 )
             cmd = (
                 f"{self.time_cmd}"
-                f"{self.aligner_exe} {read_group} "
-                f"-p {num_threads_aln} -x {self.target_aligner_index} {reads} | "
+                f"{shlex.quote(str(self.aligner_exe))} {read_group_arg} "
+                f"-p {num_threads_aln} -x {shlex.quote(str(self.target_aligner_index))} {reads} | "
                 f"{cmd_samtools}"
             )
         elif self.aligner in ["bwamem", "bwamem2"]:
-            if read_group != "":
-                read_group = f"-R {read_group}"
+            read_group_arg = f"-R {shlex.quote(self.read_group)}" if self.read_group else ""
             cmd = (
                 f"{self.time_cmd}"
-                f"{self.aligner_exe} mem {read_group} "
-                f"-t {num_threads_aln} {self.target_aligner_index} {reads} | "
+                f"{shlex.quote(str(self.aligner_exe))} mem {read_group_arg} "
+                f"-t {num_threads_aln} {shlex.quote(str(self.target_aligner_index))} {reads} | "
                 f"{cmd_samtools}"
             )
         elif self.aligner == "strobealign":
-            if read_group != "":
-                read_group = f"--rg {read_group}"
+            read_group_arg = f"--rg {shlex.quote(self.read_group)}" if self.read_group else ""
             cmd = (
                 f"{self.time_cmd}"
-                f"{self.aligner_exe} {read_group} "
-                f"-t {num_threads_aln} {self.target_aligner_index} {reads} | "
+                f"{shlex.quote(str(self.aligner_exe))} {read_group_arg} "
+                f"-t {num_threads_aln} {shlex.quote(str(self.target_aligner_index))} {reads} | "
                 f"{cmd_samtools}"
             )
         elif self.aligner in ["minimap2", "winnowmap2"]:
             # Do not use a prefix other than 'map-hifi' and 'map-ont' modes.
             preset = ""
-            if self.sequence_type == "pb-hifi":
+            if self.sequence_type == "pb_hifi":
                 preset = "-x map-hifi"
             elif self.sequence_type == "ont":
                 preset = "-x map-ont"
-            if read_group != "":
-                read_group = f"-R {read_group}"
+            read_group_arg = f"-R {shlex.quote(self.read_group)}" if self.read_group else ""
             cmd = (
                 f"{self.time_cmd}"
-                f"{self.aligner_exe} {read_group} -a {preset} --MD "
-                f"-t {num_threads_aln} {self.target_aligner_index} {reads} | "
+                f"{shlex.quote(str(self.aligner_exe))} {read_group_arg} -a {preset} --MD "
+                f"-t {num_threads_aln} {shlex.quote(str(self.target_aligner_index))} {reads} | "
                 f"{cmd_samtools}"
             )
 
@@ -728,24 +728,24 @@ class Leviosam2Workflow:
         cmd = ""
         cmd += (
             f"{self.time_cmd}"
-            f"{self.samtools} sort -@ {self.num_threads} -n "
-            f"-o {self._fn_deferred_realigned_pe_sortn} "
-            f"{self._fn_deferred_realigned_pe} && "
+            f"{shlex.quote(str(self.samtools))} sort -@ {self.num_threads} -n "
+            f"-o {shlex.quote(str(self._fn_deferred_realigned_pe_sortn))} "
+            f"{shlex.quote(str(self._fn_deferred_realigned_pe))} && "
         )
         cmd += (
             f"{self.time_cmd}"
-            f"{self.samtools} sort -@ {self.num_threads} -n "
-            f"-o {self._fn_deferred_pe_sortn} {self._fn_deferred_pe} && "
+            f"{shlex.quote(str(self.samtools))} sort -@ {self.num_threads} -n "
+            f"-o {shlex.quote(str(self._fn_deferred_pe_sortn))} {shlex.quote(str(self._fn_deferred_pe))} && "
         )
         cmd += (
             f"{self.time_cmd}"
-            f"{self.leviosam2} reconcile "
-            f"-s {self.source_label}:{self._fn_deferred_pe_sortn} "
-            f"-s {self.target_label}:{self._fn_deferred_realigned_pe_sortn} "
+            f"{shlex.quote(str(self.leviosam2))} reconcile "
+            f"-s {shlex.quote(str(self.source_label) + ':' + str(self._fn_deferred_pe_sortn))} "
+            f"-s {shlex.quote(str(self.target_label) + ':' + str(self._fn_deferred_realigned_pe_sortn))} "
             f"-m -o - | "
             f"{self.time_cmd}"
-            f"{self.samtools} sort -@ {self.num_threads} "
-            f"-o {self._fn_deferred_reconciled}"
+            f"{shlex.quote(str(self.samtools))} sort -@ {self.num_threads} "
+            f"-o {shlex.quote(str(self._fn_deferred_reconciled))}"
         )
 
         if self.dryrun:
@@ -772,10 +772,10 @@ class Leviosam2Workflow:
         cmd = ""
         cmd += (
             f"{self.time_cmd}"
-            f"{self.samtools} merge -f -@ {self.num_threads} "
-            f"-o {self._fn_final} {fn_committed_sorted} {fn_in_deferred} && "
+            f"{shlex.quote(str(self.samtools))} merge -f -@ {self.num_threads} "
+            f"-o {shlex.quote(str(self._fn_final))} {shlex.quote(str(fn_committed_sorted))} {shlex.quote(str(fn_in_deferred))} && "
         )
-        cmd += f"{self.time_cmd}" f"{self.samtools} index {self._fn_final}"
+        cmd += f"{self.time_cmd}" f"{shlex.quote(str(self.samtools))} index {shlex.quote(str(self._fn_final))}"
 
         if self.dryrun:
             return cmd
@@ -791,8 +791,8 @@ class Leviosam2Workflow:
     ) -> Union[str, "subprocess.CompletedProcess[bytes]"]:
         """(Single-end) Convert deferred BAM to FASTQ."""
         cmd = (
-            f"{self.time_cmd}{self.samtools} fastq {self._fn_deferred} | "
-            f"{self.time_cmd}{self.bgzip} > {self._fn_deferred_fq_se}"
+            f"{self.time_cmd}{shlex.quote(str(self.samtools))} fastq {shlex.quote(str(self._fn_deferred))} | "
+            f"{self.time_cmd}{shlex.quote(str(self.bgzip))} > {shlex.quote(str(self._fn_deferred_fq_se))}"
         )
 
         if self.dryrun:
@@ -813,10 +813,10 @@ class Leviosam2Workflow:
         self._cram_completed = False
         fn_final_cram = self._fn_final.with_suffix(".cram")
         cmd = (
-            f"{self.time_cmd}{self.samtools} view -T {self.target_fasta} "
-            f"-O cram -o {fn_final_cram} {self._fn_final} && "
+            f"{self.time_cmd}{shlex.quote(str(self.samtools))} view -T {shlex.quote(str(self.target_fasta))} "
+            f"-O cram -o {shlex.quote(str(fn_final_cram))} {shlex.quote(str(self._fn_final))} && "
         )
-        cmd += f"{self.time_cmd}" f"{self.samtools} index {fn_final_cram}"
+        cmd += f"{self.time_cmd}" f"{shlex.quote(str(self.samtools))} index {shlex.quote(str(fn_final_cram))}"
 
         if self.dryrun:
             return cmd
@@ -958,18 +958,21 @@ class Leviosam2Workflow:
         self.gtime = args.gnu_time_exe
         self.leviosam2 = args.leviosam2_exe
 
+        self.out_prefix = pathlib.Path(args.out_prefix)
+
         # Computational performance measurement related
         self.measure_time = args.measure_time
         self.time_cmd = ""
         if args.measure_time:
+            time_log = str(args.out_prefix) + ".time_log"
             self.time_cmd = (
-                f"{self.gtime} -v " f"-ao {self.out_prefix}.time_log "
+                f"{shlex.quote(str(self.gtime))} -v "
+                f"-ao {shlex.quote(time_log)} "
             )
 
         # Converts file name strings to pathlib.Path()
         self.target_fasta = pathlib.Path(args.target_fasta)
         self.input_bam = pathlib.Path(args.input_bam)
-        self.out_prefix = pathlib.Path(args.out_prefix)
         self.leviosam2_index = pathlib.Path(args.leviosam2_index)
         self.out_format = args.out_format
         if args.target_aligner_index:
@@ -1058,20 +1061,23 @@ class Leviosam2WorkflowOntPreset(Leviosam2Workflow):
 
 def run_workflow(args: argparse.Namespace):
     if args.use_preset:
-        if args.sequence_type in ["ilmn_se", "ilmn_pe"]:
-            if args.aligner in ["bowtie2", "bwamem", "bwamem2"]:
-                workflow = Leviosam2WorkflowIlmnPreset(args)
-        elif args.sequence_type == "pb_hifi":
-            if args.aligner in ["minimap2", "winnowmap2"]:
-                workflow = Leviosam2WorkflowPacbioHifiPreset(args)
-        elif args.sequence_type == "ont":
-            if args.aligner in ["minimap2", "winnowmap2"]:
-                workflow = Leviosam2WorkflowOntPreset(args)
-        else:
+        presets = {
+            **{(sequence, aligner): Leviosam2WorkflowIlmnPreset
+               for sequence in ("ilmn_se", "ilmn_pe")
+               for aligner in ("bowtie2", "bwamem", "bwamem2")},
+            **{("pb_hifi", aligner): Leviosam2WorkflowPacbioHifiPreset
+               for aligner in ("minimap2", "winnowmap2")},
+            **{("ont", aligner): Leviosam2WorkflowOntPreset
+               for aligner in ("minimap2", "winnowmap2")},
+        }
+        try:
+            preset = presets[(args.sequence_type, args.aligner)]
+        except KeyError:
             raise ValueError(
                 "There is no preset for the sequence_type and aligner combination of "
                 f"{args.sequence_type} and {args.aligner}"
-            )
+            ) from None
+        workflow = preset(args)
     else:
         workflow = Leviosam2Workflow(args)
     workflow.check_inputs()

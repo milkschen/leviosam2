@@ -17,7 +17,7 @@ TESTDATA = REPO_ROOT / "testdata"
 LEVIOSAM = REPO_ROOT / "build" / "leviosam2"
 
 IDENTITY_FLAG_MASK = 0x1 | 0x40 | 0x80 | 0x100 | 0x200 | 0x400 | 0x800
-INVALIDATED_TAGS = {"LO", "MC", "MD", "NM"}
+INVALIDATED_TAGS = {"LO", "MC", "MD", "NM", "SA", "XA"}
 
 
 @dataclass(frozen=True)
@@ -154,6 +154,14 @@ def run_lift(case, output_directory, index_option):
 
 
 class IntegrationTestCase(unittest.TestCase):
+    def assert_invalidated_tags_removed(self, record):
+        # These runs do not request MD/NM regeneration with -m.
+        for tag in ("MC", "MD", "NM", "SA", "XA"):
+            self.assertFalse(
+                record.has_tag(tag),
+                f"{record.query_name} retained invalidated {tag} tag",
+            )
+
     def assert_unsorted_header(self, bam_path):
         with pysam.AlignmentFile(str(bam_path)) as alignment_file:
             header = alignment_file.header.to_dict()
@@ -274,8 +282,7 @@ class LegacyLiftIntegrationTest(IntegrationTestCase):
                     self.assertEqual(result.query_sequence, expected.query_sequence)
                     self.assertEqual(result.query_qualities, expected.query_qualities)
                     self.assertEqual(stable_tags(result), stable_tags(original))
-                    self.assertFalse(result.has_tag("NM"))
-                    self.assertFalse(result.has_tag("MD"))
+                    self.assert_invalidated_tags_removed(result)
 
                 self.assert_pair_consistency(lifted_records, case.name)
 
@@ -323,8 +330,7 @@ class ChainLiftIntegrationTest(IntegrationTestCase):
                         original.flag & IDENTITY_FLAG_MASK,
                     )
                     self.assertEqual(stable_tags(result), stable_tags(original))
-                    self.assertFalse(result.has_tag("NM"))
-                    self.assertFalse(result.has_tag("MD"))
+                    self.assert_invalidated_tags_removed(result)
                     self.assertTrue(result.has_tag("LO"))
 
                     lift_status = result.get_tag("LO").split("_")
@@ -378,6 +384,8 @@ class ChainLiftIntegrationTest(IntegrationTestCase):
                 )
                 output = run_lift(case, self.output_directory, "-C")
                 self.assert_unsorted_header(output)
+                for record in read_records(output):
+                    self.assert_invalidated_tags_removed(record)
                 self.validate_with_picard(output, self.output_directory)
 
 
