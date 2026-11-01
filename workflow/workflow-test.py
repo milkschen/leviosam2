@@ -100,6 +100,121 @@ class Workflow(unittest.TestCase):
         workflow._set_filenames()
         return workflow
 
+    def test_restart_requires_success_and_invalidates_downstream(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workflow = self.failure_workflow(directory)
+            workflow.forcerun = False
+            outputs = [workflow._fn_committed, workflow._fn_deferred,
+                       pathlib.Path(f"{workflow.out_prefix}-unliftable.bam")]
+            later = workflow._stage_marker("run_merge_and_index")
+            calls = []
+
+            def produce(cmd, stage):
+                calls.append(stage)
+                for path in outputs:
+                    path.write_text("complete")
+
+            # Existing files from an interrupted run have no completion marker.
+            for path in outputs:
+                path.write_text("partial")
+            later.write_text("stale")
+            with mock.patch.object(workflow, "_run_command", side_effect=produce):
+                workflow.run_leviosam2()
+                self.assertFalse(later.exists())
+                self.assertEqual(workflow.run_leviosam2(), leviosam2.SKIP_MSG)
+                outputs[2].unlink()
+                workflow.run_leviosam2()
+                workflow.input_bam.write_text("changed input")
+                workflow.run_leviosam2()
+            self.assertEqual(len(calls), 3)
+
+            # A failed forced rerun removes its old marker before writing output.
+            workflow.forcerun = True
+            def fail(cmd, stage):
+                outputs[0].write_text("partial")
+                raise subprocess.CalledProcessError(1, cmd)
+            with mock.patch.object(workflow, "_run_command", side_effect=fail):
+                with self.assertRaises(subprocess.CalledProcessError):
+                    workflow.run_leviosam2()
+            self.assertFalse(workflow._stage_marker("run_leviosam2").exists())
+            workflow.forcerun = False
+            with mock.patch.object(workflow, "_run_command", side_effect=produce):
+                workflow.run_leviosam2()
+            self.assertEqual(len(calls), 4)
+
+    def test_restart_tracks_literal_glob_metacharacters_in_index(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workflow = self.failure_workflow(directory)
+            workflow.forcerun = False
+            workflow.is_single_end = True
+            workflow._fn_deferred_fq_se.touch()
+            workflow.target_aligner_index = pathlib.Path(directory) / "ref[1].mmi"
+            workflow.target_aligner_index.write_text("index")
+
+            def produce(cmd, stage):
+                workflow._fn_deferred_realigned_se.write_text("aligned")
+
+            with mock.patch.object(workflow, "_run_command", side_effect=produce) as run:
+                workflow.run_realign_deferred()
+                self.assertEqual(workflow.run_realign_deferred(), leviosam2.SKIP_MSG)
+                workflow.target_aligner_index.write_text("changed index")
+                workflow.run_realign_deferred()
+                self.assertEqual(run.call_count, 2)
+
+    def test_missing_input_preserves_previous_lift_outputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workflow = self.failure_workflow(directory)
+            workflow._fn_committed.write_text("recovery")
+            workflow.input_bam.unlink()
+            with self.assertRaises(FileNotFoundError):
+                workflow.run_leviosam2()
+            self.assertEqual(workflow._fn_committed.read_text(), "recovery")
+
+    def test_missing_reconcile_intermediate_requires_rerun(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workflow = self.failure_workflow(directory)
+            workflow.forcerun = False
+            workflow._fn_deferred_realigned_pe.touch()
+            workflow._fn_deferred_pe.touch()
+            outputs = [workflow._fn_deferred_realigned_pe_sortn,
+                       workflow._fn_deferred_pe_sortn, workflow._fn_deferred_reconciled]
+            def produce(cmd, stage):
+                for path in outputs:
+                    path.touch()
+            with mock.patch.object(workflow, "_run_command", side_effect=produce) as run:
+                workflow.run_refflow_merge_pe()
+                self.assertEqual(workflow.run_refflow_merge_pe(), leviosam2.SKIP_MSG)
+                outputs[0].unlink()
+                workflow.run_refflow_merge_pe()
+                self.assertEqual(run.call_count, 2)
+
+    def test_restart_checks_all_collate_and_final_outputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workflow = self.failure_workflow(directory)
+            workflow.forcerun = False
+            for path in [workflow._fn_committed_sorted, workflow._fn_deferred]:
+                path.touch()
+            outputs = [workflow._fn_committed_pe, workflow._fn_deferred_pe,
+                       workflow._fn_deferred_pe_fq1, workflow._fn_deferred_pe_fq2]
+            def produce(cmd, stage):
+                for path in outputs:
+                    path.touch()
+            with mock.patch.object(workflow, "_run_command", side_effect=produce) as run:
+                workflow.run_collate_pe()
+                self.assertEqual(workflow.run_collate_pe(), leviosam2.SKIP_MSG)
+                workflow._fn_committed_pe.unlink()
+                workflow.run_collate_pe()
+                self.assertEqual(run.call_count, 2)
+
+            workflow._fn_deferred_reconciled.touch()
+            outputs = [workflow._fn_final, pathlib.Path(str(workflow._fn_final) + ".bai")]
+            with mock.patch.object(workflow, "_run_command", side_effect=produce) as run:
+                workflow.run_merge_and_index()
+                self.assertEqual(workflow.run_merge_and_index(), leviosam2.SKIP_MSG)
+                outputs[1].unlink()
+                workflow.run_merge_and_index()
+                self.assertEqual(run.call_count, 2)
+
     def test_failed_lift_stops_workflow(self):
         with tempfile.TemporaryDirectory() as directory:
             workflow = self.failure_workflow(directory)
@@ -200,8 +315,26 @@ class Workflow(unittest.TestCase):
             tool = root / "fake tool ; name"
             tool.write_text(
                 "#!/usr/bin/env python3\n"
-                "import json, os, sys\n"
-                "with open(os.environ['WORKFLOW_ARG_LOG'], 'a') as f: f.write(json.dumps(sys.argv[1:]) + '\\n')\n"
+                "import json, os, pathlib, sys\n"
+                "args = sys.argv[1:]\n"
+                # Fake stream consumers must read input before exiting (pipefail).
+                "consume = (args[:1] == ['sort'] and args[-2:-1] == ['-o']) or "
+                "(args[:1] == ['view'] and ('-hbo' in args or args == ['view', '-h'])) or "
+                "(not args and os.environ.get('WORKFLOW_FAKE_BGZIP') == '1')\n"
+                "if consume and not sys.stdin.isatty(): sys.stdin.buffer.read()\n"
+                "with open(os.environ['WORKFLOW_ARG_LOG'], 'a') as f: f.write(json.dumps(args) + '\\n')\n"
+                # Completion markers require actual outputs from successful tools.
+                "def output(name): pathlib.Path(name).write_text('complete')\n"
+                "if '-o' in args and args[args.index('-o') + 1] != '-': output(args[args.index('-o') + 1])\n"
+                "if '-hbo' in args: output(args[args.index('-hbo') + 1])\n"
+                "if args[:1] == ['lift']:\n"
+                "    prefix = args[args.index('-p') + 1]\n"
+                "    for suffix in ('-committed.bam', '-deferred.bam', '-unliftable.bam'): output(prefix + suffix)\n"
+                "if args[:1] == ['collate']:\n"
+                "    prefix = args[args.index('-p') + 1]\n"
+                "    for suffix in ('-committed.bam', '-deferred.bam', '-deferred-R1.fq.gz', '-deferred-R2.fq.gz'): output(prefix + suffix)\n"
+                "if args[:1] == ['index']: output(args[-1] + ('.crai' if args[-1].endswith('.cram') else '.bai'))\n"
+                "if args[:1] == ['reconcile']: sys.stdout.write('x' * (128 * 1024))\n"
                 "print('first line\\nsecond line')\n"
             )
             tool.chmod(0o755)
@@ -254,8 +387,11 @@ class Workflow(unittest.TestCase):
                 workflow.is_single_end = False
                 workflow.run_refflow_merge_pe()
                 workflow.run_merge_and_index()
-                workflow.run_bam_to_fastq_se()
+                with mock.patch.dict(os.environ, {"WORKFLOW_FAKE_BGZIP": "1"}):
+                    workflow.run_bam_to_fastq_se()
                 workflow.run_bam_to_cram()
+                workflow.forcerun = False
+                self.assertEqual(workflow.run_leviosam2(), leviosam2.SKIP_MSG)
             calls = [json.loads(line) for line in log.read_text().splitlines()]
             lift = next(call for call in calls if call and call[0] == "lift")
             self.assertEqual(lift[lift.index("-p") + 1], str(workflow.out_prefix))
