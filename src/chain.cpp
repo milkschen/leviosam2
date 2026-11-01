@@ -1360,11 +1360,19 @@ void ChainMap::load(std::ifstream &in) {
     init_rs();
 }
 
-/* Lift over the POS field of an alignment
- *   - aln: target aln object
- *   - pos_end: putated ending position of an aln
- *   - intvl: Interval object of the target
- *   - first_seg: true if is read1/single-end; false if read2
+/**
+ * Lift the current record's POS or its mate's PNEXT through a supplied block.
+ * Reverse mappings use the source exclusive end as the target left boundary.
+ * On reversal, toggle BAM_FREVERSE, reverse-complement SEQ and reverse QUAL for
+ * the current record; for its mate, only toggle BAM_FMREVERSE. No validation is
+ * performed here; the caller handles CIGAR and reference IDs separately.
+ *
+ * @param aln Alignment whose selected coordinate/flag fields are updated in place.
+ * @param pos_end Source exclusive end of the selected segment, used on reversal.
+ * @param intvl Read-only source-to-target block used for the coordinate transform.
+ * @param first_seg True selects this record; false selects its mate, independent
+ * of whether this record is READ1 or READ2.
+ * @return No value.
  */
 void ChainMap::lift_pos(bam1_t *aln, const hts_pos_t &pos_end,
                         const chain::Interval &intvl, const bool &first_seg) {
@@ -1389,7 +1397,16 @@ void ChainMap::lift_pos(bam1_t *aln, const hts_pos_t &pos_end,
     }
 }
 
-// This saves one `rank` query by providing `intvl_idx`
+/**
+ * Transform a source interbase boundary through a known block without lookup.
+ * Forward mapping adds offset; reverse mapping computes
+ * offset + source_start + source_end - pos. There is no base-index -1 correction.
+ *
+ * @param pos Zero-based source interbase coordinate.
+ * @param intvl Read-only source-to-target block supplying offset and orientation.
+ * @return Arithmetic target boundary, possibly negative. No range check or
+ * failure-sentinel handling is performed.
+ */
 hts_pos_t ChainMap::lift_pos(const hts_pos_t &pos,
                              const chain::Interval &intvl) {
     if (intvl.strand) {
@@ -1399,13 +1416,21 @@ hts_pos_t ChainMap::lift_pos(const hts_pos_t &pos,
     }
 }
 
-/* Lift over a position
+/**
+ * Look up an interval for a source endpoint and apply its clipping adjustment.
+ * In a liftable gap, a source start uses the following block and adds the clip
+ * distance to its transformed coordinate; a source end uses the preceding
+ * block and subtracts that distance. Endpoint policies are in source order;
+ * BED intervals use their dedicated interval-projection path.
  *
- * Inputs:
- *  - contig
- *  - pos
- *  - allowed_gaps
- *  - left: true if the POS is at the left side of an interval; otherwise false
+ * @param contig Read-only source contig name used for interval lookup.
+ * @param pos Zero-based source endpoint: a start or an exclusive end.
+ * @param allowed_gaps Inclusive maximum clipping distance in source-reference
+ * bases; zero permits only an endpoint requiring no clipping.
+ * @param left True treats pos as a source start; false treats it as a source end.
+ * @return Transformed coordinate with the clipping adjustment, or -1 for failed
+ * lookup, invalid clipping, or a distance exceeding allowed_gaps. The resulting
+ * target coordinate is not range-checked.
  */
 hts_pos_t ChainMap::lift_pos(const std::string &contig, const hts_pos_t &pos,
                              const int &allowed_gaps, const bool &left) {
