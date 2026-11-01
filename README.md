@@ -36,6 +36,8 @@ builds with CMake are also supported.
 See the [installation guide](INSTALL.md) for prerequisites and instructions for
 each method.
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for pinned formatters and local formatting commands.
+
 ## Usage
 
 ### Prepare chain files
