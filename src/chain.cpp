@@ -510,10 +510,12 @@ void ChainMap::parse_chain_line(std::string line, std::string &source,
     }
 }
 
-/* Lift CIGAR
- * This version of `lift_cigar()` can be called when no interval indexes are
- * available, but is slower because of additional calls to query for interval
- * indexes.
+/**
+ * Lift the CIGAR in place, looking up source intervals from POS and the CIGAR's
+ * reference span, then delegating to the indexed overload. SEQ may be absent.
+ * Returns 0 on success or -1 for a failed lookup/transformation. On failure the
+ * CIGAR may already be modified. Coordinates, flags and sequence orientation
+ * are handled by the alignment-lifting caller.
  */
 int ChainMap::lift_cigar(const std::string &contig, bam1_t *aln) {
     bam1_core_t *c = &(aln->core);
@@ -535,15 +537,18 @@ int ChainMap::lift_cigar(const std::string &contig, bam1_t *aln) {
                       num_sclip_end);
 }
 
-/* Lift CIGAR
- * A fast version of `lift_cigar()`, which is used when auxiliary information
- * including query start/end interval ranks and #clipped bases is available.
+/**
+ * Lift the CIGAR in place using the first/last retained source interval indexes.
+ * Callers must ensure interval compatibility. num_sclip_start/num_sclip_end are
+ * nonnegative source-reference distances: M/=/X/D/N consume them, I/S/H do not.
  *
- * The CIGAR string is updated in two cases:
- *   (1) the start-/end-ing position of the segment is outside of an interval,
- * where we set the overhangs as soft clipped (2) the segment overlaps one or
- * more gaps between two valid intervals, where we update the CIGAR with INS or
- * DEL operators
+ * Query bases outside the retained span become S; existing hard clips and total
+ * CIGAR query consumption are preserved even when SEQ is absent. Chain gaps are
+ * composed into the alignment, =/X are normalized to M, and operation order is
+ * reversed for a reverse mapping. Coordinates, flags and SEQ are not lifted here.
+ *
+ * Returns 0 on success or -1 for invalid clipping, an entirely clipped source
+ * span, or a result with no M/I/D/N operation. Failure may leave the CIGAR changed.
  */
 int ChainMap::lift_cigar(const std::string &contig, bam1_t *aln,
                          const int &start_sidx, const int &end_sidx,
@@ -634,9 +639,19 @@ int ChainMap::lift_cigar(const std::string &contig, bam1_t *aln,
     return 0;
 }
 
-/* Core CIGAR lifting function
+/**
+ * Build a vector of HTSlib-encoded CIGAR operations without modifying aln.
+ * Expects source POS, =/X already normalized to M, compatible interval indexes,
+ * and validated source-reference clipping distances.
  *
- * Return a pointer of uint32_t in the htslib CIGAR format.
+ * Traverse source-reference consumption, splitting at clipping boundaries and
+ * chain breakpoints. Clipped query becomes S, while clipped D/N disappear;
+ * existing S/H do not consume clipping distance. Compose chain gaps as D/I,
+ * preserving query consumption and hard clips and combining soft clips. Convert
+ * I at either vector end to S, then reverse the vector for a reverse mapping.
+ *
+ * May return an empty vector. The wrapper checks for a retained M/I/D/N and
+ * applies the result to the record; this helper returns no status code.
  */
 std::vector<uint32_t> ChainMap::lift_cigar_core(
     const std::string &contig, bam1_t *aln, const int &start_sidx,
