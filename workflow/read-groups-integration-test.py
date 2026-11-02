@@ -1,11 +1,10 @@
-"""Exercise RG preservation using actual BAM operations and core reconcile.
+"""Exercise the single-RG SE/PE workflow with actual BAM operations.
 
-The aligner is a deterministic fixture emitter; samtools operations run through
-pysam's bundled implementation. This tests the workflow's metadata path, not
-the mapping accuracy of external aligners. Run in the Pixi integration env.
+Run in the Pixi integration environment. The aligner fixture honors BWA's -R;
+BAM operations use pysam's samtools and paired selection uses core reconcile.
 """
 
-import gzip
+import os
 import pathlib
 import subprocess
 import sys
@@ -17,13 +16,8 @@ import pysam
 
 import leviosam2
 
-
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-GROUPS = [
-    dict(ID="one", SM="sample", LB="library-one", PL="ILLUMINA"),
-    dict(ID="two", SM="sample", LB="library-two", PL="ILLUMINA"),
-]
-FALLBACK = dict(ID="fallback", SM="sample", LB="new-library", PL="ILLUMINA")
+GROUP = dict(ID="original", SM="sample name", LB="library", PL="ILLUMINA")
 
 
 def header(groups):
@@ -32,174 +26,124 @@ def header(groups):
     )
 
 
-def alignment(name, group, paired=False, score=100, start=101):
+def records(name, paired, score=100, group="original"):
     tags = f"\tAS:i:{score}\tNM:i:{max(0, (300 - score) // 100)}" + (
         f"\tRG:Z:{group}" if group else ""
     )
-    first = f"{name}\t{99 if paired else 0}\tchr1\t{start}\t60\t10M\t"
-    if not paired:
-        return [first + "*\t0\t0\tAAAAAAAAAA\tIIIIIIIIII" + tags]
+    flags = (99, 147) if paired else (0,)
     return [
-        first + f"=\t{start + 30}\t40\tAAAAAAAAAA\tIIIIIIIIII" + tags,
-        f"{name}\t147\tchr1\t{start + 30}\t60\t10M\t=\t{start}\t-40\tTTTTTTTTTT\tIIIIIIIIII"
-        + tags,
+        f"{name}\t{flag}\tchr1\t{11 + i * 30}\t60\t10M\t"
+        + (
+            f"=\t{41 if i == 0 else 11}\t{40 if i == 0 else -40}"
+            if paired
+            else "*\t0\t0"
+        )
+        + "\tAAAAAAAAAA\tIIIIIIIIII"
+        + tags
+        for i, flag in enumerate(flags)
     ]
 
 
 def write_bam(path, groups, lines):
-    bam_header = header(groups)
-    with pysam.AlignmentFile(path, "wb", header=bam_header) as stream:
+    hdr = header(groups)
+    with pysam.AlignmentFile(path, "wb", header=hdr) as stream:
         for line in lines:
-            stream.write(pysam.AlignedSegment.fromstring(line, bam_header))
+            stream.write(pysam.AlignedSegment.fromstring(line, hdr))
 
 
 class ReadGroupWorkflowIntegration(unittest.TestCase):
-    def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temporary.cleanup)
-        self.root = pathlib.Path(self.temporary.name)
-        self.bridge = self.root / "samtools.py"
-        self.bridge.write_text(
-            f"#!{sys.executable}\nimport pysam, sys\n"
-            "getattr(pysam, sys.argv[1])(*sys.argv[2:], catch_stdout=False)\n"
-        )
-        self.target = self.root / "aligner-output.sam"
-        self.aligner = self.root / "aligner.py"
-        self.aligner.write_text(
-            f"#!{sys.executable}\nimport pathlib, sys\n"
-            f"sys.stdout.write(pathlib.Path({str(self.target)!r}).read_text())\n"
-        )
-        self.bgzip = self.root / "bgzip.py"
-        self.bgzip.write_text(
-            f"#!{sys.executable}\nimport gzip, sys\n"
-            "sys.stdout.buffer.write(gzip.compress(sys.stdin.buffer.read()))\n"
-        )
-        for tool in (self.bridge, self.aligner, self.bgzip):
-            tool.chmod(0o755)
-
-    def workflow(self, paired=False):
-        argv = [
-            "leviosam2.py",
-            "-s",
-            "ilmn_pe" if paired else "ilmn_se",
-            "-a",
-            "bwamem",
-            "-i",
-            str(self.root / "input.bam"),
-            "-o",
-            str(self.root / "result"),
-            "-C",
-            "unused.clft",
-            "-f",
-            str(self.root / "target.fa"),
-            "--forcerun",
-            "--keep_tmp_files",
-            "--aligner_exe",
-            str(self.aligner),
-            "--samtools_exe",
-            str(self.bridge),
-            "--leviosam2_exe",
-            str(ROOT / "build" / "leviosam2"),
-            "--read_group",
-            r"@RG\tID:fallback\tSM:sample\tLB:new-library\tPL:ILLUMINA",
-        ]
-        with mock.patch.object(sys, "argv", argv):
-            workflow = leviosam2.Leviosam2Workflow(leviosam2.parse_args())
-        workflow._set_filenames()
-        workflow.bgzip = str(self.bgzip)
-        return workflow
-
-    def assert_final_groups(self, workflow, expected):
-        with pysam.AlignmentFile(workflow._fn_final) as stream:
-            actual_header = stream.header.to_dict()
-            reads = list(stream)
-        actual = {}
-        for read in reads:
-            actual.setdefault(read.query_name, set()).add(
-                read.get_tag("RG") if read.has_tag("RG") else None
-            )
-        self.assertEqual(actual, {name: {group} for name, group in expected.items()})
-        groups = {group["ID"]: group for group in actual_header["RG"]}
-        self.assertEqual(groups["one"]["LB"], "library-one")
-        self.assertEqual(groups["two"]["LB"], "library-two")
-        self.assertEqual(groups["fallback"]["LB"], "new-library")
-        self.assertEqual(len(groups), 3)
-        self.assertTrue(workflow._fn_final.with_suffix(".bam.bai").is_file())
-        return reads
-
-    def test_single_end_pipeline_preserves_libraries_and_uses_fallback(self):
-        workflow = self.workflow()
-        originals = alignment("a", "one") + alignment("b", "two") + alignment("c", None)
-        write_bam(workflow._fn_deferred, GROUPS, originals)
-        write_bam(
-            workflow._fn_committed_sorted,
-            GROUPS,
-            alignment("committed", "one", start=11),
-        )
-        target = (
-            alignment("a", "fallback")
-            + alignment("b", "fallback")
-            + alignment("c", "fallback")
-        )
-        # Secondary and supplementary output for an existing read inherits RG too.
-        target += [
-            target[0].replace("\t0\tchr1", "\t256\tchr1", 1),
-            target[1].replace("\t0\tchr1", "\t2048\tchr1", 1),
-        ]
-        self.target.write_text(str(header([FALLBACK])) + "\n".join(target) + "\n")
-        workflow.run_bam_to_fastq_se()
-        with gzip.open(workflow._fn_deferred_fq_se, "rt") as stream:
-            self.assertNotIn("RG:", stream.read())
-        workflow.run_realign_deferred()
-        workflow.run_merge_and_index()
-        self.assert_final_groups(
-            workflow, dict(a="one", b="two", c="fallback", committed="one")
-        )
-
-    def test_paired_reconcile_source_and_target_keep_original_groups(self):
-        workflow = self.workflow(paired=True)
-        original_lines, target_lines = [], []
-        for name, group, source_score, target_score in [
-            ("a", "one", 200, 100),
-            ("b", "two", 100, 200),
-            ("c", None, 50, 200),
-            ("d", None, 300, 100),
-        ]:
-            original_lines.extend(
-                alignment(name, group, paired=True, score=source_score)
-            )
-            target_lines.extend(
-                alignment(name, "fallback", paired=True, score=target_score)
-            )
-        write_bam(workflow._fn_deferred, GROUPS, original_lines)
-        write_bam(
-            workflow._fn_committed_sorted,
-            GROUPS,
-            alignment("committed", "one", paired=True, start=11),
-        )
-        self.target.write_text(str(header([FALLBACK])) + "\n".join(target_lines) + "\n")
-        workflow.run_collate_pe()
-        workflow.run_realign_deferred()
-        workflow.run_refflow_merge_pe()
-        workflow.run_merge_and_index()
-        reads = self.assert_final_groups(
-            workflow, dict(a="one", b="two", c="fallback", d=None, committed="one")
-        )
-        selected = {
-            read.query_name: read.get_tag("RF") for read in reads if read.has_tag("RF")
-        }
-        self.assertEqual(selected, dict(a="source", b="target", c="target", d="source"))
-
-    def test_header_collision_stops_before_final_merge(self):
-        workflow = self.workflow()
-        write_bam(workflow._fn_committed_sorted, GROUPS, alignment("a", "one"))
-        conflicting = [dict(GROUPS[0], LB="another-library")]
-        write_bam(
-            workflow._fn_deferred_realigned_se, conflicting, alignment("b", "one")
-        )
-        with self.assertRaises(subprocess.CalledProcessError):
-            workflow.run_merge_and_index()
-        self.assertFalse(workflow._fn_final.exists())
+    def test_single_group_survives_single_and_paired_end_workflows(self):
+        for paired in (False, True):
+            with (
+                self.subTest(paired=paired),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                root = pathlib.Path(directory)
+                samtools = root / "samtools.py"
+                samtools.write_text(
+                    f"#!{sys.executable}\nimport pysam, sys\n"
+                    "getattr(pysam, sys.argv[1])(*sys.argv[2:], catch_stdout=False)\n"
+                )
+                target = root / "aligned.sam"
+                # The fixture reproduces the aligner's RG assignment from -R.
+                aligner = root / "aligner.py"
+                aligner.write_text(
+                    f"#!{sys.executable}\nimport pathlib, sys\n"
+                    "rg = sys.argv[sys.argv.index('-R') + 1].replace(chr(92) + 't', chr(9))\n"
+                    "fields = dict(f.split(':', 1) for f in rg.split('\t')[1:])\n"
+                    "print('@SQ\tSN:chr1\tLN:1000')\nprint(rg)\n"
+                    f"for line in pathlib.Path({str(target)!r}).read_text().splitlines():\n"
+                    "    print(line + '\tRG:Z:' + fields['ID'])\n"
+                )
+                for tool in (samtools, aligner):
+                    tool.chmod(0o755)
+                argv = [
+                    "leviosam2.py",
+                    "-s",
+                    "ilmn_pe" if paired else "ilmn_se",
+                    "-a",
+                    "bwamem",
+                    "-i",
+                    str(root / "input.bam"),
+                    "-o",
+                    str(root / "result"),
+                    "-C",
+                    "unused.clft",
+                    "-f",
+                    str(root / "target.fa"),
+                    "--keep_tmp_files",
+                    "--aligner_exe",
+                    str(aligner),
+                    "--samtools_exe",
+                    str(samtools),
+                    "--leviosam2_exe",
+                    os.environ.get("LEVIOSAM2", str(ROOT / "build" / "leviosam2")),
+                ]
+                with mock.patch.object(sys, "argv", argv):
+                    workflow = leviosam2.Leviosam2Workflow(leviosam2.parse_args())
+                workflow._set_filenames()
+                original = records("source", paired, score=200) + records(
+                    "target", paired, score=100
+                )
+                write_bam(workflow.input_bam, [GROUP], original)
+                workflow._configure_read_group()
+                target.write_text(
+                    "\n".join(
+                        records("source", paired, score=100, group=None)
+                        + records("target", paired, score=200, group=None)
+                    )
+                    + "\n"
+                )
+                if paired:
+                    write_bam(workflow._fn_deferred_pe, [GROUP], original)
+                    write_bam(
+                        workflow._fn_committed_pe, [GROUP], records("committed", True)
+                    )
+                    workflow._fn_deferred_pe_fq1.touch()
+                    workflow._fn_deferred_pe_fq2.touch()
+                else:
+                    write_bam(
+                        workflow._fn_committed_sorted,
+                        [GROUP],
+                        records("committed", False),
+                    )
+                    workflow._fn_deferred_fq_se.touch()
+                workflow.run_realign_deferred()
+                if paired:
+                    workflow.run_refflow_merge_pe()
+                workflow.run_merge_and_index()
+                with pysam.AlignmentFile(workflow._fn_final) as result:
+                    self.assertEqual(result.header.to_dict()["RG"], [GROUP])
+                    reads = list(result)
+                self.assertEqual(len(reads), 6 if paired else 3)
+                self.assertTrue(
+                    all(read.get_tag("RG") == GROUP["ID"] for read in reads)
+                )
+                if paired:
+                    selected = {
+                        r.query_name: r.get_tag("RF") for r in reads if r.has_tag("RF")
+                    }
+                    self.assertEqual(selected, dict(source="source", target="target"))
 
 
 if __name__ == "__main__":

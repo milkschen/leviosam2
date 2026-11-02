@@ -19,9 +19,11 @@
 #include <algorithm>
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <numeric>
 #include <random>
 #include <regex>
+#include <sstream>
 
 #include "leviosam_utils.hpp"
 #include "version.hpp"
@@ -340,6 +342,50 @@ void reconcile_core(const std::vector<std::string>& sam_fns,
                   << " reads\n";
 }
 
+// Reconciliation writes every selected record with the first input's header.
+// Retain RG definitions from other inputs, rejecting ID collisions.
+static void merge_read_group_headers(const std::vector<bam_hdr_t*>& headers) {
+    std::map<std::string, std::map<std::string, std::string>> groups;
+    for (size_t i = 0; i < headers.size(); ++i) {
+        std::istringstream lines(sam_hdr_str(headers[i]));
+        std::string line;
+        while (std::getline(lines, line)) {
+            if (line.compare(0, 4, "@RG\t") != 0) continue;
+            std::map<std::string, std::string> fields;
+            std::istringstream tokens(line.substr(4));
+            std::string field;
+            while (std::getline(tokens, field, '\t')) {
+                auto colon = field.find(':');
+                if (colon == std::string::npos ||
+                    !fields
+                         .emplace(field.substr(0, colon),
+                                  field.substr(colon + 1))
+                         .second) {
+                    std::cerr
+                        << "[E::reconcile] Invalid read-group definition\n";
+                    exit(1);
+                }
+            }
+            auto id = fields.find("ID");
+            if (id == fields.end() || id->second.empty()) {
+                std::cerr << "[E::reconcile] Missing read-group ID\n";
+                exit(1);
+            }
+            auto inserted = groups.emplace(id->second, fields);
+            if (!inserted.second && inserted.first->second != fields) {
+                std::cerr << "[E::reconcile] Conflicting read-group ID: "
+                          << id->second << "\n";
+                exit(1);
+            }
+            if (i > 0 && inserted.second &&
+                sam_hdr_add_lines(headers[0], line.c_str(), line.size()) < 0) {
+                std::cerr << "[E::reconcile] Failed to add read-group header\n";
+                exit(1);
+            }
+        }
+    }
+}
+
 void reconcile(reconcile_opts args) {
     if (args.inputs.empty() || args.output_fn.empty()) {
         std::cerr << "[E::reconcile] Input and output files are required\n";
@@ -408,6 +454,7 @@ void reconcile(reconcile_opts args) {
             }
         }
     }
+    merge_read_group_headers(hdrs);
     std::string out_fn = args.output_fn;
     std::string out_mode = "wb";
     if (out_fn.substr(out_fn.find_last_of(".") + 1) == "sam") {

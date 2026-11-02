@@ -11,7 +11,6 @@ import logging
 import pathlib
 import shlex
 import subprocess
-import sys
 from typing import Union
 
 logging.basicConfig(
@@ -115,9 +114,8 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default="",
         help=(
-            "Aligner read-group fallback for realigned reads without an original RG; "
-            "original groups are preserved. For bowtie2, pass --rg-id/--rg options, "
-            "quoting values containing spaces"
+            "Read group for input without @RG (otherwise inferred from the single input @RG); for bowtie2, pass "
+            "--rg-id ID --rg SM:sample, quoting values containing spaces"
         ),
     )
     parser.add_argument(
@@ -412,20 +410,46 @@ class Leviosam2Workflow:
         else:
             raise KeyError(f"Unsupported aligner: {self.aligner}")
 
-    def _read_group_command(
-        self, source=None, paired=False, header_from=(), check_headers=()
-    ):
-        helper = pathlib.Path(__file__).resolve().with_name("restore_read_groups.py")
-        arguments = [sys.executable, str(helper), "--samtools", self.samtools]
-        if source is not None:
-            arguments.extend(["--source", str(source)])
-        if paired:
-            arguments.append("--paired")
-        for path in header_from:
-            arguments.extend(["--header-from", str(path)])
-        if check_headers:
-            arguments.extend(["--check-headers", *map(str, check_headers)])
-        return " ".join(shlex.quote(argument) for argument in arguments)
+    def _configure_read_group(self):
+        """Read only the input header; the workflow supports one input RG."""
+        header = subprocess.check_output(
+            [str(self.samtools), "view", "-H", str(self.input_bam)], text=True
+        )
+        groups = [line for line in header.splitlines() if line.startswith("@RG\t")]
+        if len(groups) > 1:
+            raise ValueError(
+                "The workflow supports a single input read group; split multiple-RG inputs first"
+            )
+        if not groups:
+            return  # Keep the explicit aligner group, or leave reads ungrouped.
+        fields = dict(field.split(":", 1) for field in groups[0].split("\t")[1:])
+        if not fields.get("ID"):
+            raise ValueError("Input @RG must contain a nonempty ID")
+        if self.read_group:
+            if self.aligner in ("bowtie2", "strobealign"):
+                parser = argparse.ArgumentParser(add_help=False)
+                parser.add_argument("--rg-id", required=True)
+                parser.add_argument("--rg", action="append", default=[])
+                options = parser.parse_args(shlex.split(self.read_group))
+                supplied = dict(field.split(":", 1) for field in options.rg)
+                supplied["ID"] = options.rg_id
+            else:
+                parts = self.read_group.replace(r"\t", "\t").split("\t")
+                supplied = dict(
+                    field.split(":", 1) for field in parts if field != "@RG"
+                )
+            if any(fields.get(key) != value for key, value in supplied.items()):
+                raise ValueError("--read_group conflicts with the input @RG definition")
+        if self.aligner in ("bowtie2", "strobealign"):
+            options = ["--rg-id", fields["ID"]]
+            for key, value in fields.items():
+                if key != "ID":
+                    options.extend(["--rg", f"{key}:{value}"])
+            self.read_group = shlex.join(options)
+        else:
+            self.read_group = r"\t".join(
+                ["@RG", *(f"{k}:{v}" for k, v in fields.items())]
+            )
 
     def validate_executables(self) -> None:
         validate_executable(cmd=[self.samtools, "--version"])
@@ -702,7 +726,6 @@ class Leviosam2Workflow:
                 reads = f"{shlex.quote(str(self._fn_deferred_fq_se))}"
 
             cmd_samtools = (
-                f"{self._read_group_command(source=self._fn_deferred)} | "
                 f"{self.time_cmd}"
                 f"{shlex.quote(str(self.samtools))} sort -@ {num_threads_samtools} -o {shlex.quote(str(fn_out))}"
             )
@@ -749,9 +772,7 @@ class Leviosam2Workflow:
                 f"{cmd_samtools}"
             )
         elif self.aligner == "strobealign":
-            read_group_arg = (
-                f"--rg {shlex.quote(self.read_group)}" if self.read_group else ""
-            )
+            read_group_arg = shlex.join(shlex.split(self.read_group))
             cmd = (
                 f"{self.time_cmd}"
                 f"{shlex.quote(str(self.aligner_exe))} {read_group_arg} "
@@ -820,8 +841,6 @@ class Leviosam2Workflow:
             f"-s {shlex.quote(str(self.source_label) + ':' + str(self._fn_deferred_pe_sortn))} "
             f"-s {shlex.quote(str(self.target_label) + ':' + str(self._fn_deferred_realigned_pe_sortn))} "
             f"-m -o - | "
-            f"{shlex.quote(str(self.samtools))} view -h | "
-            f"{self._read_group_command(source=self._fn_deferred_pe, paired=True, header_from=(self._fn_deferred_realigned_pe,))} | "
             f"{self.time_cmd}"
             f"{shlex.quote(str(self.samtools))} sort -@ {self.num_threads} "
             f"-o {shlex.quote(str(self._fn_deferred_reconciled))}"
@@ -854,14 +873,7 @@ class Leviosam2Workflow:
             fn_committed_sorted = self._fn_committed_sorted
             fn_in_deferred = self._fn_deferred_realigned_se
 
-        # Identical source @RG IDs must remain identical across committed and
-        # realigned records. Validate full definitions before merge's -c option.
-        cmd = (
-            self._read_group_command(
-                check_headers=(fn_committed_sorted, fn_in_deferred)
-            )
-            + " && "
-        )
+        cmd = ""
         cmd += (
             f"{self.time_cmd}"
             f"{shlex.quote(str(self.samtools))} merge -c -f -@ {self.num_threads} "
@@ -1005,6 +1017,7 @@ class Leviosam2Workflow:
         # run_intial_align()
 
         self._set_filenames()
+        self._configure_read_group()
 
         self.run_leviosam2()
 

@@ -18,40 +18,21 @@ conda, pre-built binary, or building from source.
 - Aligner: [minimap2](https://github.com/lh3/minimap2)/[winnowmap2](https://github.com/marbl/Winnowmap)/[bwa mem](https://github.com/lh3/bwa)/[Bowtie 2](http://bowtie-bio.sourceforge.net/bowtie2/manual.shtml)
 - samtools, bgzip
 
-Keep `restore_read_groups.py` beside `leviosam2.py` when copying the Python
-workflow. The helper uses Python's standard library and the configured samtools;
-it does not require pysam. It creates a temporary SQLite index of deferred read
-names and read ends, so temporary disk space is needed in the normal Python
-temporary directory (`TMPDIR` can select another location).
+## Read groups
 
-## Read groups and libraries
+The Python workflow expects a single read group shared by the input reads.
+It reads the input header once and passes the complete `@RG` definition
+(including `ID`, `SM`, and `LB`) to the aligner for both single-end and paired-end
+realignment. Multiple `@RG` records are rejected; split such inputs before
+running the workflow. It does not scan records to validate their RG tags.
 
-The Python workflow preserves each input read's `RG` identity and its complete
-`@RG` definition, including `LB`, through selective realignment. This applies to
-single-end reads, both ends of paired reads, and new secondary/supplementary
-alignments. Committed records retain their existing groups. Multiple libraries
-remain separate in the final BAM or CRAM.
-
-`--read_group` supplies the aligner's group for realigned reads that had no
-original `RG`. It does not replace existing groups or rename every read in an
-"Unknown Library" bucket. Without this option, originally ungrouped reads remain
-ungrouped. In paired-end reconciliation, an originally ungrouped read selected
-from the lifted source retains that absence; the fallback applies to selected
-realigned records.
-
-For BWA/minimap2/winnowmap2, pass one SAM read-group string, for example
-`--read_group '@RG\tID:new\tSM:sample\tLB:new-library\tPL:ILLUMINA'`.
-Bowtie 2 keeps its option-string syntax, for example
-`--read_group '--rg-id new --rg SM:sample --rg LB:new-library --rg PL:ILLUMINA'`.
-
-Restoration uses the original query name and read end. An undefined original RG,
-conflicting definitions of the same RG ID, ambiguous library assignments for
-the same name/end, or an unmatched realigned read stops the stage with an error.
-Identical RG definitions are merged without renaming their IDs. Input files
-whose distinct libraries reuse the same query names must first make those
-names unique; the workflow does not guess which library an ambiguous read came
-from. After upgrading an existing workflow run, use `--forcerun` to regenerate
-realignment/reconciliation outputs that were produced without RG restoration.
+For input without `@RG`, `--read_group` retains its existing role of setting the
+realigner's read group. Otherwise, supplied fields must match the input group;
+missing fields are inherited. Without either, reads remain ungrouped.
+The final merge preserves identical RG IDs with `samtools merge -c`.
+There is no per-read lookup, additional alignment pass, or temporary RG index.
+Use `--forcerun` when updating an existing run to regenerate outputs produced
+with missing or incorrect read groups.
 
 ## Paired-end workflows
 
@@ -263,7 +244,6 @@ The output is `ilmn-pe-chm13v2_grch38-final.bam`.
 
 ### Read groups
 
-For Bowtie2, pass its read-group options together in `--read_group`, for example
+For Bowtie2 and strobealign, pass their read-group options together in `--read_group`, for example
 `--read_group "--rg-id foo --rg 'SM:sample name'"`. Quote any option value
-containing spaces within that string. For BWA, minimap2, winnowmap2, and
-strobealign, pass the read-group value as a single string.
+containing spaces within that string. For BWA, minimap2, and winnowmap2, pass the read-group value as a single string.
