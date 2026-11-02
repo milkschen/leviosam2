@@ -342,8 +342,18 @@ void reconcile_core(const std::vector<std::string>& sam_fns,
                   << " reads\n";
 }
 
-// Reconciliation writes every selected record with the first input's header.
-// Retain RG definitions from other inputs, rejecting ID collisions.
+/**
+ * Merge input read-group definitions into the first header, which reconciliation
+ * uses to write all selected alignments. Append previously unseen @RG IDs and
+ * accept repeated IDs only when all fields match, regardless of field order.
+ * Exit with an error for malformed definitions, missing IDs, conflicting
+ * definitions, or failure to append a header line. Alignment records and their
+ * RG tags are not modified; only header text is processed.
+ *
+ * @param headers Input headers in reconciliation order. The first header is
+ * modified in place; subsequent headers are read-only. May be empty.
+ * @return No value.
+ */
 static void merge_read_group_headers(const std::vector<bam_hdr_t*>& headers) {
     std::map<std::string, std::map<std::string, std::string>> groups;
     for (size_t i = 0; i < headers.size(); ++i) {
