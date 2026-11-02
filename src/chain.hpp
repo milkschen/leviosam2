@@ -113,11 +113,12 @@ class ChainMap {
     size_t serialize(std::ofstream &out);
     void load(std::ifstream &in);
     std::vector<std::pair<std::string, int32_t>> length_map;
-    
-    void add_interval(const std::string& contig, const Interval& interval);
+
+    void add_interval(const std::string &contig, const Interval &interval);
 
     // Read-only access for interval-aware BED projection.
-    const std::vector<Interval>* intervals_for(const std::string& contig) const {
+    const std::vector<Interval> *intervals_for(
+        const std::string &contig) const {
         auto it = interval_map.find(contig);
         return it == interval_map.end() ? nullptr : &it->second;
     }

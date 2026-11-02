@@ -33,10 +33,13 @@ void print_lift_bed_help_msg() {
                  "`leviosam2 index` for details.\n";
     std::cerr << "         -p string   Prefix to the output files.\n";
     std::cerr << "Options: -h          Print detailed usage.\n";
-    std::cerr << "         -G INT      Maximum endpoint clipping, each source or target gap,\n"
-                 "                     and net length change (bases), inclusive [500].\n";
+    std::cerr << "         -G INT      Maximum endpoint clipping, each source "
+                 "or target gap,\n"
+                 "                     and net length change (bases), "
+                 "inclusive [500].\n";
     std::cerr << "         -V INT      Verbose level [0].\n";
-    std::cerr << "         BED3-6 and BED12+ are supported; BED7-11 are unmapped.\n";
+    std::cerr
+        << "         BED3-6 and BED12+ are supported; BED7-11 are unmapped.\n";
     std::cerr << "\n";
 }
 
@@ -48,28 +51,36 @@ struct BedProjection {
 };
 
 bool number(const std::string& text, int64_t& result) {
-    if (text.empty() || !std::all_of(text.begin(), text.end(),
-        [](char c) { return c >= '0' && c <= '9'; })) return false;
+    if (text.empty() || !std::all_of(text.begin(), text.end(), [](char c) {
+            return c >= '0' && c <= '9';
+        }))
+        return false;
     try {
         size_t used = 0;
         result = std::stoll(text, &used);
         return used == text.size() && result >= 0 &&
                result <= std::numeric_limits<int32_t>::max();
-    } catch (...) { return false; }
+    } catch (...) {
+        return false;
+    }
 }
 
 // Boundaries, unlike bases, need no -1 correction on the reverse strand.
 int64_t boundary(const chain::Interval& block, int64_t pos) {
-    return block.strand ? pos + block.offset :
-        int64_t(block.offset) + block.source_start + block.source_end - pos;
+    return block.strand ? pos + block.offset
+                        : int64_t(block.offset) + block.source_start +
+                              block.source_end - pos;
 }
 
 bool project(const chain::ChainMap& cmap, const std::string& contig,
              int64_t start, int64_t end, int allowed_gaps, BedProjection& out) {
     const auto* blocks = cmap.intervals_for(contig);
     if (!blocks || start > end || allowed_gaps < 0) return false;
-    auto first_block = std::lower_bound(blocks->begin(), blocks->end(), start,
-        [](const chain::Interval& block, int64_t pos) { return block.source_end <= pos; });
+    auto first_block =
+        std::lower_bound(blocks->begin(), blocks->end(), start,
+                         [](const chain::Interval& block, int64_t pos) {
+                             return block.source_end <= pos;
+                         });
     // A zero-length BED record denotes an insertion point; require it inside a
     // block rather than guessing at an ambiguous gap or chain boundary.
     if (start == end) {
@@ -89,25 +100,34 @@ bool project(const chain::ChainMap& cmap, const std::string& contig,
         int64_t a = std::max(start, int64_t(block.source_start));
         int64_t b = std::min(end, int64_t(block.source_end));
         int64_t x = boundary(block, a), y = boundary(block, b);
-        int64_t l = std::min(x,y), h = std::max(x,y);
+        int64_t l = std::min(x, y), h = std::max(x, y);
         if (!prev) {
-            out.target = block.target; out.forward = block.strand;
-            first = a; lo = l; hi = h;
+            out.target = block.target;
+            out.forward = block.strand;
+            first = a;
+            lo = l;
+            hi = h;
         } else {
-            if (block.target != out.target || block.strand != out.forward) return false;
+            if (block.target != out.target || block.strand != out.forward)
+                return false;
             int64_t source_gap = int64_t(block.source_start) - prev->source_end;
             int64_t target_gap = out.forward ? l - hi : lo - h;
             if (source_gap < 0 || source_gap > allowed_gaps || target_gap < 0 ||
-                target_gap > allowed_gaps) return false;
-            lo = std::min(lo,l); hi = std::max(hi,h);
+                target_gap > allowed_gaps)
+                return false;
+            lo = std::min(lo, l);
+            hi = std::max(hi, h);
         }
-        last = b; prev = &block;
+        last = b;
+        prev = &block;
     }
-    if (!prev || first - start > allowed_gaps || end - last > allowed_gaps || lo < 0)
+    if (!prev || first - start > allowed_gaps || end - last > allowed_gaps ||
+        lo < 0)
         return false;
     // Bound the net length change across the aligned portion as well.
     if (std::llabs((hi - lo) - (last - first)) > allowed_gaps) return false;
-    out.start = lo; out.end = hi;
+    out.start = lo;
+    out.end = hi;
     return true;
 }
 
@@ -127,19 +147,28 @@ std::string list_string(const std::vector<int64_t>& values) {
     for (auto value : values) result += std::to_string(value) + ",";
     return result;
 }
-}
+}  // namespace
 
 int lift_bed_record(chain::ChainMap& cmap, std::string& line,
                     const int& allowed_gaps) {
     auto fields = LevioSamUtils::str_to_vector(line, "\t");
-    auto reject = [&](const char* reason) { line += "\t# "; line += reason; line += "\n"; return 0; };
+    auto reject = [&](const char* reason) {
+        line += "\t# ";
+        line += reason;
+        line += "\n";
+        return 0;
+    };
     int64_t start, end;
-    if (fields.size() < 3 || !number(fields[1], start) || !number(fields[2], end) || start > end)
+    if (fields.size() < 3 || !number(fields[1], start) ||
+        !number(fields[2], end) || start > end)
         return reject("invalid BED coordinates or shape");
-    if (fields.size() > 6 && fields.size() < 12) return reject("BED7-11 unsupported");
+    if (fields.size() > 6 && fields.size() < 12)
+        return reject("BED7-11 unsupported");
     BedProjection outer;
-    if (!project(cmap, fields[0], start, end, allowed_gaps, outer)) return reject("unmappable interval or gap exceeds -G");
-    if (fields.size() >= 6 && fields[5] != "+" && fields[5] != "-" && fields[5] != ".")
+    if (!project(cmap, fields[0], start, end, allowed_gaps, outer))
+        return reject("unmappable interval or gap exceeds -G");
+    if (fields.size() >= 6 && fields[5] != "+" && fields[5] != "-" &&
+        fields[5] != ".")
         return reject("invalid or unmappable BED fields");
     if (fields.size() >= 12) {
         int64_t thick_start, thick_end, count;
@@ -150,25 +179,33 @@ int lift_bed_record(chain::ChainMap& cmap, std::string& line,
             !parse_list(fields[10], sizes) || !parse_list(fields[11], starts) ||
             int64_t(sizes.size()) != count || int64_t(starts.size()) != count)
             return reject("invalid or unmappable BED fields");
-        std::vector<std::pair<int64_t,int64_t>> mapped;
+        std::vector<std::pair<int64_t, int64_t>> mapped;
         int64_t prev_end = start;
         for (size_t i = 0; i < sizes.size(); ++i) {
             int64_t a = start + starts[i], b = a + sizes[i];
-            if (sizes[i] == 0 || a < prev_end || b > end) return reject("invalid or unmappable BED fields");
+            if (sizes[i] == 0 || a < prev_end || b > end)
+                return reject("invalid or unmappable BED fields");
             BedProjection part;
             if (!project(cmap, fields[0], a, b, allowed_gaps, part) ||
                 part.target != outer.target || part.forward != outer.forward ||
-                part.start < outer.start || part.end > outer.end) return reject("invalid or unmappable BED fields");
-            mapped.emplace_back(part.start, part.end); prev_end = b;
+                part.start < outer.start || part.end > outer.end)
+                return reject("invalid or unmappable BED fields");
+            mapped.emplace_back(part.start, part.end);
+            prev_end = b;
         }
         if (starts.front() != 0 || prev_end != end)
             return reject("BED12 blocks must cover the outer boundaries");
         std::sort(mapped.begin(), mapped.end());
-        if (mapped.front().first != outer.start || mapped.back().second != outer.end)
-            return reject("mapped BED12 blocks do not cover the outer boundaries");
+        if (mapped.front().first != outer.start ||
+            mapped.back().second != outer.end)
+            return reject(
+                "mapped BED12 blocks do not cover the outer boundaries");
         std::vector<int64_t> new_sizes, new_starts;
         for (const auto& block : mapped) {
-            if (!new_starts.empty() && block.first < outer.start + new_starts.back() + new_sizes.back()) return reject("invalid or unmappable BED fields");
+            if (!new_starts.empty() && block.first < outer.start +
+                                                         new_starts.back() +
+                                                         new_sizes.back())
+                return reject("invalid or unmappable BED fields");
             new_starts.push_back(block.first - outer.start);
             new_sizes.push_back(block.second - block.first);
         }
@@ -177,17 +214,24 @@ int lift_bed_record(chain::ChainMap& cmap, std::string& line,
             fields[6] = fields[7] = std::to_string(outer.start);
         } else {
             BedProjection thick;
-            if (!project(cmap, fields[0], thick_start, thick_end, allowed_gaps, thick) ||
-                thick.target != outer.target || thick.forward != outer.forward) return reject("invalid or unmappable BED fields");
-            fields[6] = std::to_string(thick.start); fields[7] = std::to_string(thick.end);
+            if (!project(cmap, fields[0], thick_start, thick_end, allowed_gaps,
+                         thick) ||
+                thick.target != outer.target || thick.forward != outer.forward)
+                return reject("invalid or unmappable BED fields");
+            fields[6] = std::to_string(thick.start);
+            fields[7] = std::to_string(thick.end);
         }
-        fields[10] = list_string(new_sizes); fields[11] = list_string(new_starts);
+        fields[10] = list_string(new_sizes);
+        fields[11] = list_string(new_starts);
     }
-    fields[0] = outer.target; fields[1] = std::to_string(outer.start);
+    fields[0] = outer.target;
+    fields[1] = std::to_string(outer.start);
     fields[2] = std::to_string(outer.end);
     if (fields.size() >= 6 && !outer.forward) {
-        if (fields[5] == "+") fields[5] = "-";
-        else if (fields[5] == "-") fields[5] = "+";
+        if (fields[5] == "+")
+            fields[5] = "-";
+        else if (fields[5] == "-")
+            fields[5] = "+";
     }
     line.clear();
     for (size_t i = 0; i < fields.size(); ++i) {
@@ -204,7 +248,8 @@ void lift_bed(lift_bed_opts& args) {
             std::cerr << "Loading levioSAM index...";
             std::ifstream in(args.chainmap_fname, std::ios::binary);
             if (!in) {
-                std::cerr << "[E::lift_bed] Cannot open chain index " << args.chainmap_fname << "\n";
+                std::cerr << "[E::lift_bed] Cannot open chain index "
+                          << args.chainmap_fname << "\n";
                 exit(1);
             }
             return chain::ChainMap(in, args.verbose, args.allowed_gaps);
@@ -226,8 +271,10 @@ void lift_bed(lift_bed_opts& args) {
     if (bed_f.is_open()) {
         std::string line;
         while (std::getline(bed_f, line)) {
-            if (line.empty() || line[0] == '#' || line.compare(0, 6, "track ") == 0 ||
-                line.compare(0, 8, "browser ") == 0) continue;
+            if (line.empty() || line[0] == '#' ||
+                line.compare(0, 6, "track ") == 0 ||
+                line.compare(0, 8, "browser ") == 0)
+                continue;
             cnt += 1;
             // std::cerr << line << "\n";
             int lift = lift_bed_record(cmap, line, args.allowed_gaps);
@@ -262,13 +309,13 @@ int lift_bed_run(int argc, char** argv) {
     int c;
     lift_bed_opts args;
     args.cmd = LevioSamUtils::make_cmd(argc, argv);
-    static struct option long_options[] {
+    static struct option long_options[]{
         {"help", no_argument, 0, 'h'},
         {"bed_fname", required_argument, 0, 'b'},
-            {"chainmap_fname", required_argument, 0, 'C'},
-            {"allowed_gaps", required_argument, 0, 'G'},
-            {"output", required_argument, 0, 'p'},
-            {"verbose", required_argument, 0, 'V'},
+        {"chainmap_fname", required_argument, 0, 'C'},
+        {"allowed_gaps", required_argument, 0, 'G'},
+        {"output", required_argument, 0, 'p'},
+        {"verbose", required_argument, 0, 'V'},
         {0, 0, 0, 0},
     };
     int long_index = 0;
@@ -284,20 +331,20 @@ int lift_bed_run(int argc, char** argv) {
             case 'C':
                 args.chainmap_fname = optarg;
                 break;
-            case 'G':
-                {
-                    int64_t value;
-                    if (!number(optarg, value)) {
-                        std::cerr << "[E::lift_bed] -G must be a nonnegative integer\n";
-                        return 1;
-                    }
-                    args.allowed_gaps = static_cast<int>(value);
+            case 'G': {
+                int64_t value;
+                if (!number(optarg, value)) {
+                    std::cerr
+                        << "[E::lift_bed] -G must be a nonnegative integer\n";
+                    return 1;
                 }
-                break;
+                args.allowed_gaps = static_cast<int>(value);
+            } break;
             case 'V': {
                 int64_t value;
                 if (!number(optarg, value)) {
-                    std::cerr << "[E::lift_bed] -V must be a nonnegative integer\n";
+                    std::cerr
+                        << "[E::lift_bed] -V must be a nonnegative integer\n";
                     return 1;
                 }
                 args.verbose = static_cast<int>(value);

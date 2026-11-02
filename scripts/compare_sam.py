@@ -5,6 +5,7 @@ Nae-Chyun Chen
 Johns Hopkins University
 2021
 """
+
 import argparse
 import re
 import sys
@@ -14,9 +15,7 @@ import pysam
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-q", "--input_query", help="Path to a query SAM/BAM file."
-    )
+    parser.add_argument("-q", "--input_query", help="Path to a query SAM/BAM file.")
     parser.add_argument(
         "-b", "--input_baseline", help="Path to a baseline SAM/BAM file."
     )
@@ -443,9 +442,7 @@ class CompareSamSummary:
             exit(1)
 
         print("## Position", file=f_out)
-        num_pos_match = sum(
-            [i >= 0 and i < self.allowed_posdiff for i in self.posdiff]
-        )
+        num_pos_match = sum([i >= 0 and i < self.allowed_posdiff for i in self.posdiff])
         print(
             f"{num_pos_match / len(self.posdiff):.6f} "
             f"({num_pos_match}/{len(self.posdiff)})",
@@ -470,10 +467,7 @@ class CompareSamSummary:
         num_pos_idy = sum(
             [
                 d >= self.identity_cutoff
-                or (
-                    self.posdiff[i] >= 0
-                    and self.posdiff[i] < self.allowed_posdiff
-                )
+                or (self.posdiff[i] >= 0 and self.posdiff[i] < self.allowed_posdiff)
                 for i, d in enumerate(self.identity)
             ]
         )

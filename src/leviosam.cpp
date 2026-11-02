@@ -36,7 +36,8 @@
 
 KSEQ_INIT(gzFile, gzread);
 
-static int parse_int_option(const char *option, const char *value, int minimum) {
+static int parse_int_option(const char *option, const char *value,
+                            int minimum) {
     char *end = nullptr;
     errno = 0;
     long parsed = std::strtol(value, &end, 10);
@@ -390,7 +391,8 @@ void lift_run(lift_opts args) {
         if (args.chainmap_fname != "") {
             std::cerr << "[I::lift_run] Loading levioSAM 2 index...";
             std::ifstream in(args.chainmap_fname, std::ios::binary);
-            std::ifstream fs(args.chainmap_fname, std::ios::binary | std::ios::ate);
+            std::ifstream fs(args.chainmap_fname,
+                             std::ios::binary | std::ios::ate);
             if (!in || !fs || fs.tellg() <= 0) {
                 std::cerr << "[E::lift_run] Cannot open ChainMap index "
                           << args.chainmap_fname << "\n";
@@ -499,12 +501,10 @@ void lift_run(lift_opts args) {
     free(hd_line.s);
     int sort_order_status =
         (hd_status == 0)
-            ? sam_hdr_update_line(hdr, "HD", NULL, NULL, "SO", "unsorted",
-                                  NULL)
-            : (hd_status == -1)
-                  ? sam_hdr_add_line(hdr, "HD", "VN", "1.6", "SO",
-                                     "unsorted", NULL)
-                  : -1;
+            ? sam_hdr_update_line(hdr, "HD", NULL, NULL, "SO", "unsorted", NULL)
+        : (hd_status == -1)
+            ? sam_hdr_add_line(hdr, "HD", "VN", "1.6", "SO", "unsorted", NULL)
+            : -1;
     if (sort_order_status < 0) {
         std::cerr << "[E::lift_run] Failed to update output sort order\n";
         exit(1);
@@ -609,7 +609,8 @@ void print_lift_help_msg() {
     std::cerr << "                   "
                  "Leave empty or set to \"-\" to read from stdin.\n";
     std::cerr << "         -p string Prefix of the output files. [stdout]\n";
-    std::cerr << "         -O string Format of the output file: sam or bam. [sam]\n";
+    std::cerr
+        << "         -O string Format of the output file: sam or bam. [sam]\n";
     std::cerr << "         -t INT    Number of threads used.\n"
                  "                   "
                  "If -t is not set, the value would be the sum of\n"
@@ -633,17 +634,19 @@ void print_lift_help_msg() {
                  "Add MD and NM to output alignment records (requires -f)\n";
     std::cerr << "         -f path   "
                  "Path to the FASTA file of the target reference. \n";
-    std::cerr << "         -F path   "
-                 "Path to the FAI (FASTA index) file of the target reference. \n";
+    std::cerr
+        << "         -F path   "
+           "Path to the FAI (FASTA index) file of the target reference. \n";
     std::cerr << "         -x path   Re-alignment preset. [] \n";
     std::cerr << "         -G INT    "
                  "Maximum allowed gap size (in base pairs) between chain "
                  "intervals for an alignment to be considered liftable. A "
                  "value of 0 requires perfect chain interval continuity. [0]\n";
-    std::cerr << "         -g INT    "
-                 "Haplotype (0 or 1) for variant-aware (VCF) mode. \n"
-                 "                   "
-                 "NOTE: Do not confuse with workflow script's `-g` (gap size).\n";
+    std::cerr
+        << "         -g INT    "
+           "Haplotype (0 or 1) for variant-aware (VCF) mode. \n"
+           "                   "
+           "NOTE: Do not confuse with workflow script's `-g` (gap size).\n";
     std::cerr << "         -s string "
                  "Sample name for variant-aware (VCF) mode.\n";
     std::cerr << "         -v path   "
@@ -659,11 +662,13 @@ void print_lift_help_msg() {
     std::cerr << "         Commit/defer/suppress rule options:\n";
     std::cerr << "           -S string<:int/float> Key-value pair of "
                  "a split rule. We allow appending multiple `-S` options.\n";
-    std::cerr << "                     Options: "
-                 "lifted, mapq:<int>, aln_score:<int>, isize:<int>, hdist:<int>, "
-                 "clipped_frac:<float> [none]\n";
-    std::cerr << "                       * lifted              "
-                 "Defer alignments that are unlifted (unmapped) after liftover.\n";
+    std::cerr
+        << "                     Options: "
+           "lifted, mapq:<int>, aln_score:<int>, isize:<int>, hdist:<int>, "
+           "clipped_frac:<float> [none]\n";
+    std::cerr
+        << "                       * lifted              "
+           "Defer alignments that are unlifted (unmapped) after liftover.\n";
     std::cerr << "                       * mapq          INT   "
                  "Min MAPQ (pre-liftover) accepted for a committed read.\n";
     std::cerr << "                       * aln_score     INT   "
@@ -687,8 +692,9 @@ void print_lift_help_msg() {
     std::cerr << "           -r string Path to a BED file (source "
                  "coordinates). Reads overlapping with the regions are always "
                  "committed. [none]\n";
-    std::cerr << "           -D string Path to a BED file (dest coordinates). "
-                 "Reads overlapping with the regions are always deferred. [none]\n";
+    std::cerr
+        << "           -D string Path to a BED file (dest coordinates). "
+           "Reads overlapping with the regions are always deferred. [none]\n";
     std::cerr << "           -B float  Threshold for BED record intersection. "
                  "[0]\n"
                  "                     If <= 0: consider any overlap (>0 bp)\n"
@@ -872,8 +878,7 @@ int main(int argc, char **argv) {
                     parse_int_option("--lift_threads", optarg, 1);
                 break;
             case OPT_HTS_THREADS:
-                args.hts_threads =
-                    parse_int_option("--hts_threads", optarg, 0);
+                args.hts_threads = parse_int_option("--hts_threads", optarg, 0);
                 break;
             default:
                 std::cerr << "[E::main] Invalid flag value " << c << "\n";

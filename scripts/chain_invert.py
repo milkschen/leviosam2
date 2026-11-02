@@ -1,6 +1,7 @@
 """
 Switch the source and target reference of a chain file
 """
+
 import argparse
 import re
 import sys

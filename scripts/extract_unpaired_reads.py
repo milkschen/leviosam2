@@ -11,6 +11,7 @@ Nae-Chyun Chen
 Johns Hopkins University
 2021
 """
+
 import argparse
 import os
 import sys
@@ -117,24 +118,12 @@ def extract_unpaired_reads(fn_reads: str, out_prefix: str, fn_input: str):
             #     qual = read.query_qualities
             #     seq = read.query_sequence
             singleton = dict_reads[read.query_name]
-            if (
-                read.is_read1
-                and not read.is_secondary
-                and not read.is_supplementary
-            ):
+            if read.is_read1 and not read.is_secondary and not read.is_supplementary:
                 fo_fq1.write(f"@{read.query_name}\n{seq}\n+\n{qual}\n")
-                fo_fq2.write(
-                    f"@{read.query_name}\n{singleton[0]}\n+\n{singleton[1]}\n"
-                )
-            elif (
-                read.is_read2
-                and not read.is_secondary
-                and not read.is_supplementary
-            ):
+                fo_fq2.write(f"@{read.query_name}\n{singleton[0]}\n+\n{singleton[1]}\n")
+            elif read.is_read2 and not read.is_secondary and not read.is_supplementary:
                 fo_fq2.write(f"@{read.query_name}\n{seq}\n+\n{qual}\n")
-                fo_fq1.write(
-                    f"@{read.query_name}\n{singleton[0]}\n+\n{singleton[1]}\n"
-                )
+                fo_fq1.write(f"@{read.query_name}\n{singleton[0]}\n+\n{singleton[1]}\n")
         else:
             fo_paired.write(read)
 
