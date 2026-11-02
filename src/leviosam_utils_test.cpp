@@ -255,8 +255,7 @@ TEST(LiftMap, CopyAndMovePreserveSerializedState) {
     lift::LiftMap copied(original);
     lift::LiftMap move_assigned;
     move_assigned = std::move(copied);
-    std::ofstream move_assignment_out(path,
-                                      std::ios::binary | std::ios::trunc);
+    std::ofstream move_assignment_out(path, std::ios::binary | std::ios::trunc);
     EXPECT_EQ(move_assigned.serialize(move_assignment_out), original_size);
     move_assignment_out.close();
 

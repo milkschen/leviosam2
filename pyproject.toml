@@ -1,0 +1,4 @@
+[tool.black]
+required-version = "24.10.0"
+line-length = 88
+target-version = ["py39"]

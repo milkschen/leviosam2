@@ -46,9 +46,7 @@ class TestCompareSam(unittest.TestCase):
 
     def test_calc_identity(self):
         def _test_calc_identity(b, q, gold_idy):
-            baseline = pysam.AlignedSegment.fromstring(
-                b, self.chm13_v1_0_header
-            )
+            baseline = pysam.AlignedSegment.fromstring(b, self.chm13_v1_0_header)
             query = pysam.AlignedSegment.fromstring(q, self.chm13_v1_0_header)
             summ = compare_sam.CompareSamSummary()
             idy = summ._calc_identity(query=query, baseline=baseline)

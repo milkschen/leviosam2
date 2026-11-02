@@ -149,8 +149,7 @@ int select_best_aln_paired_end(const std::vector<bam1_t*>& aln1s,
                                const std::vector<bam1_t*>& aln2s,
                                const std::string& score_tag,
                                const bool& conservative,
-                               const int& merge_pe_mode,
-                               const int& rand_seed) {
+                               const int& merge_pe_mode, const int& rand_seed) {
     std::vector<int> mapqs, scores;
     // Indicator
     //      1 if a pair is properly paired (TLEN != 0). We apply a loose
@@ -240,19 +239,21 @@ void reconcile_core(const std::vector<std::string>& sam_fns,
     }
     // htslib returns -1 for clean EOF and values below -1 for read errors.
     // Secondary/supplementary records do not form reconciliation candidates.
-    auto read_primary = [&](size_t i, bam1_t* aln) {
-        int status;
-        do {
-            status = sam_read1(sam_fps[i], hdrs[i], aln);
-            if (status < -1) {
-                std::cerr << "[E::reconcile_core] Failed to read alignment from "
-                          << sam_fns[i] << " (status " << status << ").\n";
-                exit(1);
-            }
-        } while (status >= 0 &&
-                 (aln->core.flag & (BAM_FSECONDARY | BAM_FSUPPLEMENTARY)));
-        return status;
-    };
+    auto read_primary =
+        [&](size_t i, bam1_t* aln) {
+            int status;
+            do {
+                status = sam_read1(sam_fps[i], hdrs[i], aln);
+                if (status < -1) {
+                    std::cerr
+                        << "[E::reconcile_core] Failed to read alignment from "
+                        << sam_fns[i] << " (status " << status << ").\n";
+                    exit(1);
+                }
+            } while (status >= 0 &&
+                     (aln->core.flag & (BAM_FSECONDARY | BAM_FSUPPLEMENTARY)));
+            return status;
+        };
     int num_records = 0;
     while (true) {
         size_t eof_count = 0;
@@ -398,10 +399,11 @@ void reconcile(reconcile_opts args) {
             if (strcmp(sam_hdr_tid2name(header, tid),
                        sam_hdr_tid2name(hdrs[0], tid)) != 0 ||
                 sam_hdr_tid2len(header, tid) != sam_hdr_tid2len(hdrs[0], tid)) {
-                std::cerr << "[E::reconcile] Incompatible reference dictionary in `"
-                          << sam_fns[i] << "` compared with `" << sam_fns[0]
-                          << "`: reference name, length, or order differs at index "
-                          << tid << "\n";
+                std::cerr
+                    << "[E::reconcile] Incompatible reference dictionary in `"
+                    << sam_fns[i] << "` compared with `" << sam_fns[0]
+                    << "`: reference name, length, or order differs at index "
+                    << tid << "\n";
                 exit(1);
             }
         }
@@ -413,8 +415,8 @@ void reconcile(reconcile_opts args) {
     }
     samFile* out_fp = sam_open(out_fn.data(), out_mode.data());
     if (!out_fp) {
-        std::cerr << "[E::reconcile] Failed to open output file "
-                  << out_fn << "\n";
+        std::cerr << "[E::reconcile] Failed to open output file " << out_fn
+                  << "\n";
         exit(1);
     }
     if (sam_hdr_write(out_fp, hdrs[0])) {
@@ -456,15 +458,13 @@ int reconcile_run(int argc, char** argv) {
     int c;
     reconcile_opts args;
     args.cmd = LevioSamUtils::make_cmd(argc, argv);
-    static struct option long_options[] {
+    static struct option long_options[]{
         {"conservative_mapq", no_argument, 0, 'c'},
-            {"paired_end", no_argument, 0, 'm'},
-            {"output_fn", required_argument, 0, 'o'},
-            {"rand_seed", required_argument, 0, 'r'},
-            {"inputs", required_argument, 0, 's'}, {
-            "score_tag", required_argument, 0, 'x'
-        }
-    };
+        {"paired_end", no_argument, 0, 'm'},
+        {"output_fn", required_argument, 0, 'o'},
+        {"rand_seed", required_argument, 0, 'r'},
+        {"inputs", required_argument, 0, 's'},
+        {"score_tag", required_argument, 0, 'x'}};
     int long_idx = 0;
     while ((c = getopt_long(argc, argv, "hcmo:r:s:x:", long_options,
                             &long_idx)) != -1) {

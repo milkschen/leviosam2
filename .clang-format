@@ -1,0 +1,10 @@
+# Match the existing C++ layout; preserve includes and documentation wrapping.
+BasedOnStyle: Google
+IndentWidth: 4
+ContinuationIndentWidth: 4
+ColumnLimit: 80
+AlignAfterOpenBracket: Align
+DerivePointerAlignment: true
+PointerAlignment: Left
+SortIncludes: Never
+ReflowComments: false

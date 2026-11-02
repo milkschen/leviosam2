@@ -119,15 +119,15 @@ def unique_records(records):
     counts = record_counts(records)
     duplicates = {key: count for key, count in counts.items() if count != 1}
     if duplicates:
-        raise AssertionError(f"test fixture has ambiguous record identities: {duplicates}")
+        raise AssertionError(
+            f"test fixture has ambiguous record identities: {duplicates}"
+        )
     return {record_key(record): record for record in records}
 
 
 def stable_tags(record):
     return {
-        tag: value
-        for tag, value in record.get_tags()
-        if tag not in INVALIDATED_TAGS
+        tag: value for tag, value in record.get_tags() if tag not in INVALIDATED_TAGS
     }
 
 
@@ -350,7 +350,11 @@ class ChainLiftIntegrationTest(IntegrationTestCase):
                         )
                         continue
                     self.assertEqual(result.mapping_quality, original.mapping_quality)
-                    if expected is None or expected.is_unmapped or expected.is_supplementary:
+                    if (
+                        expected is None
+                        or expected.is_unmapped
+                        or expected.is_supplementary
+                    ):
                         continue
 
                     self.assertEqual(result.reference_name, expected.reference_name)

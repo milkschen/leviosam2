@@ -12,6 +12,7 @@ Nae-Chyun Chen
 Johns Hopkins University
 2021-2022
 """
+
 import argparse
 import sys
 
@@ -70,9 +71,7 @@ def collect_perf_core(f, ls_perf) -> None:
         elif line.count("Elapsed (wall clock) time (h:mm:ss or m:ss):") > 0:
             wt = line.split("):")[1].split(":")
             if len(wt) == 3:
-                wall_time = (
-                    60 * 60 * float(wt[0]) + 60 * float(wt[1]) + float(wt[2])
-                )
+                wall_time = 60 * 60 * float(wt[0]) + 60 * float(wt[1]) + float(wt[2])
             elif len(wt) == 2:
                 wall_time = 60 * float(wt[0]) + float(wt[1])
             else:
@@ -81,9 +80,7 @@ def collect_perf_core(f, ls_perf) -> None:
         elif line.count("Maximum resident set size (kbytes):") > 0:
             max_rss = int(line.split("):")[1])
             cpu_time = usr_time + sys_time
-            ls_perf.append(
-                [task, usr_time, sys_time, cpu_time, wall_time, max_rss]
-            )
+            ls_perf.append([task, usr_time, sys_time, cpu_time, wall_time, max_rss])
     return
 
 
