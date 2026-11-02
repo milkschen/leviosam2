@@ -411,18 +411,21 @@ class Leviosam2Workflow:
             raise KeyError(f"Unsupported aligner: {self.aligner}")
 
     def _configure_read_group(self):
-        """Read only the input header; the workflow supports one input RG."""
+        """Infer a sole RG, or preserve per-read groups during reconciliation."""
         header = subprocess.check_output(
             [str(self.samtools), "view", "-H", str(self.input_bam)], text=True
         )
         groups = [line for line in header.splitlines() if line.startswith("@RG\t")]
-        if len(groups) > 1:
-            raise ValueError(
-                "The workflow supports a single input read group; split multiple-RG inputs first"
-            )
+        self.preserve_read_groups = len(groups) > 1
+        if self.preserve_read_groups and not self.read_group:
+            return
         if not groups:
             return  # Keep the explicit aligner group, or leave reads ungrouped.
-        fields = dict(field.split(":", 1) for field in groups[0].split("\t")[1:])
+        definitions = [
+            dict(field.split(":", 1) for field in group.split("\t")[1:])
+            for group in groups
+        ]
+        fields = definitions[0]
         if not fields.get("ID"):
             raise ValueError("Input @RG must contain a nonempty ID")
         if self.read_group:
@@ -438,6 +441,15 @@ class Leviosam2Workflow:
                 supplied = dict(
                     field.split(":", 1) for field in parts if field != "@RG"
                 )
+            if self.preserve_read_groups:
+                matches = [
+                    group
+                    for group in definitions
+                    if group.get("ID") == supplied.get("ID")
+                ]
+                if not matches:
+                    return  # A new aligner group is a fallback for ungrouped reads.
+                fields = matches[0]
             if any(fields.get(key) != value for key, value in supplied.items()):
                 raise ValueError("--read_group conflicts with the input @RG definition")
         if self.aligner in ("bowtie2", "strobealign"):
@@ -725,8 +737,14 @@ class Leviosam2Workflow:
             else:
                 reads = f"{shlex.quote(str(self._fn_deferred_fq_se))}"
 
+            restore_rg = (
+                f"{shlex.quote(str(self.leviosam2))} reconcile --restore-rg "
+                f"{shlex.quote(str(self._fn_deferred))} -s realigned:- -o - | "
+                if self.preserve_read_groups
+                else ""
+            )
             cmd_samtools = (
-                f"{self.time_cmd}"
+                restore_rg + f"{self.time_cmd}"
                 f"{shlex.quote(str(self.samtools))} sort -@ {num_threads_samtools} -o {shlex.quote(str(fn_out))}"
             )
         else:
@@ -806,6 +824,8 @@ class Leviosam2Workflow:
             )
             for path in inputs:
                 check_file_exists(path)
+            if self.preserve_read_groups and self.is_single_end:
+                inputs.append(self._fn_deferred)
             return self._run_stage(
                 cmd, "run_realign_deferred", inputs + self._reference_inputs(), [fn_out]
             )
@@ -840,6 +860,7 @@ class Leviosam2Workflow:
             f"{shlex.quote(str(self.leviosam2))} reconcile "
             f"-s {shlex.quote(str(self.source_label) + ':' + str(self._fn_deferred_pe_sortn))} "
             f"-s {shlex.quote(str(self.target_label) + ':' + str(self._fn_deferred_realigned_pe_sortn))} "
+            f"{'--preserve-rg ' if self.preserve_read_groups else ''}"
             f"-m -o - | "
             f"{self.time_cmd}"
             f"{shlex.quote(str(self.samtools))} sort -@ {self.num_threads} "
@@ -1046,6 +1067,7 @@ class Leviosam2Workflow:
 
     def __init__(self, args: argparse.Namespace) -> None:
         self._cram_completed = False
+        self.preserve_read_groups = False
         self.aligner = args.aligner
         self.aligner_exe = args.aligner_exe
         if self.aligner_exe == "auto":

@@ -838,15 +838,16 @@ class ReadGroupConfiguration(unittest.TestCase):
                             workflow.read_group.replace(r"\t", "\t"), group
                         )
 
-    def test_rejects_multiple_groups_and_conflicting_override(self):
+    def test_multiple_groups_enable_restoration_and_reject_conflicting_override(self):
         workflow = object.__new__(leviosam2.Leviosam2Workflow)
         workflow.samtools, workflow.input_bam = "samtools", pathlib.Path("input.bam")
         workflow.aligner, workflow.read_group = "bwamem", ""
         with mock.patch.object(
             subprocess, "check_output", return_value="@RG\tID:a\n@RG\tID:b\n"
         ):
-            with self.assertRaisesRegex(ValueError, "single input read group"):
-                workflow._configure_read_group()
+            workflow._configure_read_group()
+            self.assertTrue(workflow.preserve_read_groups)
+            self.assertEqual(workflow.read_group, "")
         for aligner, supplied in [
             ("bwamem", r"@RG\tID:a\tLB:other"),
             ("bowtie2", "--rg-id a --rg LB:other"),
@@ -875,11 +876,52 @@ class ReadGroupConfiguration(unittest.TestCase):
                 workflow._configure_read_group()
             self.assertEqual(workflow.read_group, supplied)
 
+    def test_multiple_group_fallback_inherits_matching_header_and_rejects_collisions(
+        self,
+    ):
+        workflow = object.__new__(leviosam2.Leviosam2Workflow)
+        workflow.samtools, workflow.input_bam = "samtools", pathlib.Path("input.bam")
+        workflow.aligner = "bwamem"
+        header = "@RG\tID:a\tLB:first\n@RG\tID:b\tLB:second\n"
+        with mock.patch.object(subprocess, "check_output", return_value=header):
+            workflow.read_group = r"@RG\tID:b"
+            workflow._configure_read_group()
+            self.assertTrue(workflow.preserve_read_groups)
+            self.assertIn("LB:second", workflow.read_group)
+            workflow.read_group = r"@RG\tID:new\tLB:fallback"
+            workflow._configure_read_group()
+            self.assertEqual(workflow.read_group, r"@RG\tID:new\tLB:fallback")
+            workflow.read_group = r"@RG\tID:b\tLB:conflicting"
+            with self.assertRaisesRegex(ValueError, "conflicts"):
+                workflow._configure_read_group()
+
+    def test_multi_group_commands_and_resume_inputs(self):
+        fixture = Workflow()
+        fixture.setUp()
+        workflow = fixture.workflow
+        workflow.preserve_read_groups = True
+        workflow.is_single_end = True
+        cmd = workflow.run_realign_deferred()
+        self.assertIn(
+            f"reconcile --restore-rg {workflow._fn_deferred} -s realigned:- -o - |", cmd
+        )
+        workflow.is_single_end = False
+        self.assertNotIn("--restore-rg", workflow.run_realign_deferred())
+        self.assertIn("--preserve-rg", workflow.run_refflow_merge_pe())
+        workflow.is_single_end = True
+        workflow.dryrun = False
+        with (
+            mock.patch.object(leviosam2, "check_file_exists"),
+            mock.patch.object(workflow, "_run_stage") as run,
+        ):
+            workflow.run_realign_deferred()
+        self.assertIn(workflow._fn_deferred, run.call_args.args[2])
+
     def test_configuration_precedes_lifting(self):
         workflow = object.__new__(leviosam2.Leviosam2Workflow)
         workflow._set_filenames = mock.Mock()
         workflow._configure_read_group = mock.Mock(
-            side_effect=ValueError("multiple groups")
+            side_effect=ValueError("invalid read group")
         )
         workflow.run_leviosam2 = mock.Mock()
         with self.assertRaises(ValueError):

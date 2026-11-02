@@ -20,19 +20,35 @@ conda, pre-built binary, or building from source.
 
 ## Read groups
 
-The Python workflow expects a single read group shared by the input reads.
-It reads the input header once and passes the complete `@RG` definition
-(including `ID`, `SM`, and `LB`) to the aligner for both single-end and paired-end
-realignment. Multiple `@RG` records are rejected; split such inputs before
-running the workflow. It does not scan records to validate their RG tags.
+The Python workflow preserves read-group identity and full `@RG` definitions
+(including `ID`, `SM`, and `LB`) through realignment and final merging.
 
-For input without `@RG`, `--read_group` retains its existing role of setting the
-realigner's read group. Otherwise, supplied fields must match the input group;
-missing fields are inherited. Without either, reads remain ungrouped.
-The final merge preserves identical RG IDs with `samtools merge -c`.
-There is no per-read lookup, additional alignment pass, or temporary RG index.
-Use `--forcerun` when updating an existing run to regenerate outputs produced
-with missing or incorrect read groups.
+With one input `@RG`, the workflow infers the aligner's group from the header
+once, assuming input reads share that group. Matching `--read_group` fields
+inherit the remaining metadata; conflicting fields are rejected. Without an
+input `@RG`, the option retains its role of setting the realigner's group.
+
+With multiple input groups, original per-read groups take precedence over the
+optional aligner group. `--read_group` acts as a fallback for originally
+ungrouped reads selected from realignment; ungrouped records selected from the
+lifted source remain ungrouped. Definitions sharing an ID must agree.
+The final `samtools merge -c` preserves shared IDs rather than renaming them.
+
+For paired-end input, `reconcile --preserve-rg` copies each read end's original
+group during the existing reconciliation pass, with no additional source scan.
+For single-end input with multiple groups, the native
+`reconcile --restore-rg SOURCE` mode reads the deferred BAM once, indexes query
+names and RG indexes in memory, and restores RGs on the realigner's output
+stream before sorting. All alignments of a read, including secondary and
+supplementary records, inherit its original group. Memory grows with the number
+and length of deferred query names. Neither path repeats alignment per group
+or creates a SQLite index; the single-group path remains header-only.
+
+Source names must identify reads unambiguously. Conflicting source RG
+assignments, undefined original groups, unmatched realigned names, and
+conflicting header definitions fail with an error. Inputs combining libraries
+with reused query names must make those names unique first.
+Use `--forcerun` to regenerate outputs from an older workflow version.
 
 ## Paired-end workflows
 

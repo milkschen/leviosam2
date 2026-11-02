@@ -25,6 +25,8 @@
 struct reconcile_opts {
     bool conservative = false;
     bool paired_end = false;
+    bool preserve_rg = false;
+    std::string restore_rg_source;
     std::string cmd = "";
     int rand_seed = 0;
     std::string output_fn = "";
@@ -74,7 +76,7 @@ void reconcile_core(const std::vector<std::string>& sam_fns,
                     const std::vector<bam_hdr_t*>& hdrs,
                     const bool is_paired_end, samFile* out_fp,
                     const std::string& score_tag, const bool& conservative,
-                    const int& rand_seed = 0);
+                    const int& rand_seed = 0, const bool preserve_rg = false);
 
 void reconcile(reconcile_opts args);
 

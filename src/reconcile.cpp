@@ -24,6 +24,7 @@
 #include <random>
 #include <regex>
 #include <sstream>
+#include <unordered_map>
 
 #include "leviosam_utils.hpp"
 #include "version.hpp"
@@ -227,13 +228,41 @@ int select_best_aln_paired_end(const std::vector<bam1_t*>& aln1s,
     return best_idx;
 }
 
+/**
+ * Copy the original RG to a selected alignment without changing other tags.
+ * Missing source RG leaves the selected record's optional aligner fallback.
+ * Invalid or undefined source RG and update failures terminate reconciliation.
+ *
+ * @param source Original alignment from the first input; read-only.
+ * @param selected Alignment whose RG is updated in place.
+ * @param header First input's header containing the original RG definitions.
+ * @return No value.
+ */
+static void restore_read_group(const bam1_t* source, bam1_t* selected,
+                               bam_hdr_t* header) {
+    const uint8_t* tag = bam_aux_get(source, "RG");
+    if (!tag) return;
+    const char* group = bam_aux2Z(tag);
+    if (!group || sam_hdr_line_index(header, "RG", group) < 0) {
+        std::cerr << "[E::reconcile] Invalid or undefined source RG for "
+                  << bam_get_qname(source) << "\n";
+        exit(1);
+    }
+    // Source and selected can be the same record. No update is needed then.
+    if (source != selected &&
+        bam_aux_update_str(selected, "RG", strlen(group) + 1, group) < 0) {
+        std::cerr << "[E::reconcile] Failed to restore read group\n";
+        exit(1);
+    }
+}
+
 void reconcile_core(const std::vector<std::string>& sam_fns,
                     const std::vector<std::string>& ids,
                     const std::vector<samFile*>& sam_fps,
                     const std::vector<bam_hdr_t*>& hdrs,
                     const bool is_paired_end, samFile* out_fp,
                     const std::string& score_tag, const bool& conservative,
-                    const int& rand_seed) {
+                    const int& rand_seed, const bool preserve_rg) {
     std::vector<bam1_t*> aln1s, aln2s;
     for (int i = 0; i < sam_fns.size(); i++) {
         aln1s.push_back(bam_init1());
@@ -257,6 +286,7 @@ void reconcile_core(const std::vector<std::string>& sam_fns,
             return status;
         };
     int num_records = 0;
+    std::string previous_name;
     while (true) {
         size_t eof_count = 0;
         for (size_t i = 0; i < sam_fns.size(); i++) {
@@ -298,10 +328,38 @@ void reconcile_core(const std::vector<std::string>& sam_fns,
                 exit(1);
             }
         }
+        if (preserve_rg) {
+            const std::string name = bam_get_qname(aln1s[0]);
+            if (name == previous_name) {
+                std::cerr << "[E::reconcile] Ambiguous source read name: "
+                          << name << "\n";
+                exit(1);
+            }
+            previous_name = name;
+        }
         ++num_records;
         if (is_paired_end) {
             int best_idx = select_best_aln_paired_end(
                 aln1s, aln2s, score_tag, conservative, MERGE_PE_SUM, rand_seed);
+            if (preserve_rg) {
+                // End order can differ between inputs; match READ1/READ2 flags.
+                for (bam1_t* selected : {aln1s[best_idx], aln2s[best_idx]}) {
+                    const int end =
+                        selected->core.flag & (BAM_FREAD1 | BAM_FREAD2);
+                    const bool first = (aln1s[0]->core.flag &
+                                        (BAM_FREAD1 | BAM_FREAD2)) == end;
+                    const bool second = (aln2s[0]->core.flag &
+                                         (BAM_FREAD1 | BAM_FREAD2)) == end;
+                    if ((end != BAM_FREAD1 && end != BAM_FREAD2) ||
+                        first == second) {
+                        std::cerr << "[E::reconcile] Ambiguous read end while "
+                                     "restoring RG\n";
+                        exit(1);
+                    }
+                    restore_read_group(first ? aln1s[0] : aln2s[0], selected,
+                                       hdrs[0]);
+                }
+            }
             bam_aux_append(aln1s[best_idx], "RF", 'Z',
                            ids[best_idx].length() + 1,
                            reinterpret_cast<uint8_t*>(
@@ -319,6 +377,8 @@ void reconcile_core(const std::vector<std::string>& sam_fns,
         } else {
             int best_idx = select_best_aln_single_end(aln1s, score_tag,
                                                       conservative, rand_seed);
+            if (preserve_rg)
+                restore_read_group(aln1s[0], aln1s[best_idx], hdrs[0]);
             bam_aux_append(aln1s[best_idx], "RF", 'Z',
                            ids[best_idx].length() + 1,
                            reinterpret_cast<uint8_t*>(
@@ -396,7 +456,109 @@ static void merge_read_group_headers(const std::vector<bam_hdr_t*>& headers) {
     }
 }
 
+/**
+ * Restore RG tags on a realigned stream using original single-end records.
+ * Index primary source records by query name, storing only the header RG index
+ * per name. Apply the original group to all output alignments for that name,
+ * including secondary/supplementary records. An absent source RG retains the
+ * aligner's optional fallback. Conflicting source assignments and unmatched
+ * output names are errors. Memory grows with the number of deferred names.
+ *
+ * @param args One labeled realigned input, output path, and source BAM path.
+ * The output retains the realigner's reference dictionary and both RG headers.
+ * @return No value. Invalid metadata or I/O failures terminate with an error.
+ */
+static void restore_read_groups(reconcile_opts args) {
+    if (args.inputs.size() != 1 || args.output_fn.empty() || args.paired_end ||
+        args.preserve_rg) {
+        std::cerr << "[E::reconcile] --restore-rg requires one realigned input "
+                     "and output, without -m or --preserve-rg\n";
+        exit(1);
+    }
+    auto separator = args.inputs[0].find(':');
+    if (separator == std::string::npos) {
+        std::cerr << "[E::reconcile] Expected label:input for --restore-rg\n";
+        exit(1);
+    }
+    auto fail = [](const std::string& message) {
+        std::cerr << "[E::reconcile] " << message << "\n";
+        exit(1);
+    };
+    samFile* source = sam_open(args.restore_rg_source.c_str(), "r");
+    if (!source) fail("Failed to open RG source");
+    bam_hdr_t* source_header = sam_hdr_read(source);
+    if (!source_header) fail("Failed to read RG source header");
+    std::unordered_map<std::string, int> groups;
+    bam1_t* record = bam_init1();
+    int status;
+    while ((status = sam_read1(source, source_header, record)) >= 0) {
+        if (record->core.flag & (BAM_FSECONDARY | BAM_FSUPPLEMENTARY)) continue;
+        int group_index = -1;
+        const uint8_t* tag = bam_aux_get(record, "RG");
+        if (tag) {
+            const char* group = bam_aux2Z(tag);
+            if (!group || (group_index = sam_hdr_line_index(source_header, "RG",
+                                                            group)) < 0)
+                fail("Invalid or undefined source RG for " +
+                     std::string(bam_get_qname(record)));
+        }
+        auto inserted = groups.emplace(bam_get_qname(record), group_index);
+        if (!inserted.second && inserted.first->second != group_index)
+            fail("Ambiguous source RG for " +
+                 std::string(bam_get_qname(record)));
+    }
+    if (status < -1) fail("Failed to read RG source records");
+    if (sam_close(source) < 0) fail("Failed to close RG source");
+
+    const std::string input_path = args.inputs[0].substr(separator + 1);
+    samFile* input = sam_open(input_path.c_str(), "r");
+    if (!input) fail("Failed to open realigned RG input");
+    bam_hdr_t* header = sam_hdr_read(input);
+    if (!header) fail("Failed to read realigned RG header");
+    merge_read_group_headers({header, source_header});
+    const std::string mode =
+        args.output_fn == "-"
+            ? "wbu"
+            : (args.output_fn.size() >= 4 &&
+                       args.output_fn.substr(args.output_fn.size() - 4) ==
+                           ".sam"
+                   ? "w"
+                   : "wb");
+    samFile* output = sam_open(args.output_fn.c_str(), mode.c_str());
+    if (!output || sam_hdr_write(output, header) < 0)
+        fail("Failed to write restored RG header");
+    while ((status = sam_read1(input, header, record)) >= 0) {
+        auto found = groups.find(bam_get_qname(record));
+        if (found == groups.end())
+            fail("No source record for " + std::string(bam_get_qname(record)));
+        if (found->second >= 0) {
+            const char* group =
+                sam_hdr_line_name(source_header, "RG", found->second);
+            if (bam_aux_update_str(record, "RG", strlen(group) + 1, group) < 0)
+                fail("Failed to restore RG tag");
+        }
+        const uint8_t* tag = bam_aux_get(record, "RG");
+        if (tag) {
+            const char* group = bam_aux2Z(tag);
+            if (!group || sam_hdr_line_index(header, "RG", group) < 0)
+                fail("Invalid or undefined output RG");
+        }
+        if (sam_write1(output, header, record) < 0)
+            fail("Failed to write restored RG record");
+    }
+    if (status < -1) fail("Failed to read realigned RG records");
+    if (sam_close(input) < 0 || sam_close(output) < 0)
+        fail("Failed to close RG streams");
+    bam_destroy1(record);
+    bam_hdr_destroy(header);
+    bam_hdr_destroy(source_header);
+}
+
 void reconcile(reconcile_opts args) {
+    if (!args.restore_rg_source.empty()) {
+        restore_read_groups(args);
+        return;
+    }
     if (args.inputs.empty() || args.output_fn.empty()) {
         std::cerr << "[E::reconcile] Input and output files are required\n";
         exit(1);
@@ -482,7 +644,8 @@ void reconcile(reconcile_opts args) {
         exit(1);
     }
     reconcile_core(sam_fns, ids, sam_fps, hdrs, args.paired_end, out_fp,
-                   args.score_tag, args.conservative, args.rand_seed);
+                   args.score_tag, args.conservative, args.rand_seed,
+                   args.preserve_rg);
     for (auto& s : sam_fps) {
         sam_close(s);
     }
@@ -508,6 +671,10 @@ static void print_reconcile_help() {
     std::cerr << "         -c        Set to use conservative MAPQ [false]\n";
     std::cerr << "         -m        Set to perform merging in pairs [false]\n";
     std::cerr << "         -r INT    Random seed used by the program [0]\n";
+    std::cerr << "         --restore-rg FILE  Restore single-end RGs from "
+                 "FILE; no alignment selection\n";
+    std::cerr << "         --preserve-rg  Restore RG from corresponding read "
+                 "in first input\n";
     std::cerr << "\n";
 }
 
@@ -521,11 +688,20 @@ int reconcile_run(int argc, char** argv) {
         {"output_fn", required_argument, 0, 'o'},
         {"rand_seed", required_argument, 0, 'r'},
         {"inputs", required_argument, 0, 's'},
-        {"score_tag", required_argument, 0, 'x'}};
+        {"score_tag", required_argument, 0, 'x'},
+        {"preserve-rg", no_argument, 0, 1000},
+        {"restore-rg", required_argument, 0, 1001},
+        {0, 0, 0, 0}};
     int long_idx = 0;
     while ((c = getopt_long(argc, argv, "hcmo:r:s:x:", long_options,
                             &long_idx)) != -1) {
         switch (c) {
+            case 1001:
+                args.restore_rg_source = optarg;
+                break;
+            case 1000:
+                args.preserve_rg = true;
+                break;
             case 'c':
                 args.conservative = true;
                 std::cerr << "[I::reconcile_run] Using conservative MAPQ "
