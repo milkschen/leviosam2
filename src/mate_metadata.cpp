@@ -41,7 +41,9 @@ class TempFile {
             fail("cannot open private temporary file");
         }
     }
-    ~TempFile() { if (file_) std::fclose(file_); }
+    ~TempFile() {
+        if (file_) std::fclose(file_);
+    }
     FILE* get() const { return file_; }
     void swap(TempFile& other) { std::swap(file_, other.file_); }
     void seek(uint64_t offset) {
@@ -68,6 +70,7 @@ class TempFile {
             ftruncate(fileno(file_), static_cast<off_t>(size)) != 0)
             fail("temporary index allocation failed");
     }
+
    private:
     FILE* file_;
 };
@@ -85,7 +88,8 @@ samFile* bam_handle(TempFile& file, const char* mode) {
     samFile* sam = hts_hopen(handle, "mate-metadata-spool.bam", mode);
     if (!sam) {
         int close_status = hclose(handle);
-        if (close_status < 0) fail("cannot close failed temporary BAM descriptor");
+        if (close_status < 0)
+            fail("cannot close failed temporary BAM descriptor");
         fail("cannot open temporary BAM");
     }
     return sam;
@@ -95,7 +99,8 @@ std::string key(const bam1_t* source, bool opposite) {
     const bool first = source->core.flag & BAM_FREAD1;
     const bool second = source->core.flag & BAM_FREAD2;
     if (first == second)
-        throw std::runtime_error("mate metadata: paired record " +
+        throw std::runtime_error(
+            "mate metadata: paired record " +
             std::string(bam_get_qname(source)) +
             " must identify exactly one of READ1 and READ2");
     std::string result(bam_get_qname(source));
@@ -103,7 +108,8 @@ std::string key(const bam1_t* source, bool opposite) {
     uint8_t* rg = bam_aux_get(source, "RG");
     if (rg) {
         const char* group = bam_aux2Z(rg);
-        if (!group) throw std::runtime_error("mate metadata: RG must be a string");
+        if (!group)
+            throw std::runtime_error("mate metadata: RG must be a string");
         result += group;
     }
     result.push_back('\0');
@@ -125,7 +131,7 @@ uint64_t hash_key(const std::string& text) {
 }
 
 uint8_t orientation(bool reverse, bool mate_reverse, bool left) {
-    if (reverse == mate_reverse) return 0;  // same-strand library
+    if (reverse == mate_reverse) return 0;           // same-strand library
     return (left ? reverse : mate_reverse) ? 2 : 1;  // RF / FR
 }
 
@@ -133,11 +139,13 @@ bool proper_pair(const MateOutcome& primary, const MateOutcome& mate) {
     if ((primary.flag & BAM_FUNMAP) || (mate.flag & BAM_FUNMAP) ||
         primary.tid != mate.tid || !primary.source_same_reference ||
         !(primary.source_flag & BAM_FPROPER_PAIR) ||
-        !(mate.source_flag & BAM_FPROPER_PAIR)) return false;
+        !(mate.source_flag & BAM_FPROPER_PAIR))
+        return false;
     bool left = primary.pos < mate.pos ||
                 (primary.pos == mate.pos && (primary.flag & BAM_FREAD1));
-    return primary.source_orientation == orientation(primary.flag & BAM_FREVERSE,
-                                                       mate.flag & BAM_FREVERSE, left);
+    return primary.source_orientation ==
+           orientation(primary.flag & BAM_FREVERSE, mate.flag & BAM_FREVERSE,
+                       left);
 }
 
 struct IndexSlot {
@@ -161,10 +169,13 @@ class OutcomeIndex {
         uint64_t hash = hash_key(key);
         auto found = locate(key, hash);
         if (found.second.offset)
-            throw std::runtime_error("mate metadata: ambiguous duplicate primary "
-                "alignment for QNAME/RG/read end: " + key.substr(0, key.find('\0')));
+            throw std::runtime_error(
+                "mate metadata: ambiguous duplicate primary "
+                "alignment for QNAME/RG/read end: " +
+                key.substr(0, key.find('\0')));
         if (key.size() > std::numeric_limits<uint32_t>::max())
-            throw std::runtime_error("mate metadata: primary identity is too long");
+            throw std::runtime_error(
+                "mate metadata: primary identity is too long");
         uint32_t size = static_cast<uint32_t>(key.size());
         uint64_t offset = records_.end();
         records_.write(&size, sizeof(size));
@@ -175,6 +186,7 @@ class OutcomeIndex {
         index_.write(&slot, sizeof(slot));
         ++entries_;
     }
+
    private:
     TempFile index_, records_;
     uint64_t capacity_;
@@ -192,7 +204,8 @@ class OutcomeIndex {
         }
         if (outcome) records_.read(outcome, sizeof(*outcome));
     }
-    std::pair<uint64_t, IndexSlot> locate(const std::string& key, uint64_t hash) {
+    std::pair<uint64_t, IndexSlot> locate(const std::string& key,
+                                          uint64_t hash) {
         uint64_t i = hash & (capacity_ - 1);
         while (true) {
             IndexSlot slot;
@@ -208,8 +221,10 @@ class OutcomeIndex {
         }
     }
     void grow() {
-        if (capacity_ > std::numeric_limits<uint64_t>::max() / (2 * sizeof(IndexSlot)))
-            throw std::runtime_error("mate metadata: temporary index is too large");
+        if (capacity_ >
+            std::numeric_limits<uint64_t>::max() / (2 * sizeof(IndexSlot)))
+            throw std::runtime_error(
+                "mate metadata: temporary index is too large");
         uint64_t next_capacity = capacity_ * 2;
         TempFile next;
         next.resize(next_capacity * sizeof(IndexSlot));
@@ -245,9 +260,11 @@ MateOutcome mate_outcome(const bam1_t* lifted, const bam1_t* source) {
     result.source_flag = source->core.flag;
     result.mapq = lifted->core.qual;
     bool left = source->core.pos < source->core.mpos ||
-        (source->core.pos == source->core.mpos && (source->core.flag & BAM_FREAD1));
-    result.source_orientation = orientation(source->core.flag & BAM_FREVERSE,
-                                             source->core.flag & BAM_FMREVERSE, left);
+                (source->core.pos == source->core.mpos &&
+                 (source->core.flag & BAM_FREAD1));
+    result.source_orientation =
+        orientation(source->core.flag & BAM_FREVERSE,
+                    source->core.flag & BAM_FMREVERSE, left);
     result.source_same_reference = source->core.tid == source->core.mtid;
     return result;
 }
@@ -277,7 +294,8 @@ void repair_mate_metadata(bam1_t* lifted, const bam1_t* source,
         const std::string status = std::string(mapped ? "L" : "UM") + "_" +
                                    ((c.flag & BAM_FMUNMAP) ? "UM" : "L");
         remove_aux_tag(lifted, "LO");
-        if (bam_aux_update_str(lifted, "LO", status.size() + 1, status.c_str()) < 0)
+        if (bam_aux_update_str(lifted, "LO", status.size() + 1,
+                               status.c_str()) < 0)
             throw std::runtime_error("mate metadata: cannot update LO tag");
         return;
     }
@@ -302,8 +320,8 @@ void repair_mate_metadata(bam1_t* lifted, const bam1_t* source,
         proper_pair(*pair_primary, *mate))
         c.flag |= BAM_FPROPER_PAIR;
     if (mapped && mate_mapped && c.tid == mate->tid) {
-        bool left = c.pos < mate->pos ||
-                    (c.pos == mate->pos && (c.flag & BAM_FREAD1));
+        bool left =
+            c.pos < mate->pos || (c.pos == mate->pos && (c.flag & BAM_FREAD1));
         if (!nonprimary) {
             hts_pos_t span = std::max(bam_endpos(lifted), mate->end) -
                              std::min(c.pos, mate->pos);
@@ -314,8 +332,8 @@ void repair_mate_metadata(bam1_t* lifted, const bam1_t* source,
         if (bam_aux_update_int(lifted, "MQ", mate_mapped ? mate->mapq : 0) < 0)
             throw std::runtime_error("mate metadata: cannot update MQ tag");
     }
-    const std::string status = std::string(mapped ? "L" : "UM") + "_" +
-                               (mate_mapped ? "L" : "UM");
+    const std::string status =
+        std::string(mapped ? "L" : "UM") + "_" + (mate_mapped ? "L" : "UM");
     remove_aux_tag(lifted, "LO");
     if (bam_aux_update_str(lifted, "LO", status.size() + 1, status.c_str()) < 0)
         throw std::runtime_error("mate metadata: cannot update LO tag");
@@ -340,18 +358,22 @@ class MateMetadataSpool::Impl {
 MateMetadataSpool::MateMetadataSpool(uint64_t capacity)
     : initial_index_capacity_(capacity) {
     if (capacity < 4 || (capacity & (capacity - 1)) != 0 ||
-        capacity > static_cast<uint64_t>(std::numeric_limits<off_t>::max()) / sizeof(IndexSlot))
-        throw std::runtime_error("mate metadata: invalid temporary index capacity");
+        capacity > static_cast<uint64_t>(std::numeric_limits<off_t>::max()) /
+                       sizeof(IndexSlot))
+        throw std::runtime_error(
+            "mate metadata: invalid temporary index capacity");
 }
 MateMetadataSpool::~MateMetadataSpool() = default;
 bool MateMetadataSpool::empty() const { return !impl_ || !impl_->count; }
 
 void MateMetadataSpool::append(const bam1_t* source, const bam1_t* lifted,
-                               sam_hdr_t* source_header, sam_hdr_t* lifted_header) {
+                               sam_hdr_t* source_header,
+                               sam_hdr_t* lifted_header) {
     if (!impl_) {
         impl_.reset(new Impl(initial_index_capacity_));
-        std::cerr << "[I::lift_run] Reconciling paired alignments through private "
-                     "temporary BAMs and a disk-backed primary-mate index\n";
+        std::cerr
+            << "[I::lift_run] Reconciling paired alignments through private "
+               "temporary BAMs and a disk-backed primary-mate index\n";
         impl_->source = bam_handle(impl_->source_file, "wb1");
         impl_->lifted = bam_handle(impl_->lifted_file, "wb1");
         if (sam_hdr_write(impl_->source, source_header) < 0 ||
@@ -359,7 +381,8 @@ void MateMetadataSpool::append(const bam1_t* source, const bam1_t* lifted,
             fail("cannot write temporary BAM header");
     }
     if (!(source->core.flag & (BAM_FSECONDARY | BAM_FSUPPLEMENTARY)))
-        impl_->outcomes.insert(key(source, false), mate_outcome(lifted, source));
+        impl_->outcomes.insert(key(source, false),
+                               mate_outcome(lifted, source));
     if (sam_write1(impl_->source, source_header, source) < 0 ||
         sam_write1(impl_->lifted, lifted_header, lifted) < 0)
         fail("cannot write temporary BAM record");
@@ -370,7 +393,8 @@ bool MateMetadataSpool::find_mate(const bam1_t* source, MateOutcome& result) {
     return impl_ && impl_->outcomes.find(key(source, true), result);
 }
 
-bool MateMetadataSpool::find_primary(const bam1_t* source, MateOutcome& result) {
+bool MateMetadataSpool::find_primary(const bam1_t* source,
+                                     MateOutcome& result) {
     return impl_ && impl_->outcomes.find(key(source, false), result);
 }
 
@@ -396,7 +420,8 @@ void MateMetadataSpool::begin_replay(sam_hdr_t*, sam_hdr_t*) {
 }
 
 bool MateMetadataSpool::next(bam1_t* source, bam1_t* lifted,
-                             sam_hdr_t* source_header, sam_hdr_t* lifted_header) {
+                             sam_hdr_t* source_header,
+                             sam_hdr_t* lifted_header) {
     if (empty() || !impl_->replay) return false;
     int sr = sam_read1(impl_->source, source_header, source);
     int lr = sam_read1(impl_->lifted, lifted_header, lifted);

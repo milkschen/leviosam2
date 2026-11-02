@@ -37,7 +37,8 @@
 
 KSEQ_INIT(gzFile, gzread);
 
-static int parse_int_option(const char *option, const char *value, int minimum) {
+static int parse_int_option(const char *option, const char *value,
+                            int minimum) {
     char *end = nullptr;
     errno = 0;
     long parsed = std::strtol(value, &end, 10);
@@ -206,17 +207,17 @@ void serialize_run(lift_opts args) {
     }
 }
 
-static void write_lifted_record(bam1_t* lifted, bam1_t* source,
-                                samFile* output, sam_hdr_t* header,
-                                LevioSamUtils::WriteDeferred* wd,
-                                std::mutex* output_mutex) {
+static void write_lifted_record(bam1_t *lifted, bam1_t *source, samFile *output,
+                                sam_hdr_t *header,
+                                LevioSamUtils::WriteDeferred *wd,
+                                std::mutex *output_mutex) {
     bool commit_dest = wd->commit_aln_dest(lifted);
     bool commit_source = wd->commit_aln_source(source);
     if (commit_dest || commit_source) {
         std::lock_guard<std::mutex> lock(*output_mutex);
         if (sam_write1(output, header, lifted) < 0)
             throw std::runtime_error("Failed to write lifted record " +
-                                      std::string(bam_get_qname(lifted)));
+                                     std::string(bam_get_qname(lifted)));
     }
     if (!commit_dest) {
         std::lock_guard<std::mutex> lock(wd->mutex_fwrite);
@@ -232,7 +233,7 @@ void read_and_lift(T *lift_map, std::mutex *mutex_fread,
                    sam_hdr_t *hdr_dest,
                    const std::map<std::string, std::string> *ref_dict,
                    LevioSamUtils::WriteDeferred *wd,
-                   LevioSamUtils::MateMetadataSpool* mate_spool,
+                   LevioSamUtils::MateMetadataSpool *mate_spool,
                    const lift_opts &args) {
     std::string current_contig;
     std::vector<bam1_t *> aln_vec, aln_vec_clone;
@@ -356,10 +357,10 @@ void read_and_lift(T *lift_map, std::mutex *mutex_fread,
             if (aln_vec[i]->core.flag & BAM_FPAIRED) {
                 std::lock_guard<std::mutex> lock(*mutex_fwrite);
                 mate_spool->append(aln_vec_clone[i], aln_vec[i], hdr_source,
-                                    hdr_dest);
+                                   hdr_dest);
             } else {
                 write_lifted_record(aln_vec[i], aln_vec_clone[i], out_sam_fp,
-                                     hdr_dest, wd, mutex_fwrite);
+                                    hdr_dest, wd, mutex_fwrite);
             }
         }
     }
@@ -375,32 +376,33 @@ void read_and_lift(T *lift_map, std::mutex *mutex_fread,
 // an exact source CIGAR for a virtual alignment; never substitute this record's
 // sequence length for the missing mate's reference span.
 template <class T>
-static bool lift_missing_mate(T* lift_map, const bam1_t* source,
-                              sam_hdr_t* source_header,
-                              sam_hdr_t* lifted_header, bool keep_mapq,
-                              LevioSamUtils::MateOutcome& result) {
+static bool lift_missing_mate(T *lift_map, const bam1_t *source,
+                              sam_hdr_t *source_header,
+                              sam_hdr_t *lifted_header, bool keep_mapq,
+                              LevioSamUtils::MateOutcome &result) {
     if (source->core.flag & BAM_FMUNMAP) {
         result = LevioSamUtils::MateOutcome();
         return true;
     }
-    uint8_t* mc = bam_aux_get(source, "MC");
+    uint8_t *mc = bam_aux_get(source, "MC");
     if (!mc || source->core.mtid < 0 || source->core.mpos < 0) return false;
-    const char* text = bam_aux2Z(mc);
+    const char *text = bam_aux2Z(mc);
     if (!text) throw std::runtime_error("MC tag must be a CIGAR string");
-    uint32_t* cigar = nullptr;
+    uint32_t *cigar = nullptr;
     size_t capacity = 0;
-    char* end = nullptr;
+    char *end = nullptr;
     ssize_t count = sam_parse_cigar(text, &end, &cigar, &capacity);
     std::unique_ptr<uint32_t, decltype(&std::free)> storage(cigar, &std::free);
     if (count <= 0 || !end || *end)
         throw std::runtime_error("Invalid MC CIGAR for " +
-                                  std::string(bam_get_qname(source)));
-    std::unique_ptr<bam1_t, decltype(&bam_destroy1)> mate(bam_init1(), &bam_destroy1);
+                                 std::string(bam_get_qname(source)));
+    std::unique_ptr<bam1_t, decltype(&bam_destroy1)> mate(bam_init1(),
+                                                          &bam_destroy1);
     if (!mate) throw std::runtime_error("Cannot allocate virtual mate");
     uint16_t flag = BAM_FSECONDARY;
     if (source->core.flag & BAM_FMREVERSE) flag |= BAM_FREVERSE;
     uint8_t mapq = 0;
-    uint8_t* mq = bam_aux_get(source, "MQ");
+    uint8_t *mq = bam_aux_get(source, "MQ");
     if (mq) {
         int64_t value = bam_aux2i(mq);
         if (value < 0 || value > 255)
@@ -408,11 +410,12 @@ static bool lift_missing_mate(T* lift_map, const bam1_t* source,
         mapq = static_cast<uint8_t>(value);
     }
     if (bam_set1(mate.get(), 0, nullptr, flag, source->core.mtid,
-                 source->core.mpos, mapq, count, cigar, -1, -1, 0,
-                 0, nullptr, nullptr, 0) < 0)
+                 source->core.mpos, mapq, count, cigar, -1, -1, 0, 0, nullptr,
+                 nullptr, 0) < 0)
         throw std::runtime_error("Cannot construct virtual MC mate");
     std::string dest;
-    lift_map->lift_aln(mate.get(), source_header, lifted_header, dest, keep_mapq);
+    lift_map->lift_aln(mate.get(), source_header, lifted_header, dest,
+                       keep_mapq);
     result = LevioSamUtils::mate_outcome(mate.get(), source);
     // Only proper-pair provenance is used from source_flag. It is shared by
     // the two original primary ends even though source is the opposite end.
@@ -421,36 +424,42 @@ static bool lift_missing_mate(T* lift_map, const bam1_t* source,
 }
 
 template <class T>
-static void replay_mates(T* lift_map, LevioSamUtils::MateMetadataSpool& spool,
-                          sam_hdr_t* source_header, sam_hdr_t* lifted_header,
-                          samFile* output, LevioSamUtils::WriteDeferred* wd,
-                          std::mutex* output_mutex, const lift_opts& args) {
+static void replay_mates(T *lift_map, LevioSamUtils::MateMetadataSpool &spool,
+                         sam_hdr_t *source_header, sam_hdr_t *lifted_header,
+                         samFile *output, LevioSamUtils::WriteDeferred *wd,
+                         std::mutex *output_mutex, const lift_opts &args) {
     if (spool.empty()) return;
     spool.begin_replay(source_header, lifted_header);
-    std::unique_ptr<bam1_t, decltype(&bam_destroy1)> source(bam_init1(), &bam_destroy1);
-    std::unique_ptr<bam1_t, decltype(&bam_destroy1)> lifted(bam_init1(), &bam_destroy1);
-    if (!source || !lifted) throw std::runtime_error("Cannot allocate mate replay records");
+    std::unique_ptr<bam1_t, decltype(&bam_destroy1)> source(bam_init1(),
+                                                            &bam_destroy1);
+    std::unique_ptr<bam1_t, decltype(&bam_destroy1)> lifted(bam_init1(),
+                                                            &bam_destroy1);
+    if (!source || !lifted)
+        throw std::runtime_error("Cannot allocate mate replay records");
     uint64_t unknown = 0, virtual_mates = 0;
-    while (spool.next(source.get(), lifted.get(), source_header, lifted_header)) {
+    while (
+        spool.next(source.get(), lifted.get(), source_header, lifted_header)) {
         LevioSamUtils::MateOutcome mate;
         bool found = spool.find_mate(source.get(), mate);
         if (!found) {
             found = lift_missing_mate(lift_map, source.get(), source_header,
-                                       lifted_header, args.keep_mapq, mate);
+                                      lifted_header, args.keep_mapq, mate);
             if (found && !(source->core.flag & BAM_FMUNMAP)) ++virtual_mates;
             if (!found) ++unknown;
         }
         LevioSamUtils::MateOutcome primary;
-        bool has_primary = (source->core.flag & (BAM_FSECONDARY | BAM_FSUPPLEMENTARY)) &&
-                           spool.find_primary(source.get(), primary);
+        bool has_primary =
+            (source->core.flag & (BAM_FSECONDARY | BAM_FSUPPLEMENTARY)) &&
+            spool.find_primary(source.get(), primary);
         LevioSamUtils::repair_mate_metadata(lifted.get(), source.get(),
-                                             found ? &mate : nullptr,
-                                             has_primary ? &primary : nullptr);
+                                            found ? &mate : nullptr,
+                                            has_primary ? &primary : nullptr);
         write_lifted_record(lifted.get(), source.get(), output, lifted_header,
-                             wd, output_mutex);
+                            wd, output_mutex);
     }
     if (unknown)
-        std::cerr << "[W::lift_run] " << unknown << " paired records lack a primary "
+        std::cerr << "[W::lift_run] " << unknown
+                  << " paired records lack a primary "
                      "mate and MC tag; target mate coordinates and TLEN are "
                      "unknown and have been cleared\n";
     if (virtual_mates)
@@ -484,7 +493,8 @@ void lift_run(lift_opts args) {
         if (args.chainmap_fname != "") {
             std::cerr << "[I::lift_run] Loading levioSAM 2 index...";
             std::ifstream in(args.chainmap_fname, std::ios::binary);
-            std::ifstream fs(args.chainmap_fname, std::ios::binary | std::ios::ate);
+            std::ifstream fs(args.chainmap_fname,
+                             std::ios::binary | std::ios::ate);
             if (!in || !fs || fs.tellg() <= 0) {
                 std::cerr << "[E::lift_run] Cannot open ChainMap index "
                           << args.chainmap_fname << "\n";
@@ -593,12 +603,10 @@ void lift_run(lift_opts args) {
     free(hd_line.s);
     int sort_order_status =
         (hd_status == 0)
-            ? sam_hdr_update_line(hdr, "HD", NULL, NULL, "SO", "unsorted",
-                                  NULL)
-            : (hd_status == -1)
-                  ? sam_hdr_add_line(hdr, "HD", "VN", "1.6", "SO",
-                                     "unsorted", NULL)
-                  : -1;
+            ? sam_hdr_update_line(hdr, "HD", NULL, NULL, "SO", "unsorted", NULL)
+        : (hd_status == -1)
+            ? sam_hdr_add_line(hdr, "HD", "VN", "1.6", "SO", "unsorted", NULL)
+            : -1;
     if (sort_order_status < 0) {
         std::cerr << "[E::lift_run] Failed to update output sort order\n";
         exit(1);
@@ -646,13 +654,13 @@ void lift_run(lift_opts args) {
             try {
                 if (args.chain_fname == "" && args.chainmap_fname == "")
                     read_and_lift(&lift_map, &mutex_fread, &mutex_fwrite,
-                                   sam_fp, out_sam_fp, hdr_orig, hdr, &ref_dict,
-                                   &wd, &mate_spool, args);
+                                  sam_fp, out_sam_fp, hdr_orig, hdr, &ref_dict,
+                                  &wd, &mate_spool, args);
                 else
                     read_and_lift(&chain_map, &mutex_fread, &mutex_fwrite,
-                                   sam_fp, out_sam_fp, hdr_orig, hdr, &ref_dict,
-                                   &wd, &mate_spool, args);
-            } catch (const std::exception& error) {
+                                  sam_fp, out_sam_fp, hdr_orig, hdr, &ref_dict,
+                                  &wd, &mate_spool, args);
+            } catch (const std::exception &error) {
                 std::cerr << "[E::lift_run] " << error.what() << "\n";
                 std::exit(1);
             }
@@ -664,12 +672,12 @@ void lift_run(lift_opts args) {
     threads.clear();
     try {
         if (args.chain_fname == "" && args.chainmap_fname == "")
-            replay_mates(&lift_map, mate_spool, hdr_orig, hdr, out_sam_fp,
-                           &wd, &mutex_fwrite, args);
+            replay_mates(&lift_map, mate_spool, hdr_orig, hdr, out_sam_fp, &wd,
+                         &mutex_fwrite, args);
         else
-            replay_mates(&chain_map, mate_spool, hdr_orig, hdr, out_sam_fp,
-                           &wd, &mutex_fwrite, args);
-    } catch (const std::exception& error) {
+            replay_mates(&chain_map, mate_spool, hdr_orig, hdr, out_sam_fp, &wd,
+                         &mutex_fwrite, args);
+    } catch (const std::exception &error) {
         std::cerr << "[E::lift_run] " << error.what() << "\n";
         std::exit(1);
     }
@@ -723,7 +731,8 @@ void print_lift_help_msg() {
     std::cerr << "                   "
                  "Leave empty or set to \"-\" to read from stdin.\n";
     std::cerr << "         -p string Prefix of the output files. [stdout]\n";
-    std::cerr << "         -O string Format of the output file: sam or bam. [sam]\n";
+    std::cerr
+        << "         -O string Format of the output file: sam or bam. [sam]\n";
     std::cerr << "         -t INT    Number of threads used.\n"
                  "                   "
                  "If -t is not set, the value would be the sum of\n"
@@ -747,17 +756,19 @@ void print_lift_help_msg() {
                  "Add MD and NM to output alignment records (requires -f)\n";
     std::cerr << "         -f path   "
                  "Path to the FASTA file of the target reference. \n";
-    std::cerr << "         -F path   "
-                 "Path to the FAI (FASTA index) file of the target reference. \n";
+    std::cerr
+        << "         -F path   "
+           "Path to the FAI (FASTA index) file of the target reference. \n";
     std::cerr << "         -x path   Re-alignment preset. [] \n";
     std::cerr << "         -G INT    "
                  "Maximum allowed gap size (in base pairs) between chain "
                  "intervals for an alignment to be considered liftable. A "
                  "value of 0 requires perfect chain interval continuity. [0]\n";
-    std::cerr << "         -g INT    "
-                 "Haplotype (0 or 1) for variant-aware (VCF) mode. \n"
-                 "                   "
-                 "NOTE: Do not confuse with workflow script's `-g` (gap size).\n";
+    std::cerr
+        << "         -g INT    "
+           "Haplotype (0 or 1) for variant-aware (VCF) mode. \n"
+           "                   "
+           "NOTE: Do not confuse with workflow script's `-g` (gap size).\n";
     std::cerr << "         -s string "
                  "Sample name for variant-aware (VCF) mode.\n";
     std::cerr << "         -v path   "
@@ -773,11 +784,13 @@ void print_lift_help_msg() {
     std::cerr << "         Commit/defer/suppress rule options:\n";
     std::cerr << "           -S string<:int/float> Key-value pair of "
                  "a split rule. We allow appending multiple `-S` options.\n";
-    std::cerr << "                     Options: "
-                 "lifted, mapq:<int>, aln_score:<int>, isize:<int>, hdist:<int>, "
-                 "clipped_frac:<float> [none]\n";
-    std::cerr << "                       * lifted              "
-                 "Defer alignments that are unlifted (unmapped) after liftover.\n";
+    std::cerr
+        << "                     Options: "
+           "lifted, mapq:<int>, aln_score:<int>, isize:<int>, hdist:<int>, "
+           "clipped_frac:<float> [none]\n";
+    std::cerr
+        << "                       * lifted              "
+           "Defer alignments that are unlifted (unmapped) after liftover.\n";
     std::cerr << "                       * mapq          INT   "
                  "Min MAPQ (pre-liftover) accepted for a committed read.\n";
     std::cerr << "                       * aln_score     INT   "
@@ -801,8 +814,9 @@ void print_lift_help_msg() {
     std::cerr << "           -r string Path to a BED file (source "
                  "coordinates). Reads overlapping with the regions are always "
                  "committed. [none]\n";
-    std::cerr << "           -D string Path to a BED file (dest coordinates). "
-                 "Reads overlapping with the regions are always deferred. [none]\n";
+    std::cerr
+        << "           -D string Path to a BED file (dest coordinates). "
+           "Reads overlapping with the regions are always deferred. [none]\n";
     std::cerr << "           -B float  Threshold for BED record intersection. "
                  "[0]\n"
                  "                     If <= 0: consider any overlap (>0 bp)\n"
@@ -986,8 +1000,7 @@ int main(int argc, char **argv) {
                     parse_int_option("--lift_threads", optarg, 1);
                 break;
             case OPT_HTS_THREADS:
-                args.hts_threads =
-                    parse_int_option("--hts_threads", optarg, 0);
+                args.hts_threads = parse_int_option("--hts_threads", optarg, 0);
                 break;
             default:
                 std::cerr << "[E::main] Invalid flag value " << c << "\n";

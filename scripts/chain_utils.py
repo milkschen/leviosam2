@@ -43,9 +43,7 @@ def parse_args():
         required=True,
         help='Chain ids to be converted, separated by commas and hyphens. E.g., "1-9", "1,5-8".',
     )
-    parser_c2v.add_argument(
-        "-o", "--out_vcf", help="Path to the output VCF file."
-    )
+    parser_c2v.add_argument("-o", "--out_vcf", help="Path to the output VCF file.")
     parser_c2v.set_defaults(func=chain2vcf)
 
     parser_c2b = subparsers.add_parser("chain2bed")
@@ -61,9 +59,7 @@ def parse_args():
         required=True,
         help='Chain ids to be converted, separated by commas and hyphens. E.g., "1-9", "1,5-8".',
     )
-    parser_c2b.add_argument(
-        "-o", "--out_bed", help="Path to the output BED file."
-    )
+    parser_c2b.add_argument("-o", "--out_bed", help="Path to the output BED file.")
     parser_c2b.set_defaults(func=chain2bed)
 
     args = parser.parse_args()
@@ -109,16 +105,10 @@ class Chain2Bed:
                 [self.tstart, self.tstart + int(chain_aln[self.CF.ALN_SIZE])]
             )
         else:
-            self.bed_records[-1][1] = self.tstart + int(
-                chain_aln[self.CF.ALN_SIZE]
-            )
+            self.bed_records[-1][1] = self.tstart + int(chain_aln[self.CF.ALN_SIZE])
 
-        self.tstart += int(chain_aln[self.CF.ALN_SIZE]) + int(
-            chain_aln[self.CF.ALN_DT]
-        )
-        self.qstart += int(chain_aln[self.CF.ALN_SIZE]) + int(
-            chain_aln[self.CF.ALN_DQ]
-        )
+        self.tstart += int(chain_aln[self.CF.ALN_SIZE]) + int(chain_aln[self.CF.ALN_DT])
+        self.qstart += int(chain_aln[self.CF.ALN_SIZE]) + int(chain_aln[self.CF.ALN_DQ])
 
     def write(self):
         for record in self.bed_records:
@@ -156,12 +146,8 @@ class Chain2Vcf:
                     file=self.out_vcf,
                 )
         else:
-            len_t = int(chain_hdr[self.CF.TEND]) - int(
-                chain_hdr[self.CF.TSTART]
-            )
-            len_q = int(chain_hdr[self.CF.QEND]) - int(
-                chain_hdr[self.CF.QSTART]
-            )
+            len_t = int(chain_hdr[self.CF.TEND]) - int(chain_hdr[self.CF.TSTART])
+            len_q = int(chain_hdr[self.CF.QEND]) - int(chain_hdr[self.CF.QSTART])
             if len_t > len_q:
                 ref = "A"
                 qry = "A" * (len_t - len_q + 1)
@@ -242,9 +228,7 @@ def get_contig_name(fn, chain_ids, CF):
 
 def write_vcf_hdr(f_out, chain_ids, dict_cid_contig):
     print("##fileformat=VCFv4.3", file=f_out)
-    print(
-        '##FILTER=<ID=AUTO,Description="Generated automatically.">', file=f_out
-    )
+    print('##FILTER=<ID=AUTO,Description="Generated automatically.">', file=f_out)
     print(dict_cid_contig)
     for cid, contig in dict_cid_contig.items():
         print(f"##contig=<ID={contig}>", file=f_out)
@@ -313,9 +297,7 @@ def chain2vcf(args):
     else:
         f_out = open(args.out_vcf, "w")
 
-    write_vcf_hdr(
-        f_out, chain_ids, get_contig_name(args.in_chain, chain_ids, CF)
-    )
+    write_vcf_hdr(f_out, chain_ids, get_contig_name(args.in_chain, chain_ids, CF))
 
     f = open(args.in_chain, "r")
     current_id = ""

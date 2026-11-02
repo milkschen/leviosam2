@@ -330,7 +330,8 @@ hts_pos_t get_mate_query_len_on_ref(const bam1_t* aln) {
         uint32_t* a_cigar = NULL;
         size_t capacity = 0;
         char* end = nullptr;
-        ssize_t n_cigar = sam_parse_cigar(mate_cigar, &end, &a_cigar, &capacity);
+        ssize_t n_cigar =
+            sam_parse_cigar(mate_cigar, &end, &a_cigar, &capacity);
         if (n_cigar <= 0 || !end || *end) {
             free(a_cigar);
             throw std::runtime_error("Invalid MC CIGAR for " +

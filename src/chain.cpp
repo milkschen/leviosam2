@@ -165,8 +165,8 @@ ChainMap::ChainMap(std::string fname, int verbose, int allowed_intvl_gaps,
     bool current_ss = true;
     while (getline(chain_f, line)) {
         parse_chain_line(line, source, target, source_len, source_offset,
-                         target_offset, current_ss, start_bv_map,
-                         end_bv_map, lm);
+                         target_offset, current_ss, start_bv_map, end_bv_map,
+                         lm);
     }
     chain_f.close();
     if (interval_map.empty()) {
@@ -262,7 +262,8 @@ void ChainMap::debug_print_intervals(std::string contig, const int n) {
  * @param contig The contig/chromosome name to add the interval to
  * @param interval The interval to add
  */
-void ChainMap::add_interval(const std::string& contig, const Interval& interval) {
+void ChainMap::add_interval(const std::string &contig,
+                            const Interval &interval) {
     interval_map[contig].push_back(interval);
 }
 
@@ -279,15 +280,16 @@ bool ChainMap::validate_intervals() {
         std::vector<chain::Interval> v = interval_map[itr.first];
         for (int i = 0; i < v.size() - 1; i++) {
             if (v[i].source_end > v[i + 1].source_start) {
-                std::cerr << "[E::chain::validate_intervals]  "
-                          << itr.first << "\n";
+                std::cerr << "[E::chain::validate_intervals]  " << itr.first
+                          << "\n";
                 v[i].debug_print_interval();
                 v[i + 1].debug_print_interval();
                 return false;
             }
         }
     }
-    std::cerr << "[I::chain::validate_intervals] Interval validation: passed (no overlaps)\n";
+    std::cerr << "[I::chain::validate_intervals] Interval validation: passed "
+                 "(no overlaps)\n";
     return true;
 }
 
@@ -510,10 +512,14 @@ void ChainMap::parse_chain_line(std::string line, std::string &source,
     }
 }
 
-/* Lift CIGAR
- * This version of `lift_cigar()` can be called when no interval indexes are
- * available, but is slower because of additional calls to query for interval
- * indexes.
+/**
+ * Lift the CIGAR in place, looking up source intervals from POS and the CIGAR's
+ * reference span, then delegating to the indexed overload. SEQ may be absent.
+ * Coordinates, flags and sequence orientation are handled by the caller.
+ *
+ * @param contig Read-only source contig name for interval lookup.
+ * @param aln Source-positioned alignment; its CIGAR may change even on failure.
+ * @return 0 on success, or -1 if interval lookup or CIGAR transformation fails.
  */
 int ChainMap::lift_cigar(const std::string &contig, bam1_t *aln) {
     bam1_core_t *c = &(aln->core);
@@ -535,23 +541,29 @@ int ChainMap::lift_cigar(const std::string &contig, bam1_t *aln) {
                       num_sclip_end);
 }
 
-/* Lift CIGAR
- * A fast version of `lift_cigar()`, which is used when auxiliary information
- * including query start/end interval ranks and #clipped bases is available.
+/**
+ * Lift the CIGAR in place using compatible retained source interval indexes.
+ * Clipping distances count source-reference bases: M/=/X/D/N consume them,
+ * I/S/H do not. Clipped query becomes S; hard clips and total query consumption
+ * are preserved even when SEQ is absent. Chain gaps are composed into the
+ * alignment, =/X become M, and operation order reverses for a reverse mapping.
+ * Coordinates, flags and SEQ are not lifted here.
  *
- * The CIGAR string is updated in two cases:
- *   (1) the start-/end-ing position of the segment is outside of an interval,
- * where we set the overhangs as soft clipped (2) the segment overlaps one or
- * more gaps between two valid intervals, where we update the CIGAR with INS or
- * DEL operators
+ * @param contig Read-only source contig name for chain intervals.
+ * @param aln Source-positioned alignment; its CIGAR may change even on failure.
+ * @param start_sidx First retained source interval index after endpoint clipping.
+ * @param end_sidx Last retained source interval index after endpoint clipping.
+ * @param num_sclip_start Nonnegative source-reference bases clipped at the start.
+ * @param num_sclip_end Nonnegative source-reference bases clipped at the end.
+ * @return 0 on success, or -1 for invalid clipping, an entirely clipped source
+ * span, or a result with no M/I/D/N operation.
  */
 int ChainMap::lift_cigar(const std::string &contig, bam1_t *aln,
                          const int &start_sidx, const int &end_sidx,
                          int num_sclip_start, int num_sclip_end) {
     // Clipping distances are measured on the source reference, not the query.
     // A read deletion can make the reference span longer than its sequence.
-    auto source_length = bam_cigar2rlen(aln->core.n_cigar,
-                                       bam_get_cigar(aln));
+    auto source_length = bam_cigar2rlen(aln->core.n_cigar, bam_get_cigar(aln));
     if (num_sclip_start < 0 || num_sclip_end < 0 ||
         source_length <= num_sclip_start + num_sclip_end) {
         return -1;
@@ -634,9 +646,23 @@ int ChainMap::lift_cigar(const std::string &contig, bam1_t *aln,
     return 0;
 }
 
-/* Core CIGAR lifting function
+/**
+ * Build a CIGAR vector by source-reference consumption, splitting at clipping
+ * boundaries and chain breakpoints. Clipped query becomes S and clipped D/N
+ * disappear; existing S/H do not consume clipping distance. Compose gaps as D/I
+ * while preserving query consumption and hard clips and combining soft clips.
+ * Convert I at either vector end to S, then reverse for a reverse mapping.
+ * The wrapper applies the result and checks it; this helper does not modify aln.
  *
- * Return a pointer of uint32_t in the htslib CIGAR format.
+ * @param contig Read-only source contig name for chain intervals.
+ * @param aln Read-only source-positioned alignment with =/X normalized to M.
+ * @param start_sidx First retained source interval index; must be compatible
+ * with end_sidx.
+ * @param end_sidx Last retained source interval index.
+ * @param num_sclip_start Validated source-reference bases clipped at the start.
+ * @param num_sclip_end Validated source-reference bases clipped at the end.
+ * @return Vector of HTSlib-encoded CIGAR operations, possibly empty;
+ * no status code.
  */
 std::vector<uint32_t> ChainMap::lift_cigar_core(
     const std::string &contig, bam1_t *aln, const int &start_sidx,
@@ -727,29 +753,26 @@ std::vector<uint32_t> ChainMap::lift_cigar_core(
 
             uint32_t chunk = remaining;
             if (!break_points.empty()) {
-                int32_t next_breakpoint =
-                    std::get<0>(break_points.front());
+                int32_t next_breakpoint = std::get<0>(break_points.front());
                 if (next_breakpoint > source_offset) {
-                    chunk = std::min<uint32_t>(
-                        chunk, next_breakpoint - source_offset);
+                    chunk = std::min<uint32_t>(chunk,
+                                               next_breakpoint - source_offset);
                 }
             }
             // Split at source clipping boundaries before composing chain gaps.
             // Post-composition query clipping loses existing S/H, counts I as
             // reference bases, and misses D/N that consume reference only.
             if (source_offset < retained_start) {
-                chunk = std::min<hts_pos_t>(chunk,
-                                            retained_start - source_offset);
+                chunk =
+                    std::min<hts_pos_t>(chunk, retained_start - source_offset);
                 if (bam_cigar_type(cigar_op) & 1)
-                    Cigar::push_cigar(new_cigar, chunk, BAM_CSOFT_CLIP,
-                                      false);
+                    Cigar::push_cigar(new_cigar, chunk, BAM_CSOFT_CLIP, false);
             } else if (source_offset >= retained_end) {
                 if (bam_cigar_type(cigar_op) & 1)
-                    Cigar::push_cigar(new_cigar, chunk, BAM_CSOFT_CLIP,
-                                      false);
+                    Cigar::push_cigar(new_cigar, chunk, BAM_CSOFT_CLIP, false);
             } else {
-                chunk = std::min<hts_pos_t>(chunk,
-                                            retained_end - source_offset);
+                chunk =
+                    std::min<hts_pos_t>(chunk, retained_end - source_offset);
                 append_reference_chunk(chunk, cigar_op);
             }
             source_offset += chunk;
@@ -864,11 +887,10 @@ int32_t ChainMap::get_num_clipped(const int32_t pos, const bool leftmost,
         // there is no preceding end marker. Distinguish an in-interval query
         // from a query in the following gap using the actual half-open source
         // coordinates.
-        bool within_interval =
-            leftmost ? (pos >= curr_intvl.source_start &&
-                        pos < curr_intvl.source_end)
-                     : (pos > curr_intvl.source_start &&
-                        pos <= curr_intvl.source_end);
+        bool within_interval = leftmost ? (pos >= curr_intvl.source_start &&
+                                           pos < curr_intvl.source_end)
+                                        : (pos > curr_intvl.source_start &&
+                                           pos <= curr_intvl.source_end);
         if (within_interval) return 0;
         // Advance sidx if we are checking the starting pos of a query
         // Keep sidx unchanged if we are checking the ending pos
@@ -1514,9 +1536,8 @@ bool ChainMap::check_multi_intvl_legality(const std::string &source_contig,
     };
     // Check the gap size between the intervals. Reverse intervals need the
     // full coordinate transform rather than their raw stored offset.
-    int64_t chain_gap =
-        std::abs(transform_offset(next_sintvl) -
-                 transform_offset(start_sintvl));
+    int64_t chain_gap = std::abs(transform_offset(next_sintvl) -
+                                 transform_offset(start_sintvl));
     if (chain_gap > allowed_intvl_gaps) {
         if (verbose >= VERBOSE_INFO) {
             std::cerr

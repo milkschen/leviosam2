@@ -45,8 +45,8 @@ class MateMetadataSpool {
     bool find_primary(const bam1_t* source, MateOutcome& result);
     bool empty() const;
     void begin_replay(sam_hdr_t* source_header, sam_hdr_t* lifted_header);
-    bool next(bam1_t* source, bam1_t* lifted,
-              sam_hdr_t* source_header, sam_hdr_t* lifted_header);
+    bool next(bam1_t* source, bam1_t* lifted, sam_hdr_t* source_header,
+              sam_hdr_t* lifted_header);
 
    private:
     class Impl;

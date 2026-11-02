@@ -17,17 +17,19 @@ class MateMetadataTest : public ::testing::Test {
    protected:
     sam_hdr_t* header = nullptr;
     void SetUp() override {
-        const char* text = "@HD\tVN:1.6\n@SQ\tSN:chr\tLN:1000000\n"
-                           "@RG\tID:a\tSM:sample\tPL:ILLUMINA\n"
-                           "@RG\tID:b\tSM:sample\tPL:ILLUMINA\n";
+        const char* text =
+            "@HD\tVN:1.6\n@SQ\tSN:chr\tLN:1000000\n"
+            "@RG\tID:a\tSM:sample\tPL:ILLUMINA\n"
+            "@RG\tID:b\tSM:sample\tPL:ILLUMINA\n";
         header = sam_hdr_parse(std::strlen(text), text);
         ASSERT_NE(header, nullptr);
     }
     void TearDown() override { sam_hdr_destroy(header); }
     Bam parse(const std::string& name, int flag, int pos = 101,
-               int mate_pos = 201, const std::string& group = "a") {
+              int mate_pos = 201, const std::string& group = "a") {
         Bam bam(bam_init1(), &bam_destroy1);
-        std::string text = name + "\t" + std::to_string(flag) + "\tchr\t" +
+        std::string text =
+            name + "\t" + std::to_string(flag) + "\tchr\t" +
             std::to_string(pos) + "\t60\t10M\t=\t" + std::to_string(mate_pos) +
             "\t0\tAAAAAAAAAA\tIIIIIIIIII\tRG:Z:" + group + "\tLO:Z:L_UM";
         kstring_t line = KS_INITIALIZE;
@@ -61,7 +63,8 @@ TEST_F(MateMetadataTest, DiskIndexGrowsAndReplaysAllRecords) {
     Bam source(bam_init1(), &bam_destroy1), lifted(bam_init1(), &bam_destroy1);
     for (int i = 0; i < count; ++i) {
         ASSERT_TRUE(spool.next(source.get(), lifted.get(), header, header));
-        EXPECT_EQ(std::string(bam_get_qname(source.get())), "read" + std::to_string(i));
+        EXPECT_EQ(std::string(bam_get_qname(source.get())),
+                  "read" + std::to_string(i));
         EXPECT_EQ(source->core.pos, 100);
         EXPECT_EQ(lifted->core.pos, 500 + i);
     }
@@ -89,19 +92,22 @@ TEST_F(MateMetadataTest, ReadGroupsSeparateIdenticalNamesAndDuplicatesFail) {
 
 TEST_F(MateMetadataTest, PreservesProperLibraryOrientationAndUsesActualSpan) {
     // Preserve FR, RF, FF and RR library conventions under translation.
-    for (const auto& flags : {std::make_pair(99, 147), std::make_pair(83, 163),
-                              std::make_pair(67, 131), std::make_pair(115, 179)}) {
+    for (const auto& flags :
+         {std::make_pair(99, 147), std::make_pair(83, 163),
+          std::make_pair(67, 131), std::make_pair(115, 179)}) {
         Bam source = parse("pair", flags.first, 101, 201);
         Bam mate_source = parse("pair", flags.second, 201, 101);
         Bam lifted = parse("pair", flags.first, 301, 401);
         Bam mate = parse("pair", flags.second, 401, 301);
-        auto outcome = LevioSamUtils::mate_outcome(mate.get(), mate_source.get());
-        LevioSamUtils::repair_mate_metadata(lifted.get(), source.get(), &outcome);
+        auto outcome =
+            LevioSamUtils::mate_outcome(mate.get(), mate_source.get());
+        LevioSamUtils::repair_mate_metadata(lifted.get(), source.get(),
+                                            &outcome);
         EXPECT_TRUE(lifted->core.flag & BAM_FPROPER_PAIR) << flags.first;
         EXPECT_EQ(lifted->core.mpos, 400);
         EXPECT_EQ(lifted->core.isize, 110);
         EXPECT_EQ(bool(lifted->core.flag & BAM_FMREVERSE),
-                   bool(mate->core.flag & BAM_FREVERSE));
+                  bool(mate->core.flag & BAM_FREVERSE));
     }
 }
 
@@ -138,15 +144,18 @@ TEST_F(MateMetadataTest, SupplementaryProperStatusFollowsActualPrimaryPair) {
     Bam mate_source = parse("pair", 99, 101, 201);
     Bam mate_lifted = parse("pair", 99, 301, 401);
     auto own = LevioSamUtils::mate_outcome(own_lifted.get(), own_source.get());
-    auto mate = LevioSamUtils::mate_outcome(mate_lifted.get(), mate_source.get());
-    LevioSamUtils::repair_mate_metadata(lifted.get(), source.get(), &mate, &own);
+    auto mate =
+        LevioSamUtils::mate_outcome(mate_lifted.get(), mate_source.get());
+    LevioSamUtils::repair_mate_metadata(lifted.get(), source.get(), &mate,
+                                        &own);
     EXPECT_TRUE(lifted->core.flag & BAM_FPROPER_PAIR);
     EXPECT_EQ(lifted->core.mtid, 0);
     EXPECT_EQ(lifted->core.mpos, 300);
     EXPECT_EQ(lifted->core.isize, 0);
     // If the actual primary pair ceases to be proper, inherited status clears.
     mate.flag |= BAM_FUNMAP;
-    LevioSamUtils::repair_mate_metadata(lifted.get(), source.get(), &mate, &own);
+    LevioSamUtils::repair_mate_metadata(lifted.get(), source.get(), &mate,
+                                        &own);
     EXPECT_FALSE(lifted->core.flag & BAM_FPROPER_PAIR);
 }
 

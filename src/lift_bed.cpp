@@ -121,12 +121,12 @@ int lift_bed_run(int argc, char** argv) {
     int c;
     lift_bed_opts args;
     args.cmd = LevioSamUtils::make_cmd(argc, argv);
-    static struct option long_options[] {
+    static struct option long_options[]{
         {"bed_fname", required_argument, 0, 'b'},
-            {"chainmap_fname", required_argument, 0, 'C'},
-            {"allowed_gaps", required_argument, 0, 'G'},
-            {"output", required_argument, 0, 'p'},
-            {"verbose", required_argument, 0, 'V'},
+        {"chainmap_fname", required_argument, 0, 'C'},
+        {"allowed_gaps", required_argument, 0, 'G'},
+        {"output", required_argument, 0, 'p'},
+        {"verbose", required_argument, 0, 'V'},
     };
     int long_index = 0;
     while ((c = getopt_long(argc, argv, "h:b:C:G:p:V:", long_options,

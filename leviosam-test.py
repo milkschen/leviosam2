@@ -119,15 +119,15 @@ def unique_records(records):
     counts = record_counts(records)
     duplicates = {key: count for key, count in counts.items() if count != 1}
     if duplicates:
-        raise AssertionError(f"test fixture has ambiguous record identities: {duplicates}")
+        raise AssertionError(
+            f"test fixture has ambiguous record identities: {duplicates}"
+        )
     return {record_key(record): record for record in records}
 
 
 def stable_tags(record):
     return {
-        tag: value
-        for tag, value in record.get_tags()
-        if tag not in INVALIDATED_TAGS
+        tag: value for tag, value in record.get_tags() if tag not in INVALIDATED_TAGS
     }
 
 
@@ -198,15 +198,21 @@ class IntegrationTestCase(unittest.TestCase):
                 self.assertEqual(read1.next_reference_start, read2.reference_start)
                 self.assertEqual(read2.next_reference_start, read1.reference_start)
                 self.assertEqual(read1.template_length, -read2.template_length)
-                if (not read1.is_unmapped and not read2.is_unmapped and
-                        read1.reference_id == read2.reference_id):
+                if (
+                    not read1.is_unmapped
+                    and not read2.is_unmapped
+                    and read1.reference_id == read2.reference_id
+                ):
                     span = max(read1.reference_end, read2.reference_end) - min(
-                        read1.reference_start, read2.reference_start)
+                        read1.reference_start, read2.reference_start
+                    )
                     self.assertEqual(abs(read1.template_length), span)
                     self.assertEqual(abs(read2.template_length), span)
                     if read1.reference_start != read2.reference_start:
-                        self.assertEqual(read1.template_length > 0,
-                                         read1.reference_start < read2.reference_start)
+                        self.assertEqual(
+                            read1.template_length > 0,
+                            read1.reference_start < read2.reference_start,
+                        )
                 else:
                     self.assertEqual(read1.template_length, 0)
                     self.assertEqual(read2.template_length, 0)
@@ -366,7 +372,11 @@ class ChainLiftIntegrationTest(IntegrationTestCase):
                         )
                         continue
                     self.assertEqual(result.mapping_quality, original.mapping_quality)
-                    if expected is None or expected.is_unmapped or expected.is_supplementary:
+                    if (
+                        expected is None
+                        or expected.is_unmapped
+                        or expected.is_supplementary
+                    ):
                         continue
 
                     self.assertEqual(result.reference_name, expected.reference_name)
