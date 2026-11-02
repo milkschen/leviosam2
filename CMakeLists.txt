@@ -316,6 +316,14 @@ if(BUILD_TESTING)
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/testdata
     )
 
+    add_test(NAME bed_liftover_cli_test
+        COMMAND ${CMAKE_COMMAND}
+            "-DLEVIOSAM2=$<TARGET_FILE:leviosam2>"
+            "-DTEST_TMP_DIR=${CMAKE_CURRENT_BINARY_DIR}/bed-liftover-cli-test"
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/bed_liftover_test.cmake
+    )
+    set_tests_properties(bed_liftover_cli_test PROPERTIES TIMEOUT 90)
+
     add_test(NAME cli_index_lift_test
         COMMAND ${CMAKE_COMMAND}
             "-DLEVIOSAM2=$<TARGET_FILE:leviosam2>"
