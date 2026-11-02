@@ -18,6 +18,38 @@ conda, pre-built binary, or building from source.
 - Aligner: [minimap2](https://github.com/lh3/minimap2)/[winnowmap2](https://github.com/marbl/Winnowmap)/[bwa mem](https://github.com/lh3/bwa)/[Bowtie 2](http://bowtie-bio.sourceforge.net/bowtie2/manual.shtml)
 - samtools, bgzip
 
+## Read groups
+
+The Python workflow preserves read-group identity and full `@RG` definitions
+(including `ID`, `SM`, and `LB`) through realignment and final merging.
+
+With one input `@RG`, the workflow infers the aligner's group from the header
+once, assuming input reads share that group. Matching `--read_group` fields
+inherit the remaining metadata; conflicting fields are rejected. Without an
+input `@RG`, the option retains its role of setting the realigner's group.
+
+With multiple input groups, original per-read groups take precedence over the
+optional aligner group. `--read_group` acts as a fallback for originally
+ungrouped reads selected from realignment; ungrouped records selected from the
+lifted source remain ungrouped. Definitions sharing an ID must agree.
+The final `samtools merge -c` preserves shared IDs rather than renaming them.
+
+For paired-end input, `reconcile --preserve-rg` copies each read end's original
+group during the existing reconciliation pass, with no additional source scan.
+For single-end input with multiple groups, the native
+`reconcile --restore-rg SOURCE` mode reads the deferred BAM once, indexes query
+names and RG indexes in memory, and restores RGs on the realigner's output
+stream before sorting. All alignments of a read, including secondary and
+supplementary records, inherit its original group. Memory grows with the number
+and length of deferred query names. Neither path repeats alignment per group
+or creates a SQLite index; the single-group path remains header-only.
+
+Source names must identify reads unambiguously. Conflicting source RG
+assignments, undefined original groups, unmatched realigned names, and
+conflicting header definitions fail with an error. Inputs combining libraries
+with reused query names must make those names unique first.
+Use `--forcerun` to regenerate outputs from an older workflow version.
+
 ## Paired-end workflows
 
 - Supported aligners: [bwa mem](https://github.com/lh3/bwa) and [Bowtie 2](http://bowtie-bio.sourceforge.net/bowtie2/manual.shtml)
@@ -228,7 +260,6 @@ The output is `ilmn-pe-chm13v2_grch38-final.bam`.
 
 ### Read groups
 
-For Bowtie2, pass its read-group options together in `--read_group`, for example
+For Bowtie2 and strobealign, pass their read-group options together in `--read_group`, for example
 `--read_group "--rg-id foo --rg 'SM:sample name'"`. Quote any option value
-containing spaces within that string. For BWA, minimap2, winnowmap2, and
-strobealign, pass the read-group value as a single string.
+containing spaces within that string. For BWA, minimap2, and winnowmap2, pass the read-group value as a single string.

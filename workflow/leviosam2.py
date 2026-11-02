@@ -114,7 +114,7 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default="",
         help=(
-            "Read group string; for bowtie2, pass options such as "
+            "Read group for input without @RG (otherwise inferred from the single input @RG); for bowtie2, pass "
             "--rg-id ID --rg SM:sample, quoting values containing spaces"
         ),
     )
@@ -410,6 +410,59 @@ class Leviosam2Workflow:
         else:
             raise KeyError(f"Unsupported aligner: {self.aligner}")
 
+    def _configure_read_group(self):
+        """Infer a sole RG, or preserve per-read groups during reconciliation."""
+        header = subprocess.check_output(
+            [str(self.samtools), "view", "-H", str(self.input_bam)], text=True
+        )
+        groups = [line for line in header.splitlines() if line.startswith("@RG\t")]
+        self.preserve_read_groups = len(groups) > 1
+        if self.preserve_read_groups and not self.read_group:
+            return
+        if not groups:
+            return  # Keep the explicit aligner group, or leave reads ungrouped.
+        definitions = [
+            dict(field.split(":", 1) for field in group.split("\t")[1:])
+            for group in groups
+        ]
+        fields = definitions[0]
+        if not fields.get("ID"):
+            raise ValueError("Input @RG must contain a nonempty ID")
+        if self.read_group:
+            if self.aligner in ("bowtie2", "strobealign"):
+                parser = argparse.ArgumentParser(add_help=False)
+                parser.add_argument("--rg-id", required=True)
+                parser.add_argument("--rg", action="append", default=[])
+                options = parser.parse_args(shlex.split(self.read_group))
+                supplied = dict(field.split(":", 1) for field in options.rg)
+                supplied["ID"] = options.rg_id
+            else:
+                parts = self.read_group.replace(r"\t", "\t").split("\t")
+                supplied = dict(
+                    field.split(":", 1) for field in parts if field != "@RG"
+                )
+            if self.preserve_read_groups:
+                matches = [
+                    group
+                    for group in definitions
+                    if group.get("ID") == supplied.get("ID")
+                ]
+                if not matches:
+                    return  # A new aligner group is a fallback for ungrouped reads.
+                fields = matches[0]
+            if any(fields.get(key) != value for key, value in supplied.items()):
+                raise ValueError("--read_group conflicts with the input @RG definition")
+        if self.aligner in ("bowtie2", "strobealign"):
+            options = ["--rg-id", fields["ID"]]
+            for key, value in fields.items():
+                if key != "ID":
+                    options.extend(["--rg", f"{key}:{value}"])
+            self.read_group = shlex.join(options)
+        else:
+            self.read_group = r"\t".join(
+                ["@RG", *(f"{k}:{v}" for k, v in fields.items())]
+            )
+
     def validate_executables(self) -> None:
         validate_executable(cmd=[self.samtools, "--version"])
         validate_executable(cmd=[self.bgzip, "--version"])
@@ -684,8 +737,14 @@ class Leviosam2Workflow:
             else:
                 reads = f"{shlex.quote(str(self._fn_deferred_fq_se))}"
 
+            restore_rg = (
+                f"{shlex.quote(str(self.leviosam2))} reconcile --restore-rg "
+                f"{shlex.quote(str(self._fn_deferred))} -s realigned:- -o - | "
+                if self.preserve_read_groups
+                else ""
+            )
             cmd_samtools = (
-                f"{self.time_cmd}"
+                restore_rg + f"{self.time_cmd}"
                 f"{shlex.quote(str(self.samtools))} sort -@ {num_threads_samtools} -o {shlex.quote(str(fn_out))}"
             )
         else:
@@ -731,9 +790,7 @@ class Leviosam2Workflow:
                 f"{cmd_samtools}"
             )
         elif self.aligner == "strobealign":
-            read_group_arg = (
-                f"--rg {shlex.quote(self.read_group)}" if self.read_group else ""
-            )
+            read_group_arg = shlex.join(shlex.split(self.read_group))
             cmd = (
                 f"{self.time_cmd}"
                 f"{shlex.quote(str(self.aligner_exe))} {read_group_arg} "
@@ -767,6 +824,8 @@ class Leviosam2Workflow:
             )
             for path in inputs:
                 check_file_exists(path)
+            if self.preserve_read_groups and self.is_single_end:
+                inputs.append(self._fn_deferred)
             return self._run_stage(
                 cmd, "run_realign_deferred", inputs + self._reference_inputs(), [fn_out]
             )
@@ -801,6 +860,7 @@ class Leviosam2Workflow:
             f"{shlex.quote(str(self.leviosam2))} reconcile "
             f"-s {shlex.quote(str(self.source_label) + ':' + str(self._fn_deferred_pe_sortn))} "
             f"-s {shlex.quote(str(self.target_label) + ':' + str(self._fn_deferred_realigned_pe_sortn))} "
+            f"{'--preserve-rg ' if self.preserve_read_groups else ''}"
             f"-m -o - | "
             f"{self.time_cmd}"
             f"{shlex.quote(str(self.samtools))} sort -@ {self.num_threads} "
@@ -837,7 +897,7 @@ class Leviosam2Workflow:
         cmd = ""
         cmd += (
             f"{self.time_cmd}"
-            f"{shlex.quote(str(self.samtools))} merge -f -@ {self.num_threads} "
+            f"{shlex.quote(str(self.samtools))} merge -c -f -@ {self.num_threads} "
             f"-o {shlex.quote(str(self._fn_final))} {shlex.quote(str(fn_committed_sorted))} {shlex.quote(str(fn_in_deferred))} && "
         )
         cmd += (
@@ -978,6 +1038,7 @@ class Leviosam2Workflow:
         # run_intial_align()
 
         self._set_filenames()
+        self._configure_read_group()
 
         self.run_leviosam2()
 
@@ -1006,6 +1067,7 @@ class Leviosam2Workflow:
 
     def __init__(self, args: argparse.Namespace) -> None:
         self._cram_completed = False
+        self.preserve_read_groups = False
         self.aligner = args.aligner
         self.aligner_exe = args.aligner_exe
         if self.aligner_exe == "auto":

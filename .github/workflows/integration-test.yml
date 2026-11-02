@@ -12,6 +12,8 @@ on:
       - 'pixi.toml'
       - 'pixi.lock'
       - 'testdata/**'
+      - 'tests/**'
+      - 'workflow/**'
   pull_request:
     branches:
       - 'main'
@@ -24,6 +26,8 @@ on:
       - 'pixi.toml'
       - 'pixi.lock'
       - 'testdata/**'
+      - 'tests/**'
+      - 'workflow/**'
 
 jobs:
   integration:
