@@ -5,6 +5,7 @@ Nae-Chyun Chen
 Johns Hopkins University
 2021
 """
+
 import argparse
 
 import numpy as np
@@ -76,9 +77,7 @@ def summarize_aln_features(
                     else:
                         other_cnt += 1
                 elif clipped_fraction:
-                    results.append(
-                        read.query_alignment_length / read.query_length
-                    )
+                    results.append(read.query_alignment_length / read.query_length)
             except:
                 failed_cnt += 1
 
@@ -123,9 +122,7 @@ def summarize_aln_features(
     print(f"   99% = {results[: int(l * 0.99)][-1]}")
     print(f"   max = {results[-1]}")
     if isize:
-        print(
-            f"not properly paird = {other_cnt} ({int(other_cnt / total * 100)}%)"
-        )
+        print(f"not properly paird = {other_cnt} ({int(other_cnt / total * 100)}%)")
 
 
 if __name__ == "__main__":

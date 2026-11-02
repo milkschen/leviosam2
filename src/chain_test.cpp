@@ -84,18 +84,24 @@ class SyntheticChainMatrixTest : public testing::Test {
             "\n"
             "chain 1 revsrc 100 + 0 100 revdst 120 - 10 108 2\n"
             "40 2 0\n"
-            "58\n";
+            "58\n\n"
+            "chain 1 multisrc 46 + 0 46 multidst 60 + 10 53 3\n"
+            "10 2 0\n10 2 3\n10 2 0\n10\n\n"
+            "chain 1 revmultisrc 46 + 0 46 revmultidst 60 - 7 50 4\n"
+            "10 2 0\n10 2 3\n10 2 0\n10\n";
         chain_path = write_temporary_file(chains);
         ASSERT_FALSE(chain_path.empty());
 
-        chain::LengthMap lengths{{"dst", 120}, {"revdst", 120}};
+        chain::LengthMap lengths{{"dst", 120},
+                                 {"revdst", 120},
+                                 {"multidst", 60},
+                                 {"revmultidst", 60}};
         parsed.reset(new chain::ChainMap(chain_path, 0, 10, lengths));
 
         index_path = write_temporary_file("");
         ASSERT_FALSE(index_path.empty());
         {
-            std::ofstream out(index_path,
-                              std::ios::binary | std::ios::trunc);
+            std::ofstream out(index_path, std::ios::binary | std::ios::trunc);
             ASSERT_TRUE(out.good());
             parsed->serialize(out);
         }
@@ -106,7 +112,9 @@ class SyntheticChainMatrixTest : public testing::Test {
         const std::string header_text =
             "@HD\tVN:1.6\tSO:unsorted\n"
             "@SQ\tSN:src\tLN:100\n"
-            "@SQ\tSN:revsrc\tLN:100\n";
+            "@SQ\tSN:revsrc\tLN:100\n"
+            "@SQ\tSN:multisrc\tLN:46\n"
+            "@SQ\tSN:revmultisrc\tLN:46\n";
         header = sam_hdr_parse(header_text.size(), header_text.c_str());
         ASSERT_NE(header, nullptr);
     }
@@ -123,8 +131,8 @@ class SyntheticChainMatrixTest : public testing::Test {
         BamPtr alignment = parse_alignment(header, contig, position, cigar);
         EXPECT_NE(alignment, nullptr);
         if (!alignment) return {-1, "", 0};
-        hts_pos_t query_length = bam_cigar2qlen(
-            alignment->core.n_cigar, bam_get_cigar(alignment.get()));
+        hts_pos_t query_length = bam_cigar2qlen(alignment->core.n_cigar,
+                                                bam_get_cigar(alignment.get()));
         int status = chain_map.lift_cigar(contig, alignment.get());
         hts_pos_t lifted_query_length = bam_cigar2qlen(
             alignment->core.n_cigar, bam_get_cigar(alignment.get()));
@@ -299,13 +307,11 @@ TEST_F(SyntheticChainMatrixTest, PositionBoundariesMatchAfterSerialization) {
         hts_pos_t expected;
     };
     const std::vector<PositionCase> cases{
-        {"src", 0, 10},  {"src", 19, 29}, {"src", 20, 33},
-        {"src", 39, 52}, {"src", 40, 53}, {"src", 41, 53},
-        {"src", 42, 53}, {"src", 99, 110}};
+        {"src", 0, 10},  {"src", 19, 29}, {"src", 20, 33}, {"src", 39, 52},
+        {"src", 40, 53}, {"src", 41, 53}, {"src", 42, 53}, {"src", 99, 110}};
 
     for (const auto &test_case : cases) {
-        SCOPED_TRACE(test_case.contig + ":" +
-                     std::to_string(test_case.source));
+        SCOPED_TRACE(test_case.contig + ":" + std::to_string(test_case.source));
         hts_pos_t parsed_position =
             parsed->lift_pos(test_case.contig, test_case.source, 2, true);
         hts_pos_t restored_position =
@@ -347,10 +353,47 @@ TEST_F(SyntheticChainMatrixTest, CigarBoundaryAndGapMatrix) {
 }
 
 TEST_F(SyntheticChainMatrixTest, PreservesAndNormalizesCigarOperations) {
-    expect_cigar("src", 5, "2S3=1X2I4M2D3N1H",
-                 "2S4M2I4M2D3N1H");
-    expect_cigar("revsrc", 20, "2S3=1X2I4M2D3N1H",
-                 "1H3N2D4M2I4M2S");
+    expect_cigar("src", 5, "2S3=1X2I4M2D3N1H", "2S4M2I4M2D3N1H");
+    expect_cigar("revsrc", 20, "2S3=1X2I4M2D3N1H", "1H3N2D4M2I4M2S");
+}
+
+TEST_F(SyntheticChainMatrixTest,
+       ClipsSourceReferenceWithoutLosingQueryOrHardClips) {
+    // The source gap is [40,42), so source position 41 clips one reference
+    // base. Existing S/I do not consume that base, while D/N do.
+    expect_cigar("src", 41, "3S6M", "4S5M");
+    expect_cigar("src", 41, "5H6M", "5H1S5M");
+    expect_cigar("src", 41, "5H3S2I6M", "5H6S5M");
+    expect_cigar("src", 41, "1D5M", "5M");
+    expect_cigar("src", 41, "1N5M", "5M");
+    expect_cigar("src", 41, "2D5M", "1D5M");
+    expect_cigar("src", 41, "3S2D5M", "3S1D5M");
+    expect_cigar("src", 41, "5H3S2D5M", "5H3S1D5M");
+
+    // The same source-reference rules apply to the right end, and H must
+    // remain outside the combined soft clipping.
+    expect_cigar("src", 35, "6M3S", "5M4S");
+    expect_cigar("src", 35, "6M5H", "5M1S5H");
+    expect_cigar("src", 35, "6M2I3S5H", "5M6S5H");
+    expect_cigar("src", 35, "5M1D", "5M");
+    expect_cigar("src", 35, "5M1N", "5M");
+    expect_cigar("src", 35, "4M2D", "4M1D");
+    expect_cigar("src", 35, "4M2D3S", "4M1D3S");
+    expect_cigar("src", 35, "4M2D3S5H", "4M1D3S5H");
+
+    // Compose on the source strand first, then reverse the complete CIGAR.
+    expect_cigar("revsrc", 41, "3S6M", "5M4S");
+    expect_cigar("revsrc", 41, "5H3S2I6M", "5M6S5H");
+    expect_cigar("revsrc", 41, "1D5M", "5M");
+    expect_cigar("revsrc", 35, "6M3S", "4S5M");
+    expect_cigar("revsrc", 35, "6M2I3S5H", "5H6S5M");
+    expect_cigar("revsrc", 35, "5M1D", "5M");
+
+    // Both ends lie in different source gaps, with another chain gap between
+    // them. Only the interior breakpoint belongs to the retained alignment.
+    expect_cigar("multisrc", 11, "24M", "1S10M1D12M1S");
+    expect_cigar("multisrc", 11, "5H3S24M4S6H", "5H4S10M1D12M5S6H");
+    expect_cigar("revmultisrc", 11, "5H3S24M4S6H", "6H5S12M1D10M4S5H");
 }
 
 TEST_F(SyntheticChainMatrixTest, PlacesGapsByReferenceConsumption) {
@@ -766,7 +809,7 @@ TEST(ChainTest, IntervalMapSanityCheckNoOverlaps) {
     cmap.add_interval("chr1", chain::Interval("chr1_dest", 100, 200, 50, true));
     cmap.add_interval("chr1", chain::Interval("chr1_dest", 250, 350, 50, true));
     cmap.add_interval("chr1", chain::Interval("chr1_dest", 400, 500, 50, true));
-    
+
     EXPECT_EQ(cmap.validate_intervals(), true);
 }
 
@@ -775,7 +818,7 @@ TEST(ChainTest, IntervalMapSanityCheckWithOverlaps) {
     // Add overlapping intervals - first interval ends at 200, second starts at 150
     cmap.add_interval("chr1", chain::Interval("chr1_dest", 100, 200, 50, true));
     cmap.add_interval("chr1", chain::Interval("chr1_dest", 150, 250, 50, true));
-    
+
     EXPECT_EQ(cmap.validate_intervals(), false);
 }
 
@@ -784,7 +827,7 @@ TEST(ChainTest, IntervalMapSanityCheckAdjacentIntervals) {
     // Add adjacent intervals (no gap, no overlap) - should pass
     cmap.add_interval("chr1", chain::Interval("chr1_dest", 100, 200, 50, true));
     cmap.add_interval("chr1", chain::Interval("chr1_dest", 200, 300, 50, true));
-    
+
     EXPECT_EQ(cmap.validate_intervals(), true);
 }
 
@@ -794,11 +837,11 @@ TEST(ChainTest, IntervalMapSanityCheckMultipleContigs) {
     // chr1: no overlaps (should pass)
     cmap.add_interval("chr1", chain::Interval("chr1_dest", 100, 200, 50, true));
     cmap.add_interval("chr1", chain::Interval("chr1_dest", 250, 350, 50, true));
-    
+
     // chr2: has overlaps (should fail)
     cmap.add_interval("chr2", chain::Interval("chr2_dest", 100, 200, 50, true));
     cmap.add_interval("chr2", chain::Interval("chr2_dest", 150, 250, 50, true));
-    
+
     // Should fail because chr2 has overlaps
     EXPECT_EQ(cmap.validate_intervals(), false);
 }
@@ -809,14 +852,14 @@ TEST(ChainTest, IntervalMapSanityCheckAllContigsValid) {
     // chr1: no overlaps
     cmap.add_interval("chr1", chain::Interval("chr1_dest", 100, 200, 50, true));
     cmap.add_interval("chr1", chain::Interval("chr1_dest", 250, 350, 50, true));
-    
+
     // chr2: no overlaps
     cmap.add_interval("chr2", chain::Interval("chr2_dest", 100, 200, 50, true));
     cmap.add_interval("chr2", chain::Interval("chr2_dest", 300, 400, 50, true));
-    
+
     // chr3: single interval
     cmap.add_interval("chr3", chain::Interval("chr3_dest", 500, 600, 50, true));
-    
+
     // Should pass because all contigs have valid intervals
     EXPECT_EQ(cmap.validate_intervals(), true);
 }
@@ -826,7 +869,7 @@ TEST(ChainTest, IntervalMapSanityCheckExactOverlap) {
     // Add intervals with exact overlap (same start/end positions)
     cmap.add_interval("chr1", chain::Interval("chr1_dest", 100, 200, 50, true));
     cmap.add_interval("chr1", chain::Interval("chr1_dest", 100, 200, 50, true));
-    
+
     EXPECT_EQ(cmap.validate_intervals(), false);
 }
 
@@ -835,7 +878,7 @@ TEST(ChainTest, IntervalMapSanityCheckPartialOverlap) {
     // Add intervals with partial overlap
     cmap.add_interval("chr1", chain::Interval("chr1_dest", 100, 300, 50, true));
     cmap.add_interval("chr1", chain::Interval("chr1_dest", 250, 400, 50, true));
-    
+
     EXPECT_EQ(cmap.validate_intervals(), false);
 }
 
@@ -845,8 +888,9 @@ TEST(ChainTest, IntervalMapSanityCheckDestOverlap) {
     // Dest intervals: chr1_dest: [100, 300), chr1_dest: [100, 200)
     // Source intervals: chr1: [100, 300), chr1: [300, 400)
     cmap.add_interval("chr1", chain::Interval("chr1_dest", 100, 300, 0, true));
-    cmap.add_interval("chr1", chain::Interval("chr1_dest", 300, 400, -200, true));
-    
+    cmap.add_interval("chr1",
+                      chain::Interval("chr1_dest", 300, 400, -200, true));
+
     EXPECT_EQ(cmap.validate_intervals(), true);
 }
 

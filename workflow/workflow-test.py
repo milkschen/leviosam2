@@ -5,6 +5,7 @@ Johns Hopkins University
 
 Tests of the workflow/leviosam2.py workflow.
 """
+
 import argparse
 import copy
 import json
@@ -79,15 +80,32 @@ class Workflow(unittest.TestCase):
         self.workflow._set_filenames()
 
     def test_workflow_output_format_choices(self):
-        argv = ["leviosam2.py", "-s", "ilmn_se", "-a", "bowtie2",
-                "-i", "input.bam", "-o", "result", "-C", "index.clft",
-                "-f", "target.fa"]
+        argv = [
+            "leviosam2.py",
+            "-s",
+            "ilmn_se",
+            "-a",
+            "bowtie2",
+            "-i",
+            "input.bam",
+            "-o",
+            "result",
+            "-C",
+            "index.clft",
+            "-f",
+            "target.fa",
+        ]
         for output_format in ("bam", "cram"):
-            with self.subTest(output_format=output_format), mock.patch.object(
-                    sys, "argv", argv + ["-O", output_format]):
+            with (
+                self.subTest(output_format=output_format),
+                mock.patch.object(sys, "argv", argv + ["-O", output_format]),
+            ):
                 self.assertEqual(leviosam2.parse_args().out_format, output_format)
-        with mock.patch.object(sys, "argv", argv + ["-O", "sam"]), \
-                mock.patch("sys.stderr"), self.assertRaises(SystemExit) as error:
+        with (
+            mock.patch.object(sys, "argv", argv + ["-O", "sam"]),
+            mock.patch("sys.stderr"),
+            self.assertRaises(SystemExit) as error,
+        ):
             leviosam2.parse_args()
         self.assertEqual(error.exception.code, 2)
 
@@ -102,12 +120,156 @@ class Workflow(unittest.TestCase):
         workflow._set_filenames()
         return workflow
 
+    def test_restart_requires_success_and_invalidates_downstream(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workflow = self.failure_workflow(directory)
+            workflow.forcerun = False
+            outputs = [
+                workflow._fn_committed,
+                workflow._fn_deferred,
+                pathlib.Path(f"{workflow.out_prefix}-unliftable.bam"),
+            ]
+            later = workflow._stage_marker("run_merge_and_index")
+            calls = []
+
+            def produce(cmd, stage):
+                calls.append(stage)
+                for path in outputs:
+                    path.write_text("complete")
+
+            # Existing files from an interrupted run have no completion marker.
+            for path in outputs:
+                path.write_text("partial")
+            later.write_text("stale")
+            with mock.patch.object(workflow, "_run_command", side_effect=produce):
+                workflow.run_leviosam2()
+                self.assertFalse(later.exists())
+                self.assertEqual(workflow.run_leviosam2(), leviosam2.SKIP_MSG)
+                outputs[2].unlink()
+                workflow.run_leviosam2()
+                workflow.input_bam.write_text("changed input")
+                workflow.run_leviosam2()
+            self.assertEqual(len(calls), 3)
+
+            # A failed forced rerun removes its old marker before writing output.
+            workflow.forcerun = True
+
+            def fail(cmd, stage):
+                outputs[0].write_text("partial")
+                raise subprocess.CalledProcessError(1, cmd)
+
+            with mock.patch.object(workflow, "_run_command", side_effect=fail):
+                with self.assertRaises(subprocess.CalledProcessError):
+                    workflow.run_leviosam2()
+            self.assertFalse(workflow._stage_marker("run_leviosam2").exists())
+            workflow.forcerun = False
+            with mock.patch.object(workflow, "_run_command", side_effect=produce):
+                workflow.run_leviosam2()
+            self.assertEqual(len(calls), 4)
+
+    def test_restart_tracks_literal_glob_metacharacters_in_index(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workflow = self.failure_workflow(directory)
+            workflow.forcerun = False
+            workflow.is_single_end = True
+            workflow._fn_deferred_fq_se.touch()
+            workflow.target_aligner_index = pathlib.Path(directory) / "ref[1].mmi"
+            workflow.target_aligner_index.write_text("index")
+
+            def produce(cmd, stage):
+                workflow._fn_deferred_realigned_se.write_text("aligned")
+
+            with mock.patch.object(
+                workflow, "_run_command", side_effect=produce
+            ) as run:
+                workflow.run_realign_deferred()
+                self.assertEqual(workflow.run_realign_deferred(), leviosam2.SKIP_MSG)
+                workflow.target_aligner_index.write_text("changed index")
+                workflow.run_realign_deferred()
+                self.assertEqual(run.call_count, 2)
+
+    def test_missing_input_preserves_previous_lift_outputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workflow = self.failure_workflow(directory)
+            workflow._fn_committed.write_text("recovery")
+            workflow.input_bam.unlink()
+            with self.assertRaises(FileNotFoundError):
+                workflow.run_leviosam2()
+            self.assertEqual(workflow._fn_committed.read_text(), "recovery")
+
+    def test_missing_reconcile_intermediate_requires_rerun(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workflow = self.failure_workflow(directory)
+            workflow.forcerun = False
+            workflow._fn_deferred_realigned_pe.touch()
+            workflow._fn_deferred_pe.touch()
+            outputs = [
+                workflow._fn_deferred_realigned_pe_sortn,
+                workflow._fn_deferred_pe_sortn,
+                workflow._fn_deferred_reconciled,
+            ]
+
+            def produce(cmd, stage):
+                for path in outputs:
+                    path.touch()
+
+            with mock.patch.object(
+                workflow, "_run_command", side_effect=produce
+            ) as run:
+                workflow.run_refflow_merge_pe()
+                self.assertEqual(workflow.run_refflow_merge_pe(), leviosam2.SKIP_MSG)
+                outputs[0].unlink()
+                workflow.run_refflow_merge_pe()
+                self.assertEqual(run.call_count, 2)
+
+    def test_restart_checks_all_collate_and_final_outputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workflow = self.failure_workflow(directory)
+            workflow.forcerun = False
+            for path in [workflow._fn_committed_sorted, workflow._fn_deferred]:
+                path.touch()
+            outputs = [
+                workflow._fn_committed_pe,
+                workflow._fn_deferred_pe,
+                workflow._fn_deferred_pe_fq1,
+                workflow._fn_deferred_pe_fq2,
+            ]
+
+            def produce(cmd, stage):
+                for path in outputs:
+                    path.touch()
+
+            with mock.patch.object(
+                workflow, "_run_command", side_effect=produce
+            ) as run:
+                workflow.run_collate_pe()
+                self.assertEqual(workflow.run_collate_pe(), leviosam2.SKIP_MSG)
+                workflow._fn_committed_pe.unlink()
+                workflow.run_collate_pe()
+                self.assertEqual(run.call_count, 2)
+
+            workflow._fn_deferred_reconciled.touch()
+            outputs = [
+                workflow._fn_final,
+                pathlib.Path(str(workflow._fn_final) + ".bai"),
+            ]
+            with mock.patch.object(
+                workflow, "_run_command", side_effect=produce
+            ) as run:
+                workflow.run_merge_and_index()
+                self.assertEqual(workflow.run_merge_and_index(), leviosam2.SKIP_MSG)
+                outputs[1].unlink()
+                workflow.run_merge_and_index()
+                self.assertEqual(run.call_count, 2)
+
     def test_failed_lift_stops_workflow(self):
         with tempfile.TemporaryDirectory() as directory:
             workflow = self.failure_workflow(directory)
             workflow.leviosam2 = "false"
-            with mock.patch.object(workflow, "run_sort_committed") as sort, \
-                    mock.patch.object(workflow, "run_clean") as clean:
+            with (
+                mock.patch.object(workflow, "run_sort_committed") as sort,
+                mock.patch.object(workflow, "run_clean") as clean,
+            ):
                 with self.assertLogs(leviosam2.logger, level="ERROR") as logs:
                     with self.assertRaises(subprocess.CalledProcessError):
                         workflow.run_workflow()
@@ -122,10 +284,12 @@ class Workflow(unittest.TestCase):
             workflow._fn_deferred.touch()
             workflow.samtools = "false"
             workflow.bgzip = "cat"
-            with mock.patch.object(workflow, "run_leviosam2"), \
-                    mock.patch.object(workflow, "run_sort_committed"), \
-                    mock.patch.object(workflow, "run_realign_deferred") as realign, \
-                    mock.patch.object(workflow, "run_clean") as clean:
+            with (
+                mock.patch.object(workflow, "run_leviosam2"),
+                mock.patch.object(workflow, "run_sort_committed"),
+                mock.patch.object(workflow, "run_realign_deferred") as realign,
+                mock.patch.object(workflow, "run_clean") as clean,
+            ):
                 with self.assertRaises(subprocess.CalledProcessError):
                     workflow.run_workflow()
                 realign.assert_not_called()
@@ -139,11 +303,13 @@ class Workflow(unittest.TestCase):
             workflow.aligner_exe = "false"
             # The consumer succeeds even though the aligner fails.
             workflow.samtools = "true"
-            with mock.patch.object(workflow, "run_leviosam2"), \
-                    mock.patch.object(workflow, "run_sort_committed"), \
-                    mock.patch.object(workflow, "run_collate_pe"), \
-                    mock.patch.object(workflow, "run_refflow_merge_pe") as merge, \
-                    mock.patch.object(workflow, "run_clean") as clean:
+            with (
+                mock.patch.object(workflow, "run_leviosam2"),
+                mock.patch.object(workflow, "run_sort_committed"),
+                mock.patch.object(workflow, "run_collate_pe"),
+                mock.patch.object(workflow, "run_refflow_merge_pe") as merge,
+                mock.patch.object(workflow, "run_clean") as clean,
+            ):
                 with self.assertRaises(subprocess.CalledProcessError):
                     workflow.run_workflow()
                 merge.assert_not_called()
@@ -151,8 +317,10 @@ class Workflow(unittest.TestCase):
 
     def test_failed_cram_conversion_or_index_retains_bam(self):
         for failed_stage in ("view", "index"):
-            with self.subTest(failed_stage=failed_stage), \
-                    tempfile.TemporaryDirectory() as directory:
+            with (
+                self.subTest(failed_stage=failed_stage),
+                tempfile.TemporaryDirectory() as directory,
+            ):
                 workflow = self.failure_workflow(directory)
                 workflow.out_format = "cram"
                 workflow._fn_final.write_text("original BAM")
@@ -161,16 +329,21 @@ class Workflow(unittest.TestCase):
                 marker = pathlib.Path(directory) / "index-ran"
                 tool = pathlib.Path(directory) / "samtools.sh"
                 tool.write_text(
-                    '#!/bin/sh\n'
-                    'if [ "$1" = "index" ]; then touch ' + str(marker) + '; fi\n'
+                    "#!/bin/sh\n"
+                    'if [ "$1" = "index" ]; then touch ' + str(marker) + "; fi\n"
                     'if [ "$1" = "' + failed_stage + '" ]; then exit 23; fi\n'
                 )
                 tool.chmod(0o755)
                 workflow.samtools = str(tool)
                 # Isolate the finalization path; all preceding stages succeeded.
-                stages = ["run_leviosam2", "run_sort_committed", "run_collate_pe",
-                          "run_realign_deferred", "run_refflow_merge_pe",
-                          "run_merge_and_index"]
+                stages = [
+                    "run_leviosam2",
+                    "run_sort_committed",
+                    "run_collate_pe",
+                    "run_realign_deferred",
+                    "run_refflow_merge_pe",
+                    "run_merge_and_index",
+                ]
                 patches = [mock.patch.object(workflow, stage) for stage in stages]
                 for patch in patches:
                     patch.start()
@@ -202,15 +375,25 @@ class Workflow(unittest.TestCase):
             tool = root / "fake tool ; name"
             tool.write_text(
                 "#!/usr/bin/env python3\n"
-                "import json, os, sys\n"
+                "import json, os, pathlib, sys\n"
                 "args = sys.argv[1:]\n"
-                # Simulate stream consumers; early exit would SIGPIPE producers.
+                # Fake stream consumers must read input before exiting (pipefail).
                 "consume = (args[:1] == ['sort'] and args[-2:-1] == ['-o']) or "
                 "(args[:1] == ['view'] and ('-hbo' in args or args == ['view', '-h'])) or "
                 "(not args and os.environ.get('WORKFLOW_FAKE_BGZIP') == '1')\n"
                 "if consume and not sys.stdin.isatty(): sys.stdin.buffer.read()\n"
                 "with open(os.environ['WORKFLOW_ARG_LOG'], 'a') as f: f.write(json.dumps(args) + '\\n')\n"
-                # Exceed pipe capacity so missing consumer reads fail reliably.
+                # Completion markers require actual outputs from successful tools.
+                "def output(name): pathlib.Path(name).write_text('complete')\n"
+                "if '-o' in args and args[args.index('-o') + 1] != '-': output(args[args.index('-o') + 1])\n"
+                "if '-hbo' in args: output(args[args.index('-hbo') + 1])\n"
+                "if args[:1] == ['lift']:\n"
+                "    prefix = args[args.index('-p') + 1]\n"
+                "    for suffix in ('-committed.bam', '-deferred.bam', '-unliftable.bam'): output(prefix + suffix)\n"
+                "if args[:1] == ['collate']:\n"
+                "    prefix = args[args.index('-p') + 1]\n"
+                "    for suffix in ('-committed.bam', '-deferred.bam', '-deferred-R1.fq.gz', '-deferred-R2.fq.gz'): output(prefix + suffix)\n"
+                "if args[:1] == ['index']: output(args[-1] + ('.crai' if args[-1].endswith('.cram') else '.bai'))\n"
                 "if args[:1] == ['reconcile']: sys.stdout.write('x' * (128 * 1024))\n"
                 "print('first line\\nsecond line')\n"
             )
@@ -219,7 +402,10 @@ class Workflow(unittest.TestCase):
             self.args.gnu_time_exe = str(tool)
             self.args.out_prefix = str(root / "timed ; result")
             timed = leviosam2.Leviosam2Workflow(self.args)
-            self.assertEqual(shlex.split(timed.time_cmd), [str(tool), "-v", "-ao", self.args.out_prefix + ".time_log"])
+            self.assertEqual(
+                shlex.split(timed.time_cmd),
+                [str(tool), "-v", "-ao", self.args.out_prefix + ".time_log"],
+            )
             self.args.measure_time = False
             workflow = self.failure_workflow(directory)
             workflow.out_prefix = root / "result ; $(touch INJECTED)"
@@ -230,23 +416,52 @@ class Workflow(unittest.TestCase):
             workflow.source_label = "source ; label"
             workflow.target_label = "target ; label"
             workflow.read_group = "ID:foo SM:bar ; $(touch INJECTED)"
-            workflow.leviosam2 = workflow.samtools = workflow.bgzip = workflow.aligner_exe = str(tool)
+            workflow.leviosam2 = workflow.samtools = workflow.bgzip = (
+                workflow.aligner_exe
+            ) = str(tool)
             workflow._set_filenames()
-            for name in ("_fn_committed", "_fn_committed_sorted", "_fn_deferred", "_fn_deferred_pe_fq1", "_fn_deferred_pe_fq2", "_fn_deferred_realigned_pe", "_fn_deferred_pe", "_fn_committed_pe", "_fn_deferred_reconciled", "_fn_final"):
+            for name in (
+                "_fn_committed",
+                "_fn_committed_sorted",
+                "_fn_deferred",
+                "_fn_deferred_pe_fq1",
+                "_fn_deferred_pe_fq2",
+                "_fn_deferred_realigned_pe",
+                "_fn_deferred_pe",
+                "_fn_committed_pe",
+                "_fn_deferred_reconciled",
+                "_fn_final",
+            ):
                 getattr(workflow, name).touch()
             # Dedicated RG tests exercise restoration; these fake tools only log argv.
-            with mock.patch.dict(os.environ, {"WORKFLOW_ARG_LOG": str(log)}), \
-                    mock.patch.object(workflow, "_read_group_command",
-                                      side_effect=lambda **kw: "true" if kw.get("check_headers") else "cat"):
+            with (
+                mock.patch.dict(os.environ, {"WORKFLOW_ARG_LOG": str(log)}),
+                mock.patch.object(
+                    workflow,
+                    "_read_group_command",
+                    side_effect=lambda **kw: (
+                        "true" if kw.get("check_headers") else "cat"
+                    ),
+                ),
+            ):
                 workflow.validate_executables()
                 workflow.run_leviosam2()
                 workflow.run_sort_committed()
                 workflow.run_collate_pe()
-                for aligner, flag in (("bowtie2", "--rg"), ("bwamem", "-R"), ("bwamem2", "-R"), ("strobealign", "--rg"), ("minimap2", "-R"), ("winnowmap2", "-R")):
+                for aligner, flag in (
+                    ("bowtie2", "--rg"),
+                    ("bwamem", "-R"),
+                    ("bwamem2", "-R"),
+                    ("strobealign", "--rg"),
+                    ("minimap2", "-R"),
+                    ("winnowmap2", "-R"),
+                ):
                     workflow.aligner = aligner
-                    workflow.read_group = ("--rg-id foo --rg 'SM:sample name' ; $(touch INJECTED)"
-                                           if aligner == "bowtie2" else
-                                           "ID:foo SM:bar ; $(touch INJECTED)")
+                    workflow.read_group = (
+                        "--rg-id foo --rg 'SM:sample name' ; $(touch INJECTED)"
+                        if aligner == "bowtie2"
+                        else "ID:foo SM:bar ; $(touch INJECTED)"
+                    )
                     read_group = workflow.read_group
                     workflow.is_single_end = aligner in ("minimap2", "winnowmap2")
                     workflow._fn_deferred_fq_se.touch()
@@ -259,50 +474,88 @@ class Workflow(unittest.TestCase):
                     calls = [json.loads(line) for line in log.read_text().splitlines()]
                     align_call = next(call for call in reversed(calls) if flag in call)
                     if aligner == "bowtie2":
-                        self.assertEqual(align_call[align_call.index("--rg-id") + 1], "foo")
-                        self.assertEqual(align_call[align_call.index("--rg") + 1], "SM:sample name")
+                        self.assertEqual(
+                            align_call[align_call.index("--rg-id") + 1], "foo"
+                        )
+                        self.assertEqual(
+                            align_call[align_call.index("--rg") + 1], "SM:sample name"
+                        )
                         self.assertIn(";", align_call)
                     else:
-                        self.assertEqual(align_call[align_call.index(flag) + 1], read_group)
+                        self.assertEqual(
+                            align_call[align_call.index(flag) + 1], read_group
+                        )
                 workflow.is_single_end = False
                 workflow.run_refflow_merge_pe()
                 workflow.run_merge_and_index()
                 with mock.patch.dict(os.environ, {"WORKFLOW_FAKE_BGZIP": "1"}):
                     workflow.run_bam_to_fastq_se()
                 workflow.run_bam_to_cram()
+                workflow.forcerun = False
+                self.assertEqual(workflow.run_leviosam2(), leviosam2.SKIP_MSG)
             calls = [json.loads(line) for line in log.read_text().splitlines()]
             lift = next(call for call in calls if call and call[0] == "lift")
             self.assertEqual(lift[lift.index("-p") + 1], str(workflow.out_prefix))
-            self.assertEqual(lift[lift.index("-r") + 1], workflow.lift_bed_commit_source)
+            self.assertEqual(
+                lift[lift.index("-r") + 1], workflow.lift_bed_commit_source
+            )
             reconcile = next(call for call in calls if call and call[0] == "reconcile")
-            self.assertIn(workflow.source_label + ":" + str(workflow._fn_deferred_pe_sortn), reconcile)
+            self.assertIn(
+                workflow.source_label + ":" + str(workflow._fn_deferred_pe_sortn),
+                reconcile,
+            )
             self.assertFalse((pathlib.Path.cwd() / "INJECTED").exists())
 
     def test_preset_combination_matrix(self):
         supported = {
-            **{(sequence, aligner): leviosam2.Leviosam2WorkflowIlmnPreset
-               for sequence in ("ilmn_se", "ilmn_pe")
-               for aligner in ("bowtie2", "bwamem", "bwamem2")},
-            **{("pb_hifi", aligner): leviosam2.Leviosam2WorkflowPacbioHifiPreset
-               for aligner in ("minimap2", "winnowmap2")},
-            **{("ont", aligner): leviosam2.Leviosam2WorkflowOntPreset
-               for aligner in ("minimap2", "winnowmap2")},
+            **{
+                (sequence, aligner): leviosam2.Leviosam2WorkflowIlmnPreset
+                for sequence in ("ilmn_se", "ilmn_pe")
+                for aligner in ("bowtie2", "bwamem", "bwamem2")
+            },
+            **{
+                ("pb_hifi", aligner): leviosam2.Leviosam2WorkflowPacbioHifiPreset
+                for aligner in ("minimap2", "winnowmap2")
+            },
+            **{
+                ("ont", aligner): leviosam2.Leviosam2WorkflowOntPreset
+                for aligner in ("minimap2", "winnowmap2")
+            },
         }
         self.args.use_preset = True
         for sequence in ("ilmn_pe", "ilmn_se", "pb_hifi", "ont"):
-            for aligner in ("bowtie2", "bwamem", "bwamem2", "minimap2", "winnowmap2", "strobealign"):
+            for aligner in (
+                "bowtie2",
+                "bwamem",
+                "bwamem2",
+                "minimap2",
+                "winnowmap2",
+                "strobealign",
+            ):
                 with self.subTest(sequence=sequence, aligner=aligner):
                     self.args.sequence_type, self.args.aligner = sequence, aligner
-                    with mock.patch.object(leviosam2.Leviosam2Workflow, "check_inputs") as check, \
-                         mock.patch.object(leviosam2.Leviosam2Workflow, "validate_executables"), \
-                         mock.patch.object(leviosam2.Leviosam2Workflow, "run_workflow"):
+                    with (
+                        mock.patch.object(
+                            leviosam2.Leviosam2Workflow, "check_inputs"
+                        ) as check,
+                        mock.patch.object(
+                            leviosam2.Leviosam2Workflow, "validate_executables"
+                        ),
+                        mock.patch.object(leviosam2.Leviosam2Workflow, "run_workflow"),
+                    ):
                         if (sequence, aligner) in supported:
-                            with mock.patch.object(supported[(sequence, aligner)], "__init__", return_value=None) as init:
+                            with mock.patch.object(
+                                supported[(sequence, aligner)],
+                                "__init__",
+                                return_value=None,
+                            ) as init:
                                 leviosam2.run_workflow(self.args)
                                 init.assert_called_once_with(self.args)
                             check.assert_called_once()
                         else:
-                            with self.assertRaisesRegex(ValueError, f"{sequence} and {aligner}"):
+                            with self.assertRaisesRegex(
+                                ValueError, f"{sequence} and {aligner}"
+                            ):
                                 leviosam2.run_workflow(self.args)
                             check.assert_not_called()
 
@@ -384,17 +637,45 @@ class Workflow(unittest.TestCase):
         self.assertEqual(result, expected)
 
     def test_zero_lift_options_from_cli(self):
-        argv = ["leviosam2.py", "-s", "ilmn_se", "-a", "bowtie2",
-                "-i", "input.bam", "-o", "result", "-C", "index.clft",
-                "-f", "target.fa", "--dryrun", "-g", "0",
-                "--lift_commit_min_mapq", "0", "--lift_commit_min_score", "0",
-                "--lift_commit_max_frac_clipped", "0",
-                "--lift_commit_max_isize", "0", "--lift_commit_max_hdist", "0"]
+        argv = [
+            "leviosam2.py",
+            "-s",
+            "ilmn_se",
+            "-a",
+            "bowtie2",
+            "-i",
+            "input.bam",
+            "-o",
+            "result",
+            "-C",
+            "index.clft",
+            "-f",
+            "target.fa",
+            "--dryrun",
+            "-g",
+            "0",
+            "--lift_commit_min_mapq",
+            "0",
+            "--lift_commit_min_score",
+            "0",
+            "--lift_commit_max_frac_clipped",
+            "0",
+            "--lift_commit_max_isize",
+            "0",
+            "--lift_commit_max_hdist",
+            "0",
+        ]
         with mock.patch.object(sys, "argv", argv):
             workflow = leviosam2.Leviosam2Workflow(leviosam2.parse_args())
         command = workflow.run_leviosam2()
-        for option in ("-S mapq:0", "-S aln_score:0", "-S clipped_frac:0.0",
-                       "-S isize:0", "-S hdist:0", "-G 0"):
+        for option in (
+            "-S mapq:0",
+            "-S aln_score:0",
+            "-S clipped_frac:0.0",
+            "-S isize:0",
+            "-S hdist:0",
+            "-G 0",
+        ):
             with self.subTest(option=option):
                 self.assertIn(option + " ", command)
 
@@ -405,10 +686,25 @@ class Workflow(unittest.TestCase):
         self.assertIn("-G 0 ", workflow.run_leviosam2())
 
     def test_measure_time_initializes_with_output_prefix(self):
-        argv = ["leviosam2.py", "-s", "ilmn_se", "-a", "bowtie2",
-                "-i", "input.bam", "-o", "out/result", "-C", "index.clft",
-                "-f", "target.fa", "--dryrun", "--measure_time",
-                "--gnu_time_exe", "my-time"]
+        argv = [
+            "leviosam2.py",
+            "-s",
+            "ilmn_se",
+            "-a",
+            "bowtie2",
+            "-i",
+            "input.bam",
+            "-o",
+            "out/result",
+            "-C",
+            "index.clft",
+            "-f",
+            "target.fa",
+            "--dryrun",
+            "--measure_time",
+            "--gnu_time_exe",
+            "my-time",
+        ]
         with mock.patch.object(sys, "argv", argv):
             workflow = leviosam2.Leviosam2Workflow(leviosam2.parse_args())
         workflow._set_filenames()
@@ -496,7 +792,9 @@ class Workflow(unittest.TestCase):
                     workflow.aligner_exe = aligner
                     workflow.sequence_type = sequence_type
                     workflow.is_single_end = True
-                    self.assertIn(f"-a -x {preset} --MD", workflow.run_realign_deferred())
+                    self.assertIn(
+                        f"-a -x {preset} --MD", workflow.run_realign_deferred()
+                    )
 
     def test_run_bam_to_fastq_se(self):
         result = self.workflow.run_bam_to_fastq_se()
@@ -517,14 +815,19 @@ class Workflow(unittest.TestCase):
 
 
 class ReadGroupRestoration(unittest.TestCase):
-    header = ("@HD\tVN:1.6\n@SQ\tSN:chr1\tLN:1000\n"
-              "@RG\tID:one\tSM:sample\tLB:first\tPL:ILLUMINA\n"
-              "@RG\tID:two\tSM:sample\tLB:second\tPL:ILLUMINA\n")
+    header = (
+        "@HD\tVN:1.6\n@SQ\tSN:chr1\tLN:1000\n"
+        "@RG\tID:one\tSM:sample\tLB:first\tPL:ILLUMINA\n"
+        "@RG\tID:two\tSM:sample\tLB:second\tPL:ILLUMINA\n"
+    )
 
     @staticmethod
     def record(name, flag=0, group=None):
-        return (f"{name}\t{flag}\tchr1\t11\t60\t4M\t*\t0\t0\tAAAA\tIIII"
-                + (f"\tRG:Z:{group}" if group else "") + "\n")
+        return (
+            f"{name}\t{flag}\tchr1\t11\t60\t4M\t*\t0\t0\tAAAA\tIIII"
+            + (f"\tRG:Z:{group}" if group else "")
+            + "\n"
+        )
 
     def restore(self, original, aligned, paired=False, extra_header=None):
         with tempfile.TemporaryDirectory() as directory:
@@ -532,67 +835,120 @@ class ReadGroupRestoration(unittest.TestCase):
             source = root / "source.sam"
             source.write_text(original)
             tool = root / "samtools.py"
-            tool.write_text("import pathlib, sys\n"
-                            "lines = pathlib.Path(sys.argv[-1]).read_text().splitlines(True)\n"
-                            "sys.stdout.writelines(line for line in lines if '-H' not in sys.argv or line.startswith('@'))\n")
+            tool.write_text(
+                "import pathlib, sys\n"
+                "lines = pathlib.Path(sys.argv[-1]).read_text().splitlines(True)\n"
+                "sys.stdout.writelines(line for line in lines if '-H' not in sys.argv or line.startswith('@'))\n"
+            )
             extra = []
             if extra_header is not None:
                 target = root / "target.sam"
                 target.write_text(extra_header)
                 extra = [target]
             output = io.StringIO()
-            restore_read_groups.restore([sys.executable, str(tool)], source, paired,
-                                        io.StringIO(aligned), output, extra)
+            restore_read_groups.restore(
+                [sys.executable, str(tool)],
+                source,
+                paired,
+                io.StringIO(aligned),
+                output,
+                extra,
+            )
             return output.getvalue()
 
     def test_original_groups_override_aligner_group_on_all_alignment_types(self):
-        original = self.header + self.record("a", group="one") + self.record("b", group="two")
-        aligned = (self.header + "@RG\tID:fallback\tSM:sample\n"
-                   + self.record("a", group="fallback")
-                   + self.record("b", group="fallback")
-                   + self.record("a", 256, "fallback") + self.record("b", 2048, "fallback"))
+        original = (
+            self.header + self.record("a", group="one") + self.record("b", group="two")
+        )
+        aligned = (
+            self.header
+            + "@RG\tID:fallback\tSM:sample\n"
+            + self.record("a", group="fallback")
+            + self.record("b", group="fallback")
+            + self.record("a", 256, "fallback")
+            + self.record("b", 2048, "fallback")
+        )
         restored = self.restore(original, aligned)
-        lines = [line for line in restored.splitlines() if not line.startswith('@')]
-        self.assertEqual([line.split('RG:Z:')[1] for line in lines], ['one', 'two', 'one', 'two'])
+        lines = [line for line in restored.splitlines() if not line.startswith("@")]
+        self.assertEqual(
+            [line.split("RG:Z:")[1] for line in lines], ["one", "two", "one", "two"]
+        )
         self.assertIn("LB:first", restored)
         self.assertIn("LB:second", restored)
 
-    def test_paired_read_ends_are_distinct_and_selected_source_or_target_is_restored(self):
-        original = self.header + self.record("pair", 65, "one") + self.record("pair", 129, "two")
+    def test_paired_read_ends_are_distinct_and_selected_source_or_target_is_restored(
+        self,
+    ):
+        original = (
+            self.header
+            + self.record("pair", 65, "one")
+            + self.record("pair", 129, "two")
+        )
         # Mimic reconcile output: one source-selected end and one target-selected end.
-        aligned = self.header + self.record("pair", 65, "one") + self.record("pair", 129, "fallback")
-        restored = self.restore(original, aligned, paired=True,
-                                extra_header="@RG\tID:fallback\tSM:sample\n")
+        aligned = (
+            self.header
+            + self.record("pair", 65, "one")
+            + self.record("pair", 129, "fallback")
+        )
+        restored = self.restore(
+            original, aligned, paired=True, extra_header="@RG\tID:fallback\tSM:sample\n"
+        )
         self.assertIn(self.record("pair", 65, "one"), restored)
         self.assertIn(self.record("pair", 129, "two"), restored)
 
     def test_ungrouped_reads_keep_optional_fallback_and_header(self):
         original = self.header + self.record("a") + self.record("b")
         aligned = self.header + self.record("a", group="fallback") + self.record("b")
-        restored = self.restore(original, aligned,
-                                extra_header="@RG\tID:fallback\tSM:sample\tLB:new\n")
+        restored = self.restore(
+            original, aligned, extra_header="@RG\tID:fallback\tSM:sample\tLB:new\n"
+        )
         self.assertIn(self.record("a", group="fallback"), restored)
         self.assertIn(self.record("b"), restored)
         self.assertIn("@RG\tID:fallback\tSM:sample\tLB:new\n", restored)
 
     def test_invalid_and_ambiguous_metadata_fail_clearly(self):
         cases = [
-            (self.header + self.record("a", group="missing"), self.header + self.record("a"), "Undefined original"),
-            (self.header + self.record("a", group="one") + self.record("a", group="two"),
-             self.header + self.record("a"), "Ambiguous original"),
-            (self.header + self.record("a", group="one"), self.header + self.record("other"), "no source record"),
-            (self.header + self.record("a"), self.header + self.record("a", group="missing"), "Undefined realigned"),
-            (self.header + self.record("a", group="one"),
-             self.header.replace("LB:first", "LB:different") + self.record("a"), "Conflicting definitions"),
+            (
+                self.header + self.record("a", group="missing"),
+                self.header + self.record("a"),
+                "Undefined original",
+            ),
+            (
+                self.header
+                + self.record("a", group="one")
+                + self.record("a", group="two"),
+                self.header + self.record("a"),
+                "Ambiguous original",
+            ),
+            (
+                self.header + self.record("a", group="one"),
+                self.header + self.record("other"),
+                "no source record",
+            ),
+            (
+                self.header + self.record("a"),
+                self.header + self.record("a", group="missing"),
+                "Undefined realigned",
+            ),
+            (
+                self.header + self.record("a", group="one"),
+                self.header.replace("LB:first", "LB:different") + self.record("a"),
+                "Conflicting definitions",
+            ),
         ]
         for original, aligned, message in cases:
-            with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
+            with (
+                self.subTest(message=message),
+                self.assertRaisesRegex(ValueError, message),
+            ):
                 self.restore(original, aligned)
 
     def test_final_merge_header_check_rejects_same_id_with_different_library(self):
         first = restore_read_groups.read_groups(self.header.splitlines())
-        other = restore_read_groups.read_groups(self.header.replace('LB:first', 'LB:changed').splitlines())
-        with self.assertRaisesRegex(ValueError, 'Conflicting definitions'):
+        other = restore_read_groups.read_groups(
+            self.header.replace("LB:first", "LB:changed").splitlines()
+        )
+        with self.assertRaisesRegex(ValueError, "Conflicting definitions"):
             restore_read_groups.merge_groups(first, other)
 
     def test_global_fallback_collision_is_rejected_but_field_order_is_irrelevant(self):
@@ -601,11 +957,18 @@ class ReadGroupRestoration(unittest.TestCase):
         fallback = "@SQ\tSN:chr1\tLN:1000\n@RG\tID:one\tSM:sample\tLB:replacement\tPL:ILLUMINA\n"
         with self.assertRaisesRegex(ValueError, "Conflicting definitions"):
             self.restore(original, fallback + self.record("a", group="one"))
-        reordered = "@SQ\tSN:chr1\tLN:1000\n@RG\tLB:first\tPL:ILLUMINA\tSM:sample\tID:one\n"
+        reordered = (
+            "@SQ\tSN:chr1\tLN:1000\n@RG\tLB:first\tPL:ILLUMINA\tSM:sample\tID:one\n"
+        )
         restored = self.restore(original, reordered + self.record("a", group="one"))
         self.assertIn(self.record("a", group="one"), restored)
-        self.assertEqual(sum(line.startswith('@RG') and 'ID:one' in line
-                             for line in restored.splitlines()), 1)
+        self.assertEqual(
+            sum(
+                line.startswith("@RG") and "ID:one" in line
+                for line in restored.splitlines()
+            ),
+            1,
+        )
 
     def test_helper_accepts_executable_and_source_paths_with_spaces(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -613,12 +976,25 @@ class ReadGroupRestoration(unittest.TestCase):
             source = root / "source reads.sam"
             source.write_text(self.header + self.record("a", group="one"))
             tool = root / "samtools executable"
-            tool.write_text(f"#!{sys.executable}\nimport pathlib, sys\n"
-                            "sys.stdout.write(pathlib.Path(sys.argv[-1]).read_text())\n")
+            tool.write_text(
+                f"#!{sys.executable}\nimport pathlib, sys\n"
+                "sys.stdout.write(pathlib.Path(sys.argv[-1]).read_text())\n"
+            )
             tool.chmod(0o755)
-            result = subprocess.run([sys.executable, restore_read_groups.__file__,
-                '--samtools', str(tool), '--source', str(source)],
-                input=self.header + self.record("a"), capture_output=True, text=True, check=True)
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    restore_read_groups.__file__,
+                    "--samtools",
+                    str(tool),
+                    "--source",
+                    str(source),
+                ],
+                input=self.header + self.record("a"),
+                capture_output=True,
+                text=True,
+                check=True,
+            )
             self.assertIn(self.record("a", group="one"), result.stdout)
 
 

@@ -18,7 +18,7 @@
 
 namespace BedUtils {
 
-Bed::Bed(){};
+Bed::Bed() {};
 
 Bed::Bed(const std::string &fn) { init(fn); }
 
@@ -98,14 +98,13 @@ bool Bed::intersect(const std::string &contig, const size_t &pos1,
     if (isec_threshold <= 0) return (isec.size() > 0);
 
     int max_overlap = 0;
-    for (auto& _o: isec) {
+    for (auto &_o : isec) {
         if (_o > max_overlap) max_overlap = _o;
     }
     if (isec_threshold > 0 && isec_threshold <= 1)
         return (max_overlap >= (pos2 - pos1) * isec_threshold);
 
-    if (isec_threshold > 1) 
-        return (max_overlap >= isec_threshold);
+    if (isec_threshold > 1) return (max_overlap >= isec_threshold);
 
     return false;
     // return (isec.size() > 0);
