@@ -167,6 +167,8 @@ The Python workflow writes an indexed BAM by default. Use `-O cram` to write an 
 | `<out_prefix>-final.cram` and `.cram.crai` | Final reads in target coordinates when using `-O cram`. |
 | `<out_prefix>-unliftable.bam` | Deferred and unliftable reads in source coordinates. See [#20](https://github.com/milkschen/leviosam2/issues/20). |
 
+The Python workflow records completed stages in `<out_prefix>.<stage>.complete.json` files. On restart, it reuses a stage only when its command, input metadata, and all output metadata match the record. Existing files without a record are recomputed. File signatures use paths, sizes, and modification times rather than content hashes, so changes that preserve these attributes may not be detected. A failed stage can leave partial files for inspection; they are removed before the stage is retried. Running an earlier stage again invalidates later completion records.
+
 The workflow accepts BAM and CRAM output. For SAM output in quick experiments, run `leviosam2 lift -O sam` directly.
 
 Temporary files are removed by default. Use `--keep_tmp_files` in Python or `-K` in Bash to retain intermediate alignments and deferred FASTQ files. The Bash workflow produces BAM output only.
